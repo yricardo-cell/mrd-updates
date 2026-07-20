@@ -1,11 +1,14 @@
-﻿{
-    "version_actual":  "2.1.2",
-    "nombre":  "MRD TOOL CONTROL -- Mejoras y correcciones",
-    "fecha":  "2026-07-20",
-    "cambios":  [
-                    "Mejoras y correcciones"
-                ],
-    "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.1.2.zip",
-    "sha256":  "120061e64f68d946d03a4d515d3424ab70fcd07cfe670327827055230f283092"
+{
+  "version_actual": "2.1.3",
+  "nombre": "MRD TOOL CONTROL -- Reinicio automatico + boton reiniciar",
+  "fecha": "2026-07-20",
+  "cambios": [
+    "Updater: reinicio automatico via REINICIAR_AHORA.ps1 si sc.exe falla",
+    "Actualizaciones: boton Reiniciar servidor sin reiniciar el PC",
+    "Actualizaciones: pagina simplificada, sin instalacion manual ni log",
+    "EPIs individuales: busqueda por codigo_fabricacion desde escaner"
+  ],
+  "notas": "Instala desde Configuracion > Actualizaciones.",
+  "download_url": "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.1.3.zip",
+  "sha256": "4afb5033ab2d383e0bc6c7d26abf2fd8170b17369a24bd7a88bfcea08df12599"
 }
