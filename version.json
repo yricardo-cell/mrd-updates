@@ -1,17 +1,11 @@
-{
-  "version_actual": "2.1.1",
-  "nombre": "MRD TOOL CONTROL -- Modulo escaner Bluetooth HID",
-  "fecha": "2026-07-20",
-  "cambios": [
-    "Escaner Bluetooth HID: listener global en todas las paginas",
-    "Pagina /scan: auto-busqueda desde cualquier pagina al escanear",
-    "Scripts publicacion GitHub: PUBLICAR_ACTUALIZACION.bat/.ps1 portables",
-    "Scripts configuracion canal actualizaciones: CONFIGURAR_UPDATE_GITHUB.bat",
-    "VS Code: launch.json y settings.json para desarrollo",
-    "Rediseno EPIs: modales intuitivos entrega kit/ropa con articulos adicionales",
-    "EPIs individuales: panel revisiones pendientes con formulario inline"
-  ],
-  "notas": "Instala desde Configuracion > Actualizaciones.",
-  "download_url": "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.1.1.zip",
-  "sha256": "d6a28c93ab16cb17bc30896064e5d4359c57b282893b7a47123561934f53691e"
+﻿{
+    "version_actual":  "2.1.2",
+    "nombre":  "MRD TOOL CONTROL -- Mejoras y correcciones",
+    "fecha":  "2026-07-20",
+    "cambios":  [
+                    "Mejoras y correcciones"
+                ],
+    "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.1.2.zip",
+    "sha256":  "120061e64f68d946d03a4d515d3424ab70fcd07cfe670327827055230f283092"
 }
