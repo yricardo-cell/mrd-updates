@@ -4,19 +4,20 @@
     "nombre":  "MRD TOOL CONTROL",
     "fecha":  "2026-08-19",
     "cambios":  [
-                    "Fix: error 'datetime - date' en módulo de mantenimiento predictivo (Detector herramientas)",
-                    "Fix: versión mostrada en cabecera y /health ahora lee version.json correctamente",
-                    "Fix: ITV maquinaria y fechas de compra ya no causan error de tipo en scoring",
+                    "Fix: error 'datetime - date' en anomalias.py (Detector herramientas/maquinaria/reparaciones)",
+                    "Fix: mismo error en mantenimiento.py (scoring predictivo)",
+                    "Fix: versión en cabecera y /health lee version.json en lugar del hardcoded",
                     "Fix: backup previo eliminado del proceso de actualización (ya no bloquea)"
                 ],
-    "notas":  "Corrección de bugs críticos. El backup manual se hace una vez instalada la versión.",
+    "notas":  "Corrección de bugs críticos en detección de anomalías y mantenimiento predictivo.",
     "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.1.4.zip",
-    "sha256":  "082fb04b9c38b4fecd9ea215438ece37973b6e04685f0143add42eb7ea8284c2",
+    "sha256":  "d2b0e86cbf8f24671be91bf9939ff13c86e0a8fa6b9be217470301700a553aee",
     "archivos_actualizados":  [
                                   "main.py",
                                   "mantenimiento.py",
+                                  "anomalias.py",
                                   "updater.py",
                                   "version.json"
                               ],
-    "tamanyo_zip_kb":  88
+    "tamanyo_zip_kb":  92
 }
