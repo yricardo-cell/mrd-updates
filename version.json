@@ -6,15 +6,17 @@
     "cambios":  [
                     "Fix: error 'datetime - date' en módulo de mantenimiento predictivo (Detector herramientas)",
                     "Fix: versión mostrada en cabecera y /health ahora lee version.json correctamente",
-                    "Fix: ITV maquinaria y fechas de compra ya no causan error de tipo en scoring"
+                    "Fix: ITV maquinaria y fechas de compra ya no causan error de tipo en scoring",
+                    "Fix: backup previo eliminado del proceso de actualización (ya no bloquea)"
                 ],
-    "notas":  "Corrección de bugs críticos en mantenimiento predictivo y visualización de versión.",
+    "notas":  "Corrección de bugs críticos. El backup manual se hace una vez instalada la versión.",
     "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.1.4.zip",
-    "sha256":  "ac025cb584efd5c0bcc884f4a682b260da0a5ccb4a53239e3a0a918d0a2e65dc",
+    "sha256":  "082fb04b9c38b4fecd9ea215438ece37973b6e04685f0143add42eb7ea8284c2",
     "archivos_actualizados":  [
                                   "main.py",
                                   "mantenimiento.py",
+                                  "updater.py",
                                   "version.json"
                               ],
-    "tamanyo_zip_kb":  84
+    "tamanyo_zip_kb":  88
 }
