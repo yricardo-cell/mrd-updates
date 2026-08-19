@@ -1,14 +1,20 @@
 {
-  "version_actual": "2.1.3",
-  "nombre": "MRD TOOL CONTROL -- Reinicio automatico + boton reiniciar",
-  "fecha": "2026-07-20",
-  "cambios": [
-    "Updater: reinicio automatico via REINICIAR_AHORA.ps1 si sc.exe falla",
-    "Actualizaciones: boton Reiniciar servidor sin reiniciar el PC",
-    "Actualizaciones: pagina simplificada, sin instalacion manual ni log",
-    "EPIs individuales: busqueda por codigo_fabricacion desde escaner"
-  ],
-  "notas": "Instala desde Configuracion > Actualizaciones.",
-  "download_url": "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.1.3.zip",
-  "sha256": "4afb5033ab2d383e0bc6c7d26abf2fd8170b17369a24bd7a88bfcea08df12599"
+    "version_actual":  "2.1.4",
+    "version_anterior":  "2.1.2",
+    "nombre":  "MRD TOOL CONTROL",
+    "fecha":  "2026-08-19",
+    "cambios":  [
+                    "Fix: error 'datetime - date' en módulo de mantenimiento predictivo (Detector herramientas)",
+                    "Fix: versión mostrada en cabecera y /health ahora lee version.json correctamente",
+                    "Fix: ITV maquinaria y fechas de compra ya no causan error de tipo en scoring"
+                ],
+    "notas":  "Corrección de bugs críticos en mantenimiento predictivo y visualización de versión.",
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.1.4.zip",
+    "sha256":  "ac025cb584efd5c0bcc884f4a682b260da0a5ccb4a53239e3a0a918d0a2e65dc",
+    "archivos_actualizados":  [
+                                  "main.py",
+                                  "mantenimiento.py",
+                                  "version.json"
+                              ],
+    "tamanyo_zip_kb":  84
 }
