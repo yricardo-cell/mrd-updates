@@ -1,23 +1,11 @@
-{
-    "version_actual":  "2.1.4",
-    "version_anterior":  "2.1.2",
-    "nombre":  "MRD TOOL CONTROL",
-    "fecha":  "2026-08-19",
+﻿{
+    "version_actual":  "2.7.1",
+    "nombre":  "MRD TOOL CONTROL -- Mejoras y correcciones",
+    "fecha":  "2026-09-01",
     "cambios":  [
-                    "Fix: error 'datetime - date' en anomalias.py (Detector herramientas/maquinaria/reparaciones)",
-                    "Fix: mismo error en mantenimiento.py (scoring predictivo)",
-                    "Fix: versión en cabecera y /health lee version.json en lugar del hardcoded",
-                    "Fix: backup previo eliminado del proceso de actualización (ya no bloquea)"
+                    "Mejoras y correcciones"
                 ],
-    "notas":  "Corrección de bugs críticos en detección de anomalías y mantenimiento predictivo.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.1.4.zip",
-    "sha256":  "d2b0e86cbf8f24671be91bf9939ff13c86e0a8fa6b9be217470301700a553aee",
-    "archivos_actualizados":  [
-                                  "main.py",
-                                  "mantenimiento.py",
-                                  "anomalias.py",
-                                  "updater.py",
-                                  "version.json"
-                              ],
-    "tamanyo_zip_kb":  92
+    "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.1.zip",
+    "sha256":  "ff99f3f828d18c8fb1bbd48fda44f94a2254ce82ff3654e3ab27455296b89d7c"
 }
