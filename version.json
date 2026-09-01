@@ -1,11 +1,11 @@
-﻿{
-    "version_actual":  "2.7.1",
-    "nombre":  "MRD TOOL CONTROL -- Mejoras y correcciones",
+{
+    "version_actual":  "2.7.2",
+    "nombre":  "MRD TOOL CONTROL -- Reparación de carga, caché, miniaturas y actualización segura",
     "fecha":  "2026-09-01",
     "cambios":  [
-                    "Mejoras y correcciones"
+                    "Reparación de carga, caché, miniaturas y actualización segura"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.1.zip",
-    "sha256":  "ff99f3f828d18c8fb1bbd48fda44f94a2254ce82ff3654e3ab27455296b89d7c"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.2.zip",
+    "sha256":  "1406868c791274cbbe0f8a127387f3054fb49613d8b80e1c2f089ee17fece2ea"
 }
