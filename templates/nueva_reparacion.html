@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Nueva reparación{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/reparaciones">Reparaciones</a><span class="sep">/</span>
+<span class="current">Nueva</span>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">Nueva reparación</div>
+    <div class="page-subtitle">Abre una orden de reparación</div>
+  </div>
+  <a href="/reparaciones" class="btn btn-outline btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
+</div>
+
+<div style="max-width:640px">
+  <form method="post" action="/reparaciones/nueva">
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-hammer"></i> Datos de la reparación</div></div>
+      <div class="card-body">
+
+        <div class="form-group">
+          <label class="form-label">Herramienta <span class="required">*</span></label>
+          <select name="herramienta_id" class="form-control" required>
+            <option value="">Seleccionar herramienta...</option>
+            {% for h in herramientas %}
+            <option value="{{ h.id }}" {% if herramienta_sel and herramienta_sel.id == h.id %}selected{% endif %}>
+              {{ h.codigo }} — {{ h.nombre }} ({{ h.estado | replace('_',' ') | title }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Diagnóstico / Descripción del problema</label>
+          <textarea name="diagnostico" class="form-control" rows="3"
+                    placeholder="Describe el fallo o problema detectado..."></textarea>
+        </div>
+
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Proveedor / Taller</label>
+            <select name="proveedor_id" class="form-control">
+              <option value="">Sin proveedor</option>
+              {% for p in proveedores %}
+              <option value="{{ p.id }}">{{ p.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Coste estimado (€)</label>
+            <input type="number" name="coste_estimado" class="form-control" step="0.01">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Fecha prevista de retorno</label>
+          <input type="date" name="fecha_prevista" class="form-control">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Observaciones</label>
+          <textarea name="observaciones" class="form-control" rows="2"></textarea>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:8px">
+          <a href="/reparaciones" class="btn btn-ghost">Cancelar</a>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Abrir reparación</button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

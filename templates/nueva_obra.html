@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Nueva obra — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header">
+  <div>
+    <a href="/obras" class="btn btn-sm btn-outline-secondary mb-2"><i class="bi bi-arrow-left"></i> Volver</a>
+    <h2 class="mrd-page-title"><i class="bi bi-building me-2"></i>Nueva obra</h2>
+  </div>
+</div>
+
+<div class="mrd-card" style="max-width:600px">
+  <form method="post" action="/obras/nueva">
+    <div class="p-4">
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label">Nombre de la obra <span class="text-danger">*</span></label>
+          <input type="text" name="nombre" class="form-control mrd-input" placeholder="Ej: Nave Industrial Sector 4" required>
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Cliente</label>
+          <input type="text" name="cliente" class="form-control mrd-input">
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Responsable</label>
+          <input type="text" name="responsable" class="form-control mrd-input">
+        </div>
+        <div class="col-12">
+          <label class="form-label">Dirección</label>
+          <input type="text" name="direccion" class="form-control mrd-input">
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Fecha de inicio</label>
+          <input type="date" name="fecha_inicio" class="form-control mrd-input">
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Fecha de fin prevista</label>
+          <input type="date" name="fecha_fin" class="form-control mrd-input">
+        </div>
+      </div>
+    </div>
+    <div class="p-4 pt-0 d-flex gap-2">
+      <button type="submit" class="btn btn-warning mrd-btn"><i class="bi bi-save me-1"></i>Guardar obra</button>
+      <a href="/obras" class="btn btn-outline-secondary mrd-btn">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ sesion.nombre }} — Inventario{% endblock %}
+{% block content %}
+<section class="inventory-v2-hero">
+  <div><span class="inventory-v2-eyebrow">Conteo ciego operativo</span><h1><i class="bi bi-clipboard2-check"></i> {{ sesion.nombre }}</h1><p>{{ inventario.tipo_articulo|replace('_',' ') }} · {{ inventario.scope }} · Estado: {{ inventario.estado|replace('_',' ') }}</p></div>
+  <div class="d-flex flex-wrap gap-2">
+    {% if puede_administrar %}<button id="edit-session" class="btn btn-warning mrd-btn" type="button"><i class="bi bi-pencil"></i> Modificar</button><button id="delete-session" class="btn btn-danger mrd-btn" type="button"><i class="bi bi-trash"></i> Borrar</button>{% endif %}
+    <a class="btn btn-outline-light mrd-btn" href="/inventario/v2"><i class="bi bi-arrow-left"></i> Sesiones</a>
+  </div>
+</section>
+
+<section class="mrd-card mb-4"><div class="mrd-card-body">
+  <div class="d-flex justify-content-between mb-2"><strong id="session-progress-text">{{ inventario.lineas_procesadas }} de {{ inventario.total_lineas }} líneas</strong><span>{{ inventario.progreso }}%</span></div>
+  <div class="progress" role="progressbar"><div id="session-progress" class="progress-bar bg-warning" style="width:{{ inventario.progreso }}%"></div></div>
+  {% if inventario.conteo_ciego %}<div class="inventory-safety-note mt-3"><i class="bi bi-eye-slash"></i><span>Conteo ciego activo: las cantidades teóricas están ocultas hasta terminar la revisión.</span></div>{% endif %}
+</div></section>
+
+<div class="inventory-v2-grid">
+  <section class="mrd-card inventory-v2-main">
+    <div class="mrd-card-header"><span>Líneas del inventario</span><div class="input-group input-group-sm inventory-filter"><span class="input-group-text"><i class="bi bi-search"></i></span><input id="line-filter" class="form-control" placeholder="Filtrar o escanear código"></div></div>
+    <div class="mrd-card-body p-0"><div class="table-responsive"><table class="table table-hover align-middle mb-0 inventory-count-table"><thead><tr><th>Artículo</th><th>Estado</th><th>Conteo</th><th>Acción</th></tr></thead><tbody>
+    {% for line in inventario.lineas %}<tr data-line="{{ line.id }}" data-item-key="{{ line.tipo }}:{{ line.item_id }}" data-search="{{ line.nombre }} {{ line.referencia }} {{ line.detalle }} {{ line.codigos|join(' ') }}" data-state="{{ line.estado }}">
+      <td><strong>{{ line.nombre }}</strong><small class="d-block text-secondary">{{ line.referencia }}{% if line.detalle %} · {{ line.detalle }}{% endif %}</small></td>
+      <td><span class="inventory-status is-{{ line.estado }}">{{ line.estado|replace('_',' ') }}</span></td>
+      <td>{% if line.cantidad_final is not none %}Final: {{ line.cantidad_final }}{% elif line.cantidad_contada_2 is not none %}2.º: {{ line.cantidad_contada_2 }}{% elif line.cantidad_contada_1 is not none %}1.º: {{ line.cantidad_contada_1 }}{% else %}—{% endif %}</td>
+      <td><button class="btn btn-sm btn-primary count-open" data-line="{{ line.id }}" data-name="{{ line.nombre|e }}" type="button">Contar</button>{% if puede_aprobar and line.estado in ['contado_1','contado_2','conflicto'] %}<button class="btn btn-sm btn-outline-success approve-line" data-line="{{ line.id }}" type="button">Aprobar</button>{% endif %}</td>
+    </tr>{% else %}<tr><td colspan="4" class="text-center py-5">No hay líneas en esta sesión.</td></tr>{% endfor %}
+    </tbody></table></div></div>
+  </section>
+  <aside class="inventory-v2-side"><section class="mrd-card"><div class="mrd-card-header">Registrar conteo</div><form id="count-form" class="mrd-card-body">
+    <input name="linea_id" type="hidden"><strong id="count-name">Selecciona una línea</strong>
+    <label class="form-label mt-3">Cantidad</label><input name="cantidad" type="number" min="0" step="0.01" class="form-control form-control-lg" required>
+    <label class="form-label mt-3">Modo</label><select name="modo_entrada" class="form-select"><option value="unidad">Total contado</option><option value="incremento">Sumar unidades</option><option value="caja">Cajas completas</option></select>
+    <div id="box-fields" hidden><label class="form-label mt-3">Unidades por caja</label><input name="unidades_por_caja" type="number" min="1" step="1" class="form-control"></div>
+    <label class="form-label mt-3">Conteo</label><select name="numero_conteo" class="form-select"><option value="1">Primer conteo</option><option value="2">Segundo conteo</option></select>
+    <div id="count-result" class="inventory-form-result mt-3"></div><button class="btn btn-warning w-100 mt-3" type="submit">Guardar conteo</button>
+  </form></section>
+  {% if puede_cerrar and inventario.estado == 'pendiente_cierre' %}<button id="close-session" class="btn btn-success btn-lg w-100 mt-3"><i class="bi bi-lock"></i> Cerrar y ajustar</button>{% endif %}
+  <button id="session-camera-button" class="btn btn-outline-primary w-100 mt-3" hidden><i class="bi bi-camera"></i> Escanear con cámara</button><video id="session-camera" class="inventory-camera mt-2" playsinline hidden></video>
+  </aside>
+</div>
+{% if inventario.activos %}
+<section class="mrd-card mt-4">
+  <div class="mrd-card-header"><span>Activos unitarios de la nave</span><span class="badge text-bg-secondary">Herramientas · Maquinaria · Vehículos</span></div>
+  <div class="mrd-card-body p-0"><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Activo</th><th>Código</th><th>Situación</th></tr></thead><tbody>
+  {% for asset in inventario.activos %}<tr data-asset-key="{{ asset.tipo }}:{{ asset.item_id }}">
+    <td><strong>{{ asset.nombre }}</strong><small class="d-block text-secondary">{{ asset.tipo|replace('_',' ') }} · {{ asset.estado }}</small></td>
+    <td><code>{{ asset.codigo }}</code></td>
+    <td class="asset-presence">{% if asset.encontrado %}<span class="inventory-status is-aprobado"><i class="bi bi-check-circle"></i> Encontrado</span>{% else %}<span class="inventory-status is-pendiente">Pendiente de escanear</span>{% endif %}</td>
+  </tr>{% endfor %}
+  </tbody></table></div></div>
+</section>
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+<script>
+(() => {
+ const filter=document.getElementById('line-filter'), form=document.getElementById('count-form'), result=document.getElementById('count-result');
+ function filterRows(){const q=filter.value.trim().toLowerCase();let exact=null;document.querySelectorAll('[data-line]').forEach(row=>{const match=row.dataset.search.toLowerCase().includes(q);row.hidden=!match;if(q && row.dataset.search.toLowerCase().includes(q)) exact=exact||row;});if(exact && q){exact.scrollIntoView({block:'center'});}}
+ async function useScannedLine(raw){let scanned=window.MRDGlobalScanner.normalize(raw),payload={};result.className='inventory-form-result';result.textContent='Identificando código…';try{const response=await fetch('/scan/buscar?codigo='+encodeURIComponent(raw),{cache:'no-store',headers:{Accept:'application/json'},redirect:'manual'});if(response.status===0||response.type==='opaqueredirect'||response.status===401){location.href='/login';return}payload=await response.json().catch(()=>({}));if(!response.ok||!payload.found)throw new Error(payload.detail||'Código no reconocido');scanned=window.MRDGlobalScanner.normalize(payload.codigo||scanned)}catch(error){result.className='inventory-form-result is-error';result.textContent='No reconocido: '+scanned+'. '+error.message;filter.value='';filter.focus();return}const key=String(payload.tipo||'')+':'+String(payload.id||'');const row=[...document.querySelectorAll('[data-line]')].find(item=>item.dataset.itemKey===key);if(row){document.querySelectorAll('[data-line]').forEach(item=>item.hidden=item!==row);row.scrollIntoView({block:'center'});row.querySelector('.count-open').click();result.className='inventory-form-result is-success';result.textContent='Código reconocido: '+payload.nombre+' · '+scanned}else{const asset=[...document.querySelectorAll('[data-asset-key]')].find(item=>item.dataset.assetKey===key);if(asset){try{await jsonFetch('/inventario/sesiones/{{ sesion.id }}/activos/escanear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo:raw})});asset.querySelector('.asset-presence').innerHTML='<span class="inventory-status is-aprobado"><i class="bi bi-check-circle"></i> Encontrado</span>';asset.scrollIntoView({block:'center'});result.className='inventory-form-result is-success';result.textContent='Activo localizado en la nave: '+payload.nombre}catch(error){result.className='inventory-form-result is-error';result.textContent=error.message}}else{filter.value=scanned;filterRows();result.className='inventory-form-result is-error';result.textContent='Código reconocido ('+(payload.nombre||scanned)+'), pero este tipo no está incluido en esta sesión.'}}filter.value='';setTimeout(()=>{filterRows();filter.focus()},120)}
+ filter.addEventListener('input',filterRows); filter.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();useScannedLine(filter.value)}});
+ document.addEventListener('mrd:scanner-code',event=>{event.preventDefault();useScannedLine(event.detail.code)});
+ setTimeout(()=>filter.focus(),100);
+ document.querySelectorAll('.count-open').forEach(button=>button.addEventListener('click',()=>{form.linea_id.value=button.dataset.line;document.getElementById('count-name').textContent=button.dataset.name;form.cantidad.focus();}));
+ form.modo_entrada.addEventListener('change',()=>{document.getElementById('box-fields').hidden=form.modo_entrada.value!=='caja';form.unidades_por_caja.required=form.modo_entrada.value==='caja';});
+ async function jsonFetch(url, options){const response=await fetch(url,options),type=response.headers.get('content-type')||'';if(!type.includes('application/json'))throw new Error('La sesión ha caducado. Vuelve a entrar.');const payload=await response.json();if(!response.ok)throw new Error(payload.detail||'Operación rechazada');return payload;}
+ const edit=document.getElementById('edit-session');if(edit)edit.addEventListener('click',async()=>{const nombre=prompt('Nombre de la sesión:',{{ sesion.nombre|tojson }});if(nombre===null||!nombre.trim())return;const observaciones=prompt('Observaciones:',{{ (sesion.observaciones or '')|tojson }});if(observaciones===null)return;try{await jsonFetch('/inventario/sesiones/{{ sesion.id }}',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:nombre.trim(),observaciones})});location.reload();}catch(err){alert(err.message);}});
+ const remove=document.getElementById('delete-session');if(remove)remove.addEventListener('click',async()=>{if(!confirm('¿Borrar esta sesión? Los inventarios ya cerrados nunca se eliminan.'))return;try{await jsonFetch('/inventario/sesiones/{{ sesion.id }}',{method:'DELETE'});location.href='/inventario/v2';}catch(err){alert(err.message);}});
+ form.addEventListener('submit',async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(form));data.linea_id=Number(data.linea_id);data.cantidad=Number(data.cantidad);data.numero_conteo=Number(data.numero_conteo);data.unidades_por_caja=data.modo_entrada==='caja'?Number(data.unidades_por_caja):null;data.scan_event_id='count-'+crypto.randomUUID().replaceAll('-','');data.notas='';data.puesto_id='web';try{await jsonFetch('/inventario/sesiones/{{ sesion.id }}/contar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});result.className='inventory-form-result is-success';result.textContent='Conteo guardado';setTimeout(()=>location.reload(),500);}catch(err){result.className='inventory-form-result is-error';result.textContent=err.message;}});
+ document.querySelectorAll('.approve-line').forEach(button=>button.addEventListener('click',async()=>{const value=prompt('Cantidad física final aprobada:');if(value===null)return;try{await jsonFetch(`/inventario/sesiones/{{ sesion.id }}/lineas/${button.dataset.line}/aprobar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cantidad_final:Number(value)})});location.reload();}catch(err){alert(err.message);}}));
+ const close=document.getElementById('close-session');if(close)close.addEventListener('click',async()=>{if(!confirm('¿Cerrar el inventario y aplicar sus ajustes?'))return;try{await jsonFetch('/inventario/sesiones/{{ sesion.id }}/cerrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cierre_event_id:'close-'+crypto.randomUUID().replaceAll('-','')})});location.reload();}catch(err){alert(err.message);}});
+ const cameraButton=document.getElementById('session-camera-button'),video=document.getElementById('session-camera');const mobile=/Android|iPad|iPhone|Mobile/i.test(navigator.userAgent)&&(navigator.maxTouchPoints>0||matchMedia('(pointer:coarse)').matches);cameraButton.hidden=!mobile;cameraButton.addEventListener('click',async()=>{if(!('BarcodeDetector'in window)){alert('Usa el campo de búsqueda: este navegador no dispone de lector de códigos.');return;}try{const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});video.srcObject=stream;video.hidden=false;await video.play();const detector=new BarcodeDetector({formats:['qr_code','code_128']});const loop=async()=>{if(video.hidden)return;const codes=await detector.detect(video);if(codes.length){const raw=codes[0].rawValue;stream.getTracks().forEach(t=>t.stop());video.hidden=true;useScannedLine(raw);return;}requestAnimationFrame(loop);};loop();}catch(_){alert('No se pudo abrir la cámara. Usa la pistola o el campo manual.');}});
+})();
+</script>
+{% endblock %}

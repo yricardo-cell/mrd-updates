@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+{% block title %}{{ maquina.nombre }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/maquinaria">Maquinaria</a><span class="sep">/</span>
+<span class="current">{{ maquina.nombre }}</span>
+{% endblock %}
+
+{% block content %}
+<style>
+.passport-banner{background:linear-gradient(135deg,#111827,#312e81 62%,#0f766e);color:#fff;border-radius:18px;padding:18px 20px;margin-bottom:16px;display:flex;justify-content:space-between;gap:18px;align-items:center}.passport-code{font:700 1rem ui-monospace,monospace;letter-spacing:.08em}.passport-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.passport-metric{border:1px solid var(--border);background:var(--surface);border-radius:12px;padding:12px}.passport-metric strong{display:block;font-size:1.3rem}.passport-metric span{font-size:.72rem;color:var(--text-muted)}
+.passport-grid{display:grid;grid-template-columns:1.3fr .7fr;gap:14px;margin-top:14px}.timeline{list-style:none;margin:0;padding:0}.timeline li{position:relative;padding:0 0 18px 28px;border-left:2px solid var(--border)}.timeline li:before{content:'';position:absolute;left:-7px;top:2px;width:12px;height:12px;border-radius:50%;background:var(--primary);border:2px solid var(--surface)}.timeline li:last-child{border-left-color:transparent}.passport-form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.document-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}.patio-muted{font-size:.78rem;color:var(--text-muted)}
+@media(max-width:900px){.passport-grid{grid-template-columns:1fr}.passport-metrics{grid-template-columns:repeat(2,1fr)}div[style*="grid-template-columns:1fr 300px"]{grid-template-columns:1fr!important}.passport-form-grid{grid-template-columns:1fr}}@media(max-width:520px){.passport-banner{align-items:flex-start;flex-direction:column}.passport-metrics{grid-template-columns:1fr 1fr}}
+</style>
+{% set badge = {
+  'disponible':'success','en_uso':'primary','en_obra':'info',
+  'en_taller':'warning','en_transito':'secondary','baja':'dark'
+} %}
+
+<section class="passport-banner" id="pasaporte">
+  <div><div style="font-size:.75rem;color:#a7f3d0;text-transform:uppercase;letter-spacing:.12em">Pasaporte digital MRD</div><div class="passport-code">{{ codigo_pasaporte }}</div><div style="color:#dbeafe;font-size:.82rem;margin-top:4px">Historial técnico, económico y documental del activo.</div></div>
+  <div><span class="badge bg-{{ badge.get(maquina.estado,'secondary') }}">{{ estados.get(maquina.estado, maquina.estado) }}</span></div>
+</section>
+
+{% if request.query_params.get('ok') == 'editado' %}
+<div class="alert alert-success" style="margin-bottom:12px;padding:10px 14px;background:var(--success-bg,#d1fae5);color:var(--success,#065f46);border-radius:8px;font-size:.88rem">
+  <i class="bi bi-check-circle me-2"></i>Máquina actualizada correctamente.
+</div>
+{% elif request.query_params.get('ok') == 'foto' %}
+<div class="alert alert-success" style="margin-bottom:12px;padding:10px 14px;background:var(--success-bg,#d1fae5);color:var(--success,#065f46);border-radius:8px;font-size:.88rem">
+  <i class="bi bi-image me-2"></i>Foto actualizada.
+</div>
+{% elif request.query_params.get('ok') == 'foto_eliminada' %}
+<div class="alert alert-success" style="margin-bottom:12px;padding:10px 14px;background:var(--success-bg,#d1fae5);color:var(--success,#065f46);border-radius:8px;font-size:.88rem">
+  <i class="bi bi-check-circle me-2"></i>Foto eliminada.
+</div>
+{% elif request.query_params.get('ok') in ['evento','localizador','documento'] %}
+<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>Pasaporte actualizado correctamente.</div>
+{% endif %}
+
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">{{ maquina.nombre }}</div>
+    <div class="page-subtitle">
+      {{ maquina.tipo or '' }}
+      {% if maquina.matricula %} · <strong>{{ maquina.matricula }}</strong>{% endif %}
+      &nbsp;<span class="badge bg-{{ badge.get(maquina.estado,'secondary') }}">{{ estados.get(maquina.estado, maquina.estado) }}</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/maquinaria/{{ maquina.id }}/pasaporte" class="btn btn-primary btn-sm">
+      <i class="bi bi-passport"></i> Abrir pasaporte completo
+    </a>
+    {% if maquina.tipo in ['Alimak', 'Maquinillo'] %}
+    <a href="/maquinaria/{{ maquina.id }}/salida/nueva" class="btn btn-warning btn-sm">
+      <i class="bi bi-box-arrow-right"></i> Dar salida a obra
+    </a>
+    <a href="/maquinaria/{{ maquina.id }}/salidas" class="btn btn-outline btn-sm">
+      <i class="bi bi-clock-history"></i> Historial salidas
+    </a>
+    {% endif %}
+    {% if puede_editar %}
+    <button class="btn btn-warning btn-sm" onclick="openModal('modal-editar-maq')">
+      <i class="bi bi-pencil"></i> Editar datos
+    </button>
+    {% endif %}
+    <a href="{{ etiqueta_imprimir_url }}" class="btn btn-outline btn-sm" target="_blank">
+      <i class="bi bi-printer"></i> Etiqueta
+    </a>
+    {% if puede_borrar %}
+    <form method="post" action="/maquinaria/{{ maquina.id }}/eliminar"
+          onsubmit="return confirm('¿Dar de baja {{ maquina.nombre }}? Su pasaporte e historial se conservarán.')"
+          style="display:inline">
+      <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--danger)">
+        <i class="bi bi-archive"></i> Dar de baja
+      </button>
+    </form>
+    {% endif %}
+    <a href="/maquinaria" class="btn btn-ghost btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start">
+
+  <!-- Info principal -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+
+    <!-- Datos técnicos -->
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-truck"></i> Datos del activo</div></div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          {% macro field(label, value) %}
+          <div>
+            <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">{{ label }}</div>
+            <div style="font-size:.9rem;font-weight:600;margin-top:2px">{{ value or '—' }}</div>
+          </div>
+          {% endmacro %}
+          {{ field("Tipo", maquina.tipo) }}
+          {{ field("Marca", maquina.marca) }}
+          {{ field("Modelo", maquina.modelo) }}
+          {{ field("Matrícula", maquina.matricula) }}
+          {{ field("Número de serie", maquina.num_serie) }}
+          {{ field("Año", maquina.anio) }}
+          {{ field("Cód. barras", maquina.codigo_barras) }}
+          {{ field("Cód. interno", maquina.codigo_interno) }}
+          {{ field("Color", maquina.color) }}
+        </div>
+        {% if maquina.notas %}
+        <div style="margin-top:12px;padding:10px;background:var(--surface-2);border-radius:6px;font-size:.84rem;color:var(--text-secondary);white-space:pre-line">{{ maquina.notas }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Actualizar estado -->
+    {% if puede_operar %}
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-arrow-repeat"></i> Actualizar estado / ubicación</div></div>
+      <div class="card-body">
+        <form method="post" action="/maquinaria/{{ maquina.id }}/estado">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="form-group">
+              <label class="form-label">Estado</label>
+              <select name="estado" class="form-control" required>
+                {% for key, label in estados.items() %}
+                <option value="{{ key }}" {% if key == maquina.estado %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Ubicación</label>
+              <input type="text" name="ubicacion" class="form-control" value="{{ maquina.ubicacion or '' }}" placeholder="Obra Norte, Almacén A...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Responsable</label>
+              <input type="text" name="responsable" class="form-control" value="{{ maquina.responsable or '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Obra actual</label>
+              <input type="text" name="obra_actual" class="form-control" value="{{ maquina.obra_actual or '' }}">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:8px">
+            <label class="form-label">Nota del cambio <span style="color:var(--text-muted)">(opcional)</span></label>
+            <input type="text" name="notas" class="form-control" placeholder="Motivo del cambio de estado...">
+          </div>
+          <div style="margin-top:12px">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-floppy"></i> Guardar cambio
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Panel lateral -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+
+    <!-- QR -->
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-qr-code"></i> Código QR</div></div>
+      <div class="card-body" style="text-align:center">
+        <img src="data:image/png;base64,{{ qr_b64 }}"
+             style="width:160px;height:160px;border:1px solid var(--border);border-radius:8px;padding:6px"
+             alt="QR">
+        <div style="font-size:.75rem;color:var(--text-muted);margin-top:6px">
+          {{ maquina.codigo_interno }}
+        </div>
+        <a href="{{ etiqueta_imprimir_url }}" class="btn btn-outline btn-sm w-100" style="margin-top:10px" target="_blank">
+          <i class="bi bi-printer"></i> Imprimir etiqueta
+        </a>
+      </div>
+    </div>
+
+    <!-- Foto -->
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-image"></i> Foto</div></div>
+      <div class="card-body" style="text-align:center">
+        {% if maquina.foto %}
+        <img src="/static/uploads/maquinaria/{{ maquina.foto }}"
+             style="width:100%;max-height:180px;object-fit:cover;border-radius:6px;border:1px solid var(--border);margin-bottom:8px"
+             alt="{{ maquina.nombre }}">
+        {% if puede_operar %}<form method="post" action="/maquinaria/{{ maquina.id }}/foto/eliminar"
+              onsubmit="return confirm('¿Eliminar foto?')" style="margin-bottom:8px">
+          <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--danger);font-size:.78rem">
+            <i class="bi bi-trash"></i> Eliminar foto
+          </button>
+        </form>{% endif %}
+        {% else %}
+        <div style="color:var(--text-muted);font-size:.82rem;margin-bottom:8px">Sin foto</div>
+        {% endif %}
+        {% if puede_operar %}<form method="post" action="/maquinaria/{{ maquina.id }}/foto" enctype="multipart/form-data" id="form-foto-maq-{{ maquina.id }}">
+          <input type="file" name="foto" accept="image/*" class="form-control"
+                 style="font-size:.78rem;margin-bottom:6px" required
+                 onchange="subirFotoMaq(this)">
+        </form>{% endif %}
+        <script>
+        function subirFotoMaq(inp){
+          var f=inp.closest('form');
+          if(!f.querySelector('[name=_csrf_token]')){
+            var m=document.cookie.match(/(?:^|; )mrd_csrf=([^;]*)/);
+            var tok=m?decodeURIComponent(m[1]):'';
+            var hi=document.createElement('input');
+            hi.type='hidden';hi.name='_csrf_token';hi.value=tok;
+            f.appendChild(hi);
+          }
+          f.submit();
+        }
+        </script>
+      </div>
+    </div>
+
+    <!-- Estado actual -->
+    <div class="card">
+      <div class="card-body" style="display:flex;flex-direction:column;gap:8px;font-size:.84rem">
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-muted)">Estado</span>
+          <span class="badge bg-{{ badge.get(maquina.estado,'secondary') }}">{{ estados.get(maquina.estado, maquina.estado) }}</span>
+        </div>
+        {% if maquina.ubicacion %}
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-muted)">Ubicación</span>
+          <span>{{ maquina.ubicacion }}</span>
+        </div>
+        {% endif %}
+        {% if maquina.responsable %}
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-muted)">Responsable</span>
+          <span>{{ maquina.responsable }}</span>
+        </div>
+        {% endif %}
+        {% if maquina.obra_actual %}
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-muted)">Obra</span>
+          <span>{{ maquina.obra_actual }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="passport-metrics">
+  <div class="passport-metric"><strong>{{ '%.1f'|format(maquina.horas_uso or 0) }}</strong><span>Horas registradas</span></div>
+  <div class="passport-metric"><strong>{{ '%.2f'|format(coste_total) }} €</strong><span>Coste acumulado</span></div>
+  <div class="passport-metric"><strong>{{ eventos|length }}</strong><span>Eventos técnicos</span></div>
+  <div class="passport-metric"><strong>{% if maquina.proxima_revision %}{{ maquina.proxima_revision.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</strong><span>Próxima revisión</span></div>
+</div>
+
+{% if puede_operar %}
+<div class="card" style="margin:14px 0">
+  <div class="card-header"><div class="card-title"><i class="bi bi-wrench-adjustable-circle"></i> Acciones del pasaporte</div></div>
+  <div class="card-body" style="display:grid;gap:10px">
+    <details class="passport-action" id="registrar-evento"><summary class="btn btn-primary"><i class="bi bi-plus-lg"></i> Registrar revisión, avería o reparación</summary>
+      <form method="post" action="/maquinaria/{{ maquina.id }}/pasaporte/eventos" style="margin-top:12px"><div class="passport-form-grid"><div class="form-group"><label class="form-label">Tipo</label><select name="tipo" class="form-control" required>{% for k,v in tipos_evento.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div><div class="form-group"><label class="form-label">Título</label><input name="titulo" class="form-control" maxlength="200" required placeholder="Ej.: Revisión anual"></div><div class="form-group"><label class="form-label">Fecha y hora</label><input type="datetime-local" name="fecha" class="form-control"></div><div class="form-group"><label class="form-label">Horas actuales</label><input type="number" min="0" step="0.1" name="horas_maquina" class="form-control"></div><div class="form-group"><label class="form-label">Coste (€)</label><input type="number" min="0" step="0.01" name="coste" class="form-control"></div><div class="form-group"><label class="form-label">Proveedor / técnico</label><input name="proveedor" class="form-control"></div><div class="form-group"><label class="form-label">Referencia de pieza</label><input name="pieza_referencia" class="form-control"></div><div class="form-group"><label class="form-label">Próxima revisión</label><input type="date" name="proxima_revision" class="form-control"></div></div><div class="form-group" style="margin-top:10px"><label class="form-label">Descripción</label><textarea name="descripcion" rows="3" class="form-control"></textarea></div><button class="btn btn-primary" style="margin-top:10px">Guardar en el pasaporte</button></form>
+    </details>
+    <details class="passport-action"><summary class="btn btn-outline"><i class="bi bi-geo-alt"></i> Configurar o verificar AirTag</summary>
+      <form method="post" action="/maquinaria/{{ maquina.id }}/pasaporte/localizador" style="margin-top:12px"><div class="passport-form-grid"><div class="form-group"><label class="form-label">Tipo</label><input name="localizador_tipo" value="{{ maquina.localizador_tipo or 'Apple AirTag' }}" class="form-control"></div><div class="form-group"><label class="form-label">Alias</label><input name="localizador_alias" value="{{ maquina.localizador_alias or '' }}" class="form-control"></div><div class="form-group"><label class="form-label">Identificador</label><input name="localizador_identificador" value="{{ maquina.localizador_identificador or '' }}" class="form-control"></div><div class="form-group"><label class="form-label">Estado</label><select name="localizador_estado" class="form-control">{% for k,v in estados_localizador.items() %}<option value="{{ k }}" {% if maquina.localizador_estado == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div></div><div class="form-group"><label class="form-label">Notas</label><textarea name="localizador_notas" class="form-control">{{ maquina.localizador_notas or '' }}</textarea></div><label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" name="marcar_verificado" value="1"> Lo he comprobado físicamente ahora</label><button class="btn btn-primary" style="margin-top:10px">Guardar localizador</button></form>
+    </details>
+    <details class="passport-action"><summary class="btn btn-outline"><i class="bi bi-paperclip"></i> Adjuntar documento o fotografía</summary>
+      <form method="post" action="/maquinaria/{{ maquina.id }}/pasaporte/documentos" enctype="multipart/form-data" style="margin-top:12px"><div class="passport-form-grid"><div class="form-group"><label class="form-label">Tipo</label><select name="tipo" class="form-control"><option value="manual">Manual</option><option value="certificado">Certificado</option><option value="revision">Revisión</option><option value="factura">Factura</option><option value="foto">Fotografía</option><option value="documento">Otro</option></select></div><div class="form-group"><label class="form-label">PDF o imagen</label><input type="file" name="archivo" accept=".pdf,image/jpeg,image/png,image/webp" class="form-control" required></div></div><div class="form-group"><label class="form-label">Notas</label><textarea name="notas" class="form-control"></textarea></div><button class="btn btn-primary" style="margin-top:10px">Subir al pasaporte</button></form>
+    </details>
+  </div>
+</div>
+{% endif %}
+
+<div class="passport-grid">
+  <section class="card">
+    <div class="card-header"><div class="card-title"><i class="bi bi-clock-history"></i> Historial técnico</div>{% if puede_operar %}<button class="btn btn-primary btn-sm" onclick="openModal('modal-evento-maq')"><i class="bi bi-plus-lg"></i> Registrar</button>{% endif %}</div>
+    <div class="card-body"><ul class="timeline">{% for e in eventos %}<li><div style="display:flex;justify-content:space-between;gap:10px"><div><span class="badge bg-secondary">{{ tipos_evento.get(e.tipo,e.tipo) }}</span> <strong>{{ e.titulo }}</strong></div><span class="patio-muted">{{ e.fecha.strftime('%d/%m/%Y %H:%M') }}</span></div>{% if e.descripcion %}<div style="margin-top:5px;color:var(--text-secondary);white-space:pre-line">{{ e.descripcion }}</div>{% endif %}<div style="font-size:.78rem;color:var(--text-muted);margin-top:5px">{% if e.horas_maquina is not none %}{{ e.horas_maquina }} h · {% endif %}{% if e.coste is not none %}{{ '%.2f'|format(e.coste) }} € · {% endif %}{% if e.pieza_referencia %}Pieza {{ e.pieza_referencia }} · {% endif %}{% if e.proveedor %}{{ e.proveedor }}{% endif %}</div></li>{% else %}<li><span style="color:var(--text-muted)">Todavía no hay revisiones, averías o cambios registrados.</span></li>{% endfor %}</ul></div>
+  </section>
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <section class="card"><div class="card-header"><div class="card-title"><i class="bi bi-geo-alt"></i> Localizador externo</div></div><div class="card-body">
+      <div style="font-size:.82rem;padding:9px;border-radius:8px;background:var(--surface-2);margin-bottom:10px"><i class="bi bi-shield-lock me-1"></i> Solo se registra su control físico. MRD no accede a Apple Find My ni obtiene ubicación automática.</div>
+      {% if maquina.localizador_alias %}<div><strong>{{ maquina.localizador_alias }}</strong> · {{ maquina.localizador_tipo or 'Localizador' }}</div><div class="patio-muted">ID: {{ maquina.localizador_identificador or '—' }}</div><div style="margin-top:7px"><span class="badge bg-secondary">{{ estados_localizador.get(maquina.localizador_estado,maquina.localizador_estado) }}</span></div><div class="patio-muted" style="margin-top:6px">Última verificación: {% if maquina.localizador_ultima_verificacion %}{{ maquina.localizador_ultima_verificacion.strftime('%d/%m/%Y %H:%M') }}{% else %}Nunca{% endif %}</div>{% else %}<div style="color:var(--text-muted)">Sin localizador inventariado.</div>{% endif %}
+      {% if puede_operar %}<button class="btn btn-outline btn-sm w-100" style="margin-top:10px" onclick="openModal('modal-localizador-maq')">Configurar / verificar</button>{% endif %}
+    </div></section>
+    <section class="card"><div class="card-header"><div class="card-title"><i class="bi bi-folder2-open"></i> Documentos y fotos</div>{% if puede_operar %}<button class="btn btn-outline btn-sm" onclick="openModal('modal-documento-maq')"><i class="bi bi-upload"></i></button>{% endif %}</div><div class="card-body">{% for d in documentos %}<div class="document-row"><div><strong>{{ d.nombre_original }}</strong><div class="patio-muted">{{ d.tipo }} · {{ d.creado_en.strftime('%d/%m/%Y') }}</div></div><a href="/maquinaria/{{ maquina.id }}/pasaporte/documentos/{{ d.id }}" class="btn btn-ghost btn-sm"><i class="bi bi-download"></i></a></div>{% else %}<div style="color:var(--text-muted)">Sin documentos adjuntos.</div>{% endfor %}</div></section>
+  </div>
+</div>
+
+{% if puede_operar %}
+<div class="modal-overlay" id="modal-evento-maq"><div class="modal modal-lg"><div class="modal-header"><div class="modal-title">Registrar evento técnico</div><button class="btn btn-ghost btn-icon" onclick="closeModal('modal-evento-maq')"><i class="bi bi-x-lg"></i></button></div><form method="post" action="/maquinaria/{{ maquina.id }}/pasaporte/eventos"><div class="modal-body"><div class="passport-form-grid"><div class="form-group"><label class="form-label">Tipo</label><select name="tipo" class="form-control" required>{% for k,v in tipos_evento.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div><div class="form-group"><label class="form-label">Título</label><input name="titulo" class="form-control" maxlength="200" required></div><div class="form-group"><label class="form-label">Fecha y hora</label><input type="datetime-local" name="fecha" class="form-control"></div><div class="form-group"><label class="form-label">Horas actuales</label><input type="number" min="0" step="0.1" name="horas_maquina" class="form-control"></div><div class="form-group"><label class="form-label">Coste (€)</label><input type="number" min="0" step="0.01" name="coste" class="form-control"></div><div class="form-group"><label class="form-label">Proveedor / técnico</label><input name="proveedor" class="form-control"></div><div class="form-group"><label class="form-label">Referencia de pieza</label><input name="pieza_referencia" class="form-control"></div><div class="form-group"><label class="form-label">Próxima revisión</label><input type="date" name="proxima_revision" class="form-control"></div></div><div class="form-group" style="margin-top:10px"><label class="form-label">Descripción</label><textarea name="descripcion" rows="4" class="form-control"></textarea></div></div><div class="modal-footer"><button type="button" class="btn btn-ghost" onclick="closeModal('modal-evento-maq')">Cancelar</button><button class="btn btn-primary">Guardar en pasaporte</button></div></form></div></div>
+<div class="modal-overlay" id="modal-localizador-maq"><div class="modal"><div class="modal-header"><div class="modal-title">Control del localizador</div><button class="btn btn-ghost btn-icon" onclick="closeModal('modal-localizador-maq')"><i class="bi bi-x-lg"></i></button></div><form method="post" action="/maquinaria/{{ maquina.id }}/pasaporte/localizador"><div class="modal-body"><div class="form-group"><label class="form-label">Tipo</label><input name="localizador_tipo" value="{{ maquina.localizador_tipo or 'Apple AirTag' }}" class="form-control"></div><div class="form-group"><label class="form-label">Alias visible</label><input name="localizador_alias" value="{{ maquina.localizador_alias or '' }}" class="form-control" placeholder="AirTag Alimak ST300"></div><div class="form-group"><label class="form-label">Identificador inventariable</label><input name="localizador_identificador" value="{{ maquina.localizador_identificador or '' }}" class="form-control"></div><div class="form-group"><label class="form-label">Estado</label><select name="localizador_estado" class="form-control">{% for k,v in estados_localizador.items() %}<option value="{{ k }}" {% if maquina.localizador_estado == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div><div class="form-group"><label class="form-label">Notas</label><textarea name="localizador_notas" class="form-control">{{ maquina.localizador_notas or '' }}</textarea></div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="marcar_verificado" value="1"> He comprobado físicamente el localizador ahora</label></div><div class="modal-footer"><button class="btn btn-primary">Guardar control</button></div></form></div></div>
+<div class="modal-overlay" id="modal-documento-maq"><div class="modal"><div class="modal-header"><div class="modal-title">Adjuntar documento o foto</div><button class="btn btn-ghost btn-icon" onclick="closeModal('modal-documento-maq')"><i class="bi bi-x-lg"></i></button></div><form method="post" action="/maquinaria/{{ maquina.id }}/pasaporte/documentos" enctype="multipart/form-data"><div class="modal-body"><div class="form-group"><label class="form-label">Tipo</label><select name="tipo" class="form-control"><option value="manual">Manual</option><option value="certificado">Certificado</option><option value="revision">Revisión</option><option value="factura">Factura</option><option value="foto">Fotografía</option><option value="documento">Otro documento</option></select></div><div class="form-group"><label class="form-label">Archivo PDF o imagen</label><input type="file" name="archivo" accept=".pdf,image/jpeg,image/png,image/webp" class="form-control" required></div><div class="form-group"><label class="form-label">Notas</label><textarea name="notas" class="form-control"></textarea></div></div><div class="modal-footer"><button class="btn btn-primary">Subir al pasaporte</button></div></form></div></div>
+{% endif %}
+
+<!-- Modal editar maquinaria -->
+{% if puede_editar %}
+<div class="modal-overlay" id="modal-editar-maq">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title"><i class="bi bi-pencil-square me-2"></i>Editar datos de máquina</div>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-editar-maq')"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <form method="post" action="/maquinaria/{{ maquina.id }}/editar">
+      <div class="modal-body" style="overflow-y:auto;padding:20px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">Nombre <span style="color:var(--danger)">*</span></label>
+            <input type="text" name="nombre" class="form-control" value="{{ maquina.nombre }}" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <select name="tipo" class="form-control">
+              {% for t in tipos_maquinaria %}
+              <option value="{{ t }}" {% if t == maquina.tipo %}selected{% endif %}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Marca</label>
+            <input type="text" name="marca" class="form-control" value="{{ maquina.marca or '' }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Modelo</label>
+            <input type="text" name="modelo" class="form-control" value="{{ maquina.modelo or '' }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Matrícula</label>
+            <input type="text" name="matricula" class="form-control" value="{{ maquina.matricula or '' }}" style="text-transform:uppercase">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nº de serie</label>
+            <input type="text" name="num_serie" class="form-control" value="{{ maquina.num_serie or '' }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Estado</label>
+            <select name="estado" class="form-control">
+              {% for key, label in estados.items() %}
+              <option value="{{ key }}" {% if key == maquina.estado %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">KM actuales</label>
+            <input type="number" name="km_actuales" class="form-control" value="{{ maquina.km_actuales or '' }}" step="1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ubicación</label>
+            <input type="text" name="ubicacion" class="form-control" value="{{ maquina.ubicacion or '' }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Responsable</label>
+            <input type="text" name="responsable" class="form-control" value="{{ maquina.responsable or '' }}">
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:10px">
+          <label class="form-label">Notas / Descripción</label>
+          <textarea name="notas" class="form-control" rows="3">{{ maquina.notas or '' }}</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-editar-maq')">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

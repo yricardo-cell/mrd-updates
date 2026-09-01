@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Dotación #{{ dotacion.id }} — {{ app_name }}{% endblock %}
+
+{% block content %}
+<section class="dotation-hero">
+  <div>
+    <span class="inventory-v2-eyebrow">Entrega física controlada</span>
+    <h1><i class="bi bi-person-check"></i> {{ trabajador.nombre_completo if trabajador else 'Trabajador' }}</h1>
+    <p>Dotación #{{ dotacion.id }} · <strong id="dotation-state">{{ dotacion.estado }}</strong>. Cada línea se prepara y se entrega con su QR; el stock solo baja al confirmar.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/inventario/v2"><i class="bi bi-arrow-left"></i> Inventario</a>
+</section>
+
+<section class="dotation-console">
+  <div class="dotation-scanner">
+    <label for="dotation-scan" class="form-label">Pistola USB / código QR</label>
+    <div class="input-group input-group-lg">
+      <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+      <input id="dotation-scan" class="form-control" autocomplete="off" placeholder="Selecciona una línea y escanea">
+      <button id="dotation-camera" class="btn btn-outline-primary" type="button" hidden><i class="bi bi-camera"></i> Cámara</button>
+    </div>
+    <video id="dotation-video" class="dotation-video" playsinline muted hidden></video>
+    <div id="dotation-message" class="inventory-form-result" role="status">Selecciona la línea que vas a preparar.</div>
+  </div>
+  <div class="dotation-signature">
+    <label class="form-label" for="dotation-signer">Recibe y firma</label>
+    <input id="dotation-signer" class="form-control mb-2" maxlength="150" value="{{ trabajador.nombre_completo if trabajador else '' }}">
+    <canvas id="dotation-signature" width="640" height="150" aria-label="Firma del trabajador"></canvas>
+    <button id="signature-clear" class="btn btn-sm btn-outline-secondary mt-2" type="button">Borrar firma</button>
+  </div>
+</section>
+
+<section class="dotation-lines" id="dotation-lines">
+  {% for line in dotacion.lineas %}
+  <article class="dotation-line state-{{ line.estado }}" data-line-id="{{ line.id }}" data-state="{{ line.estado }}" tabindex="0">
+    <div class="dotation-line-index">{{ loop.index }}</div>
+    <div class="dotation-line-main">
+      <h2>{{ line.nombre }}</h2>
+      <p>{% if line.talla %}Talla <strong>{{ line.talla }}</strong> · {% endif %}{{ line.cantidad }} unidad{% if line.cantidad != 1 %}es{% endif %}</p>
+      <span class="dotation-status">{{ line.estado|replace('_', ' ') }}</span>
+    </div>
+    <div class="dotation-line-actions">
+      {% if line.estado in ['pendiente','sin_stock'] %}<button class="btn btn-primary js-select" type="button">Preparar</button>{% endif %}
+      {% if line.estado == 'preparada' %}<button class="btn btn-success js-select" type="button">Escanear y entregar</button>{% endif %}
+      {% if line.estado in ['pendiente','preparada','sin_stock'] and line.categoria == 'ropa' %}<button class="btn btn-outline-secondary js-size" type="button">Cambiar talla</button>{% endif %}
+      {% if line.estado == 'entregada' %}<button class="btn btn-outline-warning js-return" type="button">Devolver</button>{% endif %}
+      {% if line.estado == 'devuelta' %}<button class="btn btn-outline-primary js-replace" type="button">Sustituir</button>{% endif %}
+    </div>
+  </article>
+  {% endfor %}
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+  const scan = document.getElementById('dotation-scan');
+  const message = document.getElementById('dotation-message');
+  const canvas = document.getElementById('dotation-signature');
+  const ctx = canvas.getContext('2d');
+  let selected = null, drawing = false, signed = false, cameraStream = null;
+  ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = '#172033';
+
+  function point(event) {
+    const rect = canvas.getBoundingClientRect(), source = event.touches ? event.touches[0] : event;
+    return [(source.clientX - rect.left) * canvas.width / rect.width, (source.clientY - rect.top) * canvas.height / rect.height];
+  }
+  function start(event) { drawing = true; const [x,y] = point(event); ctx.beginPath(); ctx.moveTo(x,y); event.preventDefault(); }
+  function move(event) { if (!drawing) return; const [x,y] = point(event); ctx.lineTo(x,y); ctx.stroke(); signed = true; event.preventDefault(); }
+  function stop() { drawing = false; }
+  canvas.addEventListener('pointerdown', start); canvas.addEventListener('pointermove', move);
+  canvas.addEventListener('pointerup', stop); canvas.addEventListener('pointerleave', stop);
+  document.getElementById('signature-clear').onclick = () => { ctx.clearRect(0,0,canvas.width,canvas.height); signed = false; };
+
+  function selectLine(card, operation = 'scan') {
+    document.querySelectorAll('.dotation-line.is-selected').forEach(node => node.classList.remove('is-selected'));
+    selected = card; selected.dataset.operation = operation; card.classList.add('is-selected'); scan.focus();
+    message.className = 'inventory-form-result';
+    message.textContent = operation === 'return' ? 'Escanea el artículo que vuelve físicamente al almacén.' : (card.dataset.state === 'preparada' ? 'Escanea de nuevo el artículo preparado para entregarlo.' : 'Escanea el QR del artículo físico.');
+  }
+  document.querySelectorAll('.js-select').forEach(button => button.onclick = () => selectLine(button.closest('.dotation-line')));
+
+  async function jsonPost(url, body) {
+    const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), redirect:'manual'});
+    const type = response.headers.get('content-type') || '';
+    if (!type.includes('application/json')) throw new Error('La sesión ha caducado. Inicia sesión de nuevo.');
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || 'No se pudo completar la operación.');
+    return payload;
+  }
+  function eventId(prefix) { return `${prefix}-${crypto.randomUUID().replaceAll('-','')}`.slice(0,64); }
+
+  async function operate(code) {
+    if (!selected) throw new Error('Selecciona primero una línea.');
+    const lineId = selected.dataset.lineId;
+    if (selected.dataset.operation === 'return') {
+      const reason = selected.dataset.returnReason || 'Devolución física';
+      await jsonPost(`/inventario/dotaciones/lineas/${lineId}/devolver`, {event_id:eventId('devolucion'), codigo_qr:code, motivo:reason});
+      message.textContent = 'Devolución registrada y artículo reintegrado.';
+    } else if (selected.dataset.state === 'preparada') {
+      if (!signed) throw new Error('El trabajador debe firmar antes de entregar.');
+      const signer = document.getElementById('dotation-signer').value.trim();
+      if (!signer) throw new Error('Indica quién recibe la dotación.');
+      await jsonPost(`/inventario/dotaciones/lineas/${lineId}/entregar`, {
+        event_id:eventId('entrega'), codigo_qr:code, firmado_por:signer,
+        firma_base64:canvas.toDataURL('image/png')
+      });
+      message.textContent = 'Línea entregada y registrada. El stock se ha actualizado.';
+    } else {
+      await jsonPost(`/inventario/dotaciones/lineas/${lineId}/preparar`, {codigo_qr:code});
+      message.textContent = 'Artículo preparado. Escanéalo otra vez al entregarlo.';
+    }
+    message.className = 'inventory-form-result is-success';
+    setTimeout(() => location.reload(), 700);
+  }
+  scan.addEventListener('keydown', async event => {
+    if (event.key !== 'Enter') return; event.preventDefault();
+    const code = scan.value.trim(); if (!code) return;
+    scan.disabled = true;
+    try { await operate(code); } catch (error) { message.className='inventory-form-result is-error'; message.textContent=error.message; }
+    finally { scan.disabled=false; scan.value=''; scan.focus(); }
+  });
+
+  document.querySelectorAll('.js-size').forEach(button => button.onclick = async () => {
+    const card = button.closest('.dotation-line'), size = prompt('Nueva talla o número:');
+    if (!size) return;
+    try { await jsonPost(`/inventario/dotaciones/lineas/${card.dataset.lineId}/talla`, {talla:size}); location.reload(); }
+    catch (error) { alert(error.message); }
+  });
+  document.querySelectorAll('.js-return').forEach(button => button.onclick = async () => {
+    const card = button.closest('.dotation-line'), reason = prompt('Motivo de devolución:') || 'Devolución física';
+    card.dataset.returnReason = reason; selectLine(card, 'return');
+  });
+  document.querySelectorAll('.js-replace').forEach(button => button.onclick = async () => {
+    const card = button.closest('.dotation-line'), reason = prompt('Motivo de sustitución:');
+    if (!reason) return;
+    try { await jsonPost(`/inventario/dotaciones/lineas/${card.dataset.lineId}/sustituir`, {motivo:reason}); location.reload(); }
+    catch (error) { alert(error.message); }
+  });
+
+  const camera = document.getElementById('dotation-camera'), video = document.getElementById('dotation-video');
+  const cameraEligible = /Android|iPad|iPhone|Mobile/i.test(navigator.userAgent) && (navigator.maxTouchPoints > 0 || matchMedia('(pointer:coarse)').matches);
+  camera.hidden = !cameraEligible;
+  camera.onclick = async () => {
+    if (!('BarcodeDetector' in window)) { message.textContent='Este navegador no lee QR directamente. Usa la pistola o escribe el código.'; return; }
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+      video.srcObject=cameraStream; video.hidden=false; await video.play();
+      const detector = new BarcodeDetector({formats:['qr_code']});
+      const detect = async () => {
+        if (!cameraStream) return;
+        const codes = await detector.detect(video);
+        if (codes.length) { cameraStream.getTracks().forEach(track=>track.stop()); cameraStream=null; video.hidden=true; scan.value=codes[0].rawValue; await operate(codes[0].rawValue); return; }
+        requestAnimationFrame(detect);
+      }; detect();
+    } catch (error) { message.className='inventory-form-result is-error'; message.textContent='No se pudo activar la cámara. Usa la pistola USB.'; }
+  };
+  scan.focus();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,490 @@
+{% extends "base.html" %}
+{% block title %}Herramientas{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a>
+<span class="sep">/</span>
+<span class="current">Herramientas</span>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header-row inventory-page-header">
+  <div class="page-header">
+    <div class="inventory-eyebrow">Inventario operativo</div>
+    <div class="page-title"><i class="bi bi-tools"></i> Herramientas</div>
+    <div class="page-subtitle">{{ total_global }} herramientas registradas</div>
+  </div>
+  <div class="inventory-header-actions">
+    <a href="/herramientas/importar" class="btn btn-outline btn-sm">
+      <i class="bi bi-upload"></i> Importar
+    </a>
+    <button class="btn btn-outline btn-sm" onclick="exportarInventario()">
+      <i class="bi bi-download"></i> Exportar
+    </button>
+    <a href="/herramientas/nueva" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg"></i> Nueva herramienta
+    </a>
+  </div>
+</div>
+
+<!-- KPIs completos — 8 estados clave -->
+<div class="kpi-grid inventory-kpis">
+  <div class="kpi-card inventory-kpi{% if not estado_filtro %} is-active is-primary{% endif %}" onclick="filtrarEstado('')">
+    <div class="kpi-icon blue inventory-kpi-icon"><i class="bi bi-tools"></i></div>
+    <div class="kpi-value inventory-kpi-value">{{ total_global }}</div>
+    <div class="kpi-label">Total</div>
+  </div>
+  <div class="kpi-card inventory-kpi is-success{% if estado_filtro=='disponible' %} is-active{% endif %}" onclick="filtrarEstado('disponible')">
+    <div class="kpi-icon green inventory-kpi-icon"><i class="bi bi-check-circle"></i></div>
+    <div class="kpi-value inventory-kpi-value">{{ kpis.get('disponible', 0) }}</div>
+    <div class="kpi-label">Disponibles</div>
+  </div>
+  <div class="kpi-card inventory-kpi is-primary{% if estado_filtro=='entregada' %} is-active{% endif %}" onclick="filtrarEstado('entregada')">
+    <div class="kpi-icon blue inventory-kpi-icon"><i class="bi bi-person"></i></div>
+    <div class="kpi-value inventory-kpi-value">{{ kpis.get('entregada', 0) }}</div>
+    <div class="kpi-label">Entregadas</div>
+  </div>
+  <div class="kpi-card inventory-kpi is-info{% if estado_filtro=='en_obra' %} is-active{% endif %}" onclick="filtrarEstado('en_obra')">
+    <div class="kpi-icon info inventory-kpi-icon"><i class="bi bi-building"></i></div>
+    <div class="kpi-value inventory-kpi-value">{{ kpis.get('en_obra', 0) }}</div>
+    <div class="kpi-label">En obra</div>
+  </div>
+  <div class="kpi-card inventory-kpi is-muted{% if estado_filtro=='en_almacen' %} is-active{% endif %}" onclick="filtrarEstado('en_almacen')">
+    <div class="kpi-icon gray inventory-kpi-icon"><i class="bi bi-house"></i></div>
+    <div class="kpi-value inventory-kpi-value">{{ kpis.get('en_almacen', 0) }}</div>
+    <div class="kpi-label">En almacén</div>
+  </div>
+  <div class="kpi-card inventory-kpi is-warning{% if estado_filtro=='en_furgoneta' %} is-active{% endif %}" onclick="filtrarEstado('en_furgoneta')">
+    <div class="kpi-icon orange inventory-kpi-icon"><i class="bi bi-truck"></i></div>
+    <div class="kpi-value inventory-kpi-value">{{ kpis.get('en_furgoneta', 0) }}</div>
+    <div class="kpi-label">Furgoneta</div>
+  </div>
+  <div class="kpi-card inventory-kpi is-orange{% if estado_filtro=='en_reparacion' %} is-active{% endif %}" onclick="filtrarEstado('en_reparacion')">
+    <div class="kpi-icon orange inventory-kpi-icon"><i class="bi bi-hammer"></i></div>
+    <div class="kpi-value inventory-kpi-value">{{ kpis.get('en_reparacion', 0) }}</div>
+    <div class="kpi-label">Reparación</div>
+  </div>
+  <div class="kpi-card inventory-kpi is-danger{% if estado_filtro in ('perdida','robada','fuera_servicio') %} is-active{% endif %}" onclick="filtrarEstado('perdida')">
+    <div class="kpi-icon red inventory-kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
+    <div class="kpi-value inventory-kpi-value">{{ (kpis.get('perdida', 0) + kpis.get('robada', 0) + kpis.get('fuera_servicio', 0)) }}</div>
+    <div class="kpi-label">Incidencias</div>
+  </div>
+  <div class="kpi-card inventory-kpi is-muted{% if estado_filtro=='baja' %} is-active{% endif %}" onclick="filtrarEstado('baja')">
+    <div class="kpi-icon gray inventory-kpi-icon"><i class="bi bi-x-circle"></i></div>
+    <div class="kpi-value inventory-kpi-value">{{ (kpis.get('baja', 0) + kpis.get('archivada', 0)) }}</div>
+    <div class="kpi-label">Bajas</div>
+  </div>
+</div>
+
+<!-- Tabla principal -->
+<div class="card inventory-directory">
+
+  <!-- Barra de acciones masivas -->
+  <div class="bulk-bar" id="bulk-bar">
+    <i class="bi bi-check-square"></i>
+    <span><span class="bulk-count">0</span> seleccionadas</span>
+    <div class="inventory-bulk-actions">
+      <button class="btn btn-outline btn-sm" onclick="accionMasiva('mover')"><i class="bi bi-arrow-left-right"></i> Mover</button>
+      <button class="btn btn-outline btn-sm" onclick="accionMasiva('etiquetas')"><i class="bi bi-printer"></i> Etiquetas</button>
+      <button class="btn btn-outline btn-sm" onclick="accionMasiva('exportar')"><i class="bi bi-download"></i> Exportar</button>
+    </div>
+  </div>
+
+  <!-- Toolbar filtros -->
+  <form method="get" action="/herramientas" id="form-filtros">
+  <div class="table-toolbar inventory-toolbar">
+    <div class="filter-group inventory-filter-group">
+      <div class="inventory-search">
+        <i class="bi bi-search"></i>
+        <input type="text" name="q" id="filtro-busqueda" class="filter-input" placeholder="Código, nombre, serie..."
+               value="{{ q }}">
+      </div>
+
+      <select name="estado" id="filtro-estado" class="filter-select" onchange="this.form.submit()">
+        <option value="">Todos los estados</option>
+        {% for key, info in estados.items() %}
+        <option value="{{ key }}"{% if estado_filtro == key %} selected{% endif %}>{{ info.label }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="categoria" id="filtro-categoria" class="filter-select" onchange="this.form.submit()">
+        <option value="">Todas las categorías</option>
+        {% for cat in categorias %}
+        <option value="{{ cat }}"{% if categoria_filtro == cat %} selected{% endif %}>{{ cat }}</option>
+        {% endfor %}
+      </select>
+
+      <button type="submit" class="btn btn-outline btn-sm"><i class="bi bi-search"></i></button>
+      {% if q or estado_filtro or categoria_filtro %}
+      <a href="/herramientas" class="btn btn-ghost btn-sm"><i class="bi bi-x"></i> Limpiar</a>
+      {% endif %}
+    </div>
+
+    <div class="table-meta" id="table-meta">
+      {% if q or estado_filtro or categoria_filtro %}
+        {{ total }} de {{ total_global }} resultados
+      {% else %}
+        {{ total_global }} herramientas
+      {% endif %}
+    </div>
+  </div>
+  </form>
+
+  <!-- Tabla -->
+  <div class="inventory-table-wrap">
+    <table class="smart-table inventory-table" id="tabla-herramientas">
+      <thead>
+        <tr>
+          <th class="col-check">
+            <input type="checkbox" class="select-all" id="select-all">
+          </th>
+          <th class="inventory-col-photo">Foto</th>
+          <th class="inventory-col-code">Código</th>
+          <th>Nombre</th>
+          <th class="inventory-col-category">Categoría</th>
+          <th class="inventory-col-brand">Marca / Modelo</th>
+          <th>Estado</th>
+          <th class="inventory-col-location">Ubicación</th>
+          <th>Responsable</th>
+          <th class="col-actions">Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-body">
+        {% for h in herramientas %}
+        <tr data-codigo="{{ h.codigo }}"
+            data-nombre="{{ h.nombre }}"
+            data-categoria="{{ h.categoria or '' }}"
+            data-estado="{{ h.estado }}">
+          <td class="col-check"><input type="checkbox" class="row-check" value="{{ h.id }}"></td>
+
+          <td class="inventory-col-photo">
+            {% if h.foto %}
+            <div class="thumb"><img src="/uploads/herramientas/{{ h.foto }}" alt=""></div>
+            {% else %}
+            <div class="thumb"><i class="bi bi-tools"></i></div>
+            {% endif %}
+          </td>
+
+          <td>
+            <a href="/herramientas/{{ h.id }}" class="inventory-code">
+              {{ h.codigo }}
+            </a>
+          </td>
+
+          <td>
+            <div class="inventory-name">{{ h.nombre }}</div>
+            {% if h.num_serie %}
+            <div class="inventory-serial">S/N: {{ h.num_serie }}</div>
+            {% endif %}
+          </td>
+
+          <td class="inventory-col-category">
+            <span class="inventory-cell-text">{{ h.categoria or '—' }}</span>
+          </td>
+
+          <td class="inventory-col-brand">
+            <div class="inventory-cell-text">{{ h.marca or '—' }}</div>
+            {% if h.modelo %}
+            <div class="inventory-serial">{{ h.modelo }}</div>
+            {% endif %}
+          </td>
+
+          <td>
+            {% set estado_info = estados.get(h.estado, {}) %}
+            {% set clr = estado_info.get('color', 'secondary') %}
+            {% set lbl = estado_info.get('label', h.estado) %}
+            <span class="badge badge-{{ clr }}">
+              <span class="badge-dot-sm"></span>
+              {{ lbl }}
+            </span>
+          </td>
+
+          <td class="inventory-col-location">
+            <span class="inventory-cell-text">
+              {{ h.ubicacion_texto or (h.almacen.nombre if h.almacen else '—') }}
+            </span>
+          </td>
+
+          <td>
+            {% if h.responsable %}
+            <span class="inventory-cell-text">{{ h.responsable.nombre_completo }}</span>
+            {% elif h.obra %}
+            <span class="inventory-cell-text">{{ h.obra.nombre }}</span>
+            {% else %}
+            <span class="inventory-cell-empty">—</span>
+            {% endif %}
+          </td>
+
+          <td class="col-actions">
+            <div class="table-actions">
+              <a href="/herramientas/{{ h.id }}" class="btn btn-ghost btn-icon btn-sm" title="Ver ficha">
+                <i class="bi bi-eye"></i>
+              </a>
+              <a href="/herramientas/{{ h.id }}/editar" class="btn btn-ghost btn-icon btn-sm" title="Editar">
+                <i class="bi bi-pencil"></i>
+              </a>
+              <button class="btn btn-ghost btn-icon btn-sm" title="Más acciones"
+                      onclick="menuAcciones(event, {{ h.id }}, '{{ h.estado }}')">
+                <i class="bi bi-three-dots"></i>
+              </button>
+            </div>
+          </td>
+
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="10">
+            <div class="empty-state">
+              <i class="bi bi-tools"></i>
+              <h3>No hay herramientas</h3>
+              <p>{% if q or estado_filtro %}No hay resultados para los filtros aplicados.{% else %}Comienza registrando la primera herramienta{% endif %}</p>
+              {% if not q and not estado_filtro %}
+              <a href="/herramientas/nueva" class="btn btn-primary btn-sm inventory-empty-action">
+                <i class="bi bi-plus-lg"></i> Nueva herramienta
+              </a>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Paginación -->
+  {% if total_pages > 1 %}
+  <div class="pagination">
+    <span class="inventory-page-meta">Pág. {{ page }} de {{ total_pages }}</span>
+    {% if page > 1 %}
+    <a href="/herramientas?q={{ q }}&estado={{ estado_filtro }}&categoria={{ categoria_filtro }}&page={{ page - 1 }}" class="page-btn"><i class="bi bi-chevron-left"></i></a>
+    {% else %}
+    <button class="page-btn" disabled><i class="bi bi-chevron-left"></i></button>
+    {% endif %}
+
+    {% for p in range([1, page-2]|max, [total_pages+1, page+3]|min) %}
+    <a href="/herramientas?q={{ q }}&estado={{ estado_filtro }}&categoria={{ categoria_filtro }}&page={{ p }}"
+       class="page-btn{% if p == page %} active{% endif %}">{{ p }}</a>
+    {% endfor %}
+
+    {% if page < total_pages %}
+    <a href="/herramientas?q={{ q }}&estado={{ estado_filtro }}&categoria={{ categoria_filtro }}&page={{ page + 1 }}" class="page-btn"><i class="bi bi-chevron-right"></i></a>
+    {% else %}
+    <button class="page-btn" disabled><i class="bi bi-chevron-right"></i></button>
+    {% endif %}
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- Menú contextual acciones -->
+<div id="ctx-menu" class="inventory-context-menu"></div>
+
+<!-- Modal acción masiva — Mover -->
+<div id="modal-mover-masivo" class="inventory-modal">
+  <div class="inventory-modal-dialog">
+    <div class="inventory-modal-header">
+      <span><i class="bi bi-arrow-left-right"></i> Mover herramientas</span>
+      <button onclick="cerrarModal('modal-mover-masivo')" class="btn btn-ghost btn-icon btn-sm"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <form id="form-mover-masivo">
+      <div class="form-group">
+        <label class="form-label">Destino</label>
+        <select id="mover-accion" class="form-control">
+          <option value="a_almacen">Mover a almacén</option>
+          <option value="devolver">Devolver (disponible)</option>
+          <option value="reparacion">Enviar a reparación</option>
+        </select>
+      </div>
+      <div class="form-group inventory-modal-field">
+        <label class="form-label">Observaciones</label>
+        <textarea id="mover-obs" class="form-control" rows="2" placeholder="Motivo del traslado..."></textarea>
+      </div>
+      <div class="inventory-modal-actions">
+        <button type="button" class="btn btn-primary" onclick="ejecutarMoverMasivo()">Aplicar</button>
+        <button type="button" class="btn btn-ghost" onclick="cerrarModal('modal-mover-masivo')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Filtrar por estado desde KPI (recarga página con filtro)
+function filtrarEstado(estado) {
+  const url = new URL(window.location);
+  if (estado) url.searchParams.set('estado', estado);
+  else url.searchParams.delete('estado');
+  url.searchParams.delete('page');
+  window.location.href = url.toString();
+}
+
+// Búsqueda en tiempo real (solo en la página actual, para respuesta inmediata)
+(function() {
+  const inp = document.getElementById('filtro-busqueda');
+  if (!inp) return;
+  let to;
+  inp.addEventListener('input', function() {
+    clearTimeout(to);
+    const q = this.value.toLowerCase();
+    if (!q) {
+      document.querySelectorAll('#tabla-body tr[data-codigo]').forEach(r => r.style.display = '');
+      return;
+    }
+    document.querySelectorAll('#tabla-body tr[data-codigo]').forEach(row => {
+      const txt = row.textContent.toLowerCase();
+      row.style.display = txt.includes(q) ? '' : 'none';
+    });
+    to = setTimeout(() => {
+      // Full server search after 600ms idle
+      document.getElementById('form-filtros').submit();
+    }, 600);
+  });
+})();
+
+// Menú contextual
+function menuAcciones(e, id, estado) {
+  e.stopPropagation();
+  const menu = document.getElementById('ctx-menu');
+
+  const acciones = [
+    { icon:'bi-eye',    label:'Ver ficha',   href:`/herramientas/${id}` },
+    { icon:'bi-pencil', label:'Editar',       href:`/herramientas/${id}/editar` },
+    { icon:'bi-printer',label:'Etiqueta',     href:`/etiquetas/imprimir/${id}` },
+    { icon:'bi-file-pdf',label:'Ficha PDF',   href:`/herramientas/${id}/pdf` },
+  ];
+
+  if (estado === 'disponible') {
+    acciones.push({ icon:'bi-arrow-up-right', label:'Entregar', href:`/movimientos/entregar?herramienta=${id}` });
+  }
+  if (['entregada','en_obra','en_furgoneta','en_almacen'].includes(estado)) {
+    acciones.push({ icon:'bi-arrow-down-left', label:'Devolver', href:'#', onclick:`accionDirecta(${id},'devolver')` });
+  }
+  if (!['en_reparacion','baja','archivada','robada'].includes(estado)) {
+    acciones.push({ icon:'bi-hammer', label:'A reparación', href:'#', onclick:`accionDirecta(${id},'reparacion')` });
+  }
+  if (!['baja','archivada','robada'].includes(estado)) {
+    acciones.push({ icon:'bi-exclamation-circle', label:'Incidencia', href:`/incidencias/nueva?herramienta=${id}` });
+  }
+
+  menu.innerHTML = acciones.map(a => {
+    const extra = a.onclick ? `onclick="${a.onclick};return false"` : '';
+    return `<a href="${a.href}" ${extra} class="inventory-context-action">
+      <i class="bi ${a.icon}"></i>${a.label}</a>`;
+  }).join('');
+
+  menu.style.display = 'block';
+  const rect = e.target.closest('button').getBoundingClientRect();
+  menu.style.top  = rect.bottom + 4 + 'px';
+  menu.style.left = Math.min(rect.left, window.innerWidth - 190) + 'px';
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('ctx-menu').style.display = 'none';
+});
+
+// Acción directa (desde menú contextual)
+async function accionDirecta(id, accion, obs = '') {
+  const fd = new FormData();
+  fd.append('accion', accion);
+  fd.append('observaciones', obs);
+  try {
+    const r = await fetch(`/herramientas/${id}/accion`, {
+      method: 'POST', body: fd, headers: { 'Accept': 'application/json' }
+    });
+    if (r.ok) {
+      Toast.success('Acción aplicada');
+      setTimeout(() => location.reload(), 700);
+    } else {
+      const d = await r.json().catch(() => ({}));
+      Toast.error(d.detail || 'Error al aplicar acción');
+    }
+  } catch { Toast.error('Error de conexión'); }
+}
+
+function exportarInventario() {
+  Toast.info('Generando Excel...');
+  setTimeout(() => { window.location.href = '/informes/inventario/excel'; }, 400);
+}
+
+// Acción masiva
+function accionMasiva(accion) {
+  const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(cb => cb.value);
+  if (!ids.length) { Toast.warning('Selecciona al menos una herramienta'); return; }
+
+  if (accion === 'mover') {
+    document.getElementById('modal-mover-masivo').style.display = 'flex';
+    return;
+  }
+  if (accion === 'etiquetas') {
+    window.location.href = `/etiquetas/lote?ids=${ids.join(',')}`;
+    return;
+  }
+  if (accion === 'exportar') {
+    window.location.href = `/api/v1/tools/export?ids=${ids.join(',')}`;
+    return;
+  }
+}
+
+async function ejecutarMoverMasivo() {
+  const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(cb => cb.value);
+  const accion = document.getElementById('mover-accion').value;
+  const obs = document.getElementById('mover-obs').value;
+
+  cerrarModal('modal-mover-masivo');
+  Toast.info(`Aplicando a ${ids.length} herramientas...`);
+
+  let ok = 0, err = 0;
+  for (const id of ids) {
+    const fd = new FormData();
+    fd.append('accion', accion);
+    fd.append('observaciones', obs);
+    try {
+      const r = await fetch(`/herramientas/${id}/accion`, {
+        method: 'POST', body: fd, headers: { 'Accept': 'application/json' }
+      });
+      if (r.ok) ok++; else err++;
+    } catch { err++; }
+  }
+
+  if (err === 0) Toast.success(`${ok} herramientas actualizadas`);
+  else Toast.warning(`${ok} actualizadas, ${err} errores`);
+  setTimeout(() => location.reload(), 1000);
+}
+
+function cerrarModal(id) {
+  document.getElementById(id).style.display = 'none';
+}
+
+// Checkboxes + bulk bar
+document.addEventListener('DOMContentLoaded', () => {
+  initSmartTable('tabla-herramientas');
+
+  document.getElementById('select-all').addEventListener('change', function() {
+    document.querySelectorAll('.row-check').forEach(cb => {
+      cb.checked = this.checked;
+      cb.closest('tr').classList.toggle('selected', this.checked);
+    });
+    actualizarBulkBar();
+  });
+
+  document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('row-check')) {
+      e.target.closest('tr').classList.toggle('selected', e.target.checked);
+      actualizarBulkBar();
+    }
+  });
+});
+
+function actualizarBulkBar() {
+  const cnt = document.querySelectorAll('.row-check:checked').length;
+  const bar = document.getElementById('bulk-bar');
+  if (bar) {
+    bar.classList.toggle('visible', cnt > 0);
+    bar.querySelector('.bulk-count').textContent = cnt;
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% block title %}Editar — {{ auto.nombre }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/automatizaciones">Automatizaciones</a><span class="sep">/</span>
+<a href="/automatizaciones/{{ auto.id }}">{{ auto.nombre }}</a><span class="sep">/</span>
+<span class="current">Editar</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title"><i class="bi bi-pencil-square" style="color:var(--primary)"></i> Editar automatización</div>
+    <div class="page-subtitle">v{{ auto.version }} → v{{ auto.version + 1 }} al guardar</div>
+  </div>
+  <a href="/automatizaciones/{{ auto.id }}" class="btn btn-ghost btn-sm"><i class="bi bi-arrow-left"></i> Cancelar</a>
+</div>
+
+{% if error %}
+<div style="background:var(--danger-light);border:1px solid var(--danger);border-radius:8px;padding:12px 16px;margin-bottom:16px;color:var(--danger);font-size:.84rem">
+  <i class="bi bi-exclamation-circle-fill"></i> {{ error }}
+</div>
+{% endif %}
+
+<form method="post" action="/automatizaciones/{{ auto.id }}/editar" id="form-editar">
+  <div style="display:grid;grid-template-columns:1fr 260px;gap:16px;align-items:start">
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <!-- Identidad -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-tag"></i> Identificación</div></div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Nombre <span class="required">*</span></label>
+            <input type="text" name="nombre" class="form-control" required value="{{ auto.nombre }}">
+          </div>
+          <div class="form-row form-row-2">
+            <div class="form-group">
+              <label class="form-label">Descripción</label>
+              <textarea name="descripcion" class="form-control" rows="2">{{ auto.descripcion or '' }}</textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Prioridad</label>
+              <select name="prioridad" class="form-control">
+                {% for key, label in prioridades_auto.items() %}
+                <option value="{{ key }}" {% if auto.prioridad == key %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Disparador -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-clock"></i> Disparador</div></div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <select name="tipo_disparador" class="form-control" id="sel-disparador" onchange="mostrarConfigDisparador(this.value)">
+              {% for key, label in tipos_disparador.items() %}
+              <option value="{{ key }}" {% if auto.tipo_disparador == key %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div id="cfg-intervalo" style="display:none">
+            <div class="form-group">
+              <label class="form-label">Cada cuántos minutos</label>
+              <input type="number" name="intervalo_min" class="form-control" min="5" max="1440"
+                     value="{{ config_disp.get('intervalo_min', 60) }}" style="max-width:120px">
+            </div>
+          </div>
+          <div id="cfg-diario" style="display:none">
+            <div class="form-group">
+              <label class="form-label">Hora de ejecución</label>
+              <input type="time" name="hora_diario" class="form-control"
+                     value="{{ config_disp.get('hora', '08:00') }}" style="max-width:150px">
+            </div>
+          </div>
+          <div id="cfg-evento" style="display:none">
+            <div class="form-group">
+              <label class="form-label">Filtrar por estado (opcional)</label>
+              <input type="text" name="filtro_estado_evento" class="form-control"
+                     value="{{ config_disp.get('filtro_estado', '') }}"
+                     placeholder="disponible, entregada, en_reparacion... (vacío = cualquier estado)">
+              <div class="form-hint">Solo se disparará cuando el activo pase al estado indicado.</div>
+            </div>
+          </div>
+          <div id="cfg-manual" style="display:none">
+            <div style="background:var(--surface-2);border-radius:6px;padding:10px 14px;font-size:.82rem;color:var(--text-muted)">
+              <i class="bi bi-info-circle" style="color:var(--primary)"></i> Solo se ejecuta manualmente.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Condiciones (hasta 3, AND) -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-funnel"></i> Condiciones <span style="font-size:.78rem;font-weight:400;color:var(--text-muted)">(se aplican todas — AND)</span></div>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
+          {% for i in range(1, 4) %}
+          {% set cond = condiciones[i-1] if condiciones|length >= i else {} %}
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--surface-2)">
+            <div style="font-size:.75rem;color:var(--text-muted);font-weight:600;margin-bottom:8px">CONDICIÓN {{ i }}{% if i > 1 %} <span style="color:var(--success)">AND</span>{% endif %}</div>
+            <div class="form-row form-row-2">
+              <div class="form-group" style="margin-bottom:8px">
+                <select name="tipo_condicion_{{ i }}" class="form-control cond-sel"
+                        data-idx="{{ i }}" onchange="mostrarConfigCond({{ i }}, this.value)">
+                  <option value="ninguna">— Sin condición —</option>
+                  {% for key, label in tipos_condicion.items() %}
+                  <option value="{{ key }}" {% if cond.get('tipo') == key %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="form-group cond-dias-{{ i }}" style="margin-bottom:8px;display:{% if cond.get('dias') is not none and cond.get('tipo','') not in ('siempre','herramienta_estado_es','maquinaria_estado_es','stock_material_bajo') %}block{% else %}none{% endif %}">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <input type="number" name="cond_dias_{{ i }}" class="form-control" min="1" max="365"
+                         value="{{ cond.get('dias', 30) }}" style="max-width:90px">
+                  <span style="font-size:.82rem;color:var(--text-muted)">días</span>
+                </div>
+              </div>
+            </div>
+            <div class="cond-estado-{{ i }}" style="display:{% if cond.get('tipo','') in ('herramienta_estado_es','maquinaria_estado_es') %}block{% else %}none{% endif %}">
+              <div class="form-row form-row-2">
+                <div class="form-group" style="margin-bottom:0">
+                  <label class="form-label" style="font-size:.78rem">Estado</label>
+                  <input type="text" name="cond_estado_{{ i }}" class="form-control"
+                         value="{{ cond.get('estado', '') }}"
+                         placeholder="disponible, entregada, en_reparacion...">
+                </div>
+                <div class="form-group" style="margin-bottom:0">
+                  <label class="form-label" style="font-size:.78rem">Mín. días en ese estado (0 = cualquiera)</label>
+                  <input type="number" name="cond_dias_{{ i }}" class="form-control" min="0" max="365"
+                         value="{{ cond.get('dias', 0) }}" style="max-width:90px">
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Acciones (hasta 2) -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-lightning"></i> Acciones <span style="font-size:.78rem;font-weight:400;color:var(--text-muted)">(se ejecutan en orden)</span></div>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
+          {% for i in range(1, 3) %}
+          {% set acc = acciones[i-1] if acciones|length >= i else {} %}
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--surface-2)">
+            <div style="font-size:.75rem;color:var(--text-muted);font-weight:600;margin-bottom:8px">ACCIÓN {{ i }}</div>
+            <div class="form-group">
+              <select name="tipo_accion_{{ i }}" class="form-control acc-sel"
+                      data-idx="{{ i }}" onchange="mostrarConfigAcc({{ i }}, this.value)">
+                <option value="ninguna">— Sin acción —</option>
+                {% for key, label in tipos_accion.items() %}
+                <option value="{{ key }}" {% if acc.get('tipo') == key %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Config: crear_aviso / notificar_usuario -->
+            <div class="acc-aviso-{{ i }}" style="display:{% if acc.get('tipo') in ('crear_aviso','notificar_usuario') %}block{% else %}none{% endif %}">
+              <div class="form-row form-row-2">
+                <div class="form-group">
+                  <label class="form-label" style="font-size:.78rem">Título</label>
+                  <input type="text" name="accion_titulo_{{ i }}" class="form-control"
+                         value="{{ acc.get('titulo','Aviso: {nombre}') }}">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" style="font-size:.78rem">Prioridad</label>
+                  <select name="accion_prioridad_{{ i }}" class="form-control">
+                    {% for key, label in prioridades_aviso.items() %}
+                    <option value="{{ key }}" {% if acc.get('prioridad','media') == key %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" style="font-size:.78rem">Mensaje</label>
+                <textarea name="accion_mensaje_{{ i }}" class="form-control" rows="2">{{ acc.get('mensaje','El activo {nombre} ({codigo}) requiere atención.') }}</textarea>
+              </div>
+              <div class="acc-username-{{ i }}" style="display:{% if acc.get('tipo') == 'notificar_usuario' %}block{% else %}none{% endif %}">
+                <div class="form-group">
+                  <label class="form-label" style="font-size:.78rem">Usuario destinatario</label>
+                  <select name="accion_username_{{ i }}" class="form-control">
+                    <option value="">Todos los usuarios</option>
+                    {% for u in usuarios %}
+                    <option value="{{ u.username }}" {% if acc.get('username_destino') == u.username %}selected{% endif %}>
+                      {{ u.nombre or u.username }} (@{{ u.username }})
+                    </option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Config: cambiar_estado_herramienta -->
+            <div class="acc-estado-{{ i }}" style="display:{% if acc.get('tipo') == 'cambiar_estado_herramienta' %}block{% else %}none{% endif %}">
+              <div class="form-row form-row-2">
+                <div class="form-group">
+                  <label class="form-label" style="font-size:.78rem">Estado destino</label>
+                  <input type="text" name="accion_estado_destino_{{ i }}" class="form-control"
+                         value="{{ acc.get('estado_destino','') }}"
+                         placeholder="disponible, en_reparacion...">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" style="font-size:.78rem">Mensaje de auditoría</label>
+                  <input type="text" name="accion_mensaje_{{ i }}" class="form-control"
+                         value="{{ acc.get('mensaje','') }}"
+                         placeholder="Razón del cambio automático">
+                </div>
+              </div>
+              <div style="background:var(--warning-light, #fff3cd);border-radius:6px;padding:8px 12px;font-size:.78rem;color:#856404;margin-top:4px">
+                <i class="bi bi-exclamation-triangle"></i> Esta acción modifica el estado real de la herramienta. Simula primero antes de activar.
+              </div>
+            </div>
+
+            <!-- Config: registrar_log -->
+            <div class="acc-log-{{ i }}" style="display:{% if acc.get('tipo') == 'registrar_log' %}block{% else %}none{% endif %}">
+              <div class="form-row form-row-2">
+                <div class="form-group">
+                  <label class="form-label" style="font-size:.78rem">Nivel</label>
+                  <select name="accion_nivel_{{ i }}" class="form-control">
+                    {% for lvl in ['info','warning','error'] %}
+                    <option value="{{ lvl }}" {% if acc.get('nivel','info') == lvl %}selected{% endif %}>{{ lvl.upper() }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" style="font-size:.78rem">Mensaje</label>
+                  <input type="text" name="accion_mensaje_{{ i }}" class="form-control"
+                         value="{{ acc.get('mensaje','{nombre_auto}: {nombre} ({codigo})') }}">
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Panel lateral -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="card">
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="bi bi-floppy"></i> Guardar cambios
+          </button>
+          <a href="/automatizaciones/{{ auto.id }}" class="btn btn-ghost w-100">Cancelar</a>
+        </div>
+      </div>
+      <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:.79rem;color:var(--text-muted)">
+        <i class="bi bi-info-circle" style="color:var(--primary)"></i>
+        Guardar incrementa la versión a <strong>v{{ auto.version + 1 }}</strong>. El historial de ejecuciones se conserva.
+      </div>
+      <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:.79rem;color:var(--text-muted)">
+        <div style="font-weight:600;margin-bottom:4px"><i class="bi bi-braces"></i> Variables disponibles</div>
+        <code style="font-size:.75rem">{nombre}</code> nombre del activo<br>
+        <code style="font-size:.75rem">{codigo}</code> código interno<br>
+        <code style="font-size:.75rem">{estado}</code> estado actual<br>
+        <code style="font-size:.75rem">{dias}</code> días en ese estado<br>
+        <code style="font-size:.75rem">{marca}</code> marca<br>
+        <code style="font-size:.75rem">{enlace}</code> URL de la ficha<br>
+        <code style="font-size:.75rem">{nombre_auto}</code> nombre de esta regla
+      </div>
+    </div>
+
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const COND_CON_DIAS = ['herramienta_dias_entregada','reparacion_retrasada',
+  'mantenimiento_proximo_itv','maquinaria_sin_movimiento','herramienta_garantia_vence',
+  'incidencia_abierta_dias'];
+const COND_CON_ESTADO = ['herramienta_estado_es','maquinaria_estado_es'];
+
+function mostrarConfigDisparador(val) {
+  ['intervalo','diario','evento','manual'].forEach(t =>
+    document.getElementById('cfg-'+t).style.display = (val === t || (val.startsWith('evento') && t === 'evento')) ? 'block' : 'none'
+  );
+}
+
+function mostrarConfigCond(i, val) {
+  const diasEl = document.querySelector('.cond-dias-' + i);
+  const estadoEl = document.querySelector('.cond-estado-' + i);
+  if (diasEl) diasEl.style.display = COND_CON_DIAS.includes(val) ? 'block' : 'none';
+  if (estadoEl) estadoEl.style.display = COND_CON_ESTADO.includes(val) ? 'block' : 'none';
+}
+
+function mostrarConfigAcc(i, val) {
+  const aviso = document.querySelector('.acc-aviso-' + i);
+  const estado = document.querySelector('.acc-estado-' + i);
+  const log = document.querySelector('.acc-log-' + i);
+  const uname = document.querySelector('.acc-username-' + i);
+  if (aviso) aviso.style.display = ['crear_aviso','notificar_usuario'].includes(val) ? 'block' : 'none';
+  if (estado) estado.style.display = val === 'cambiar_estado_herramienta' ? 'block' : 'none';
+  if (log) log.style.display = val === 'registrar_log' ? 'block' : 'none';
+  if (uname) uname.style.display = val === 'notificar_usuario' ? 'block' : 'none';
+}
+
+// Init
+mostrarConfigDisparador(document.getElementById('sel-disparador').value);
+[1,2,3].forEach(i => {
+  const sel = document.querySelector(`[name=tipo_condicion_${i}]`);
+  if (sel) mostrarConfigCond(i, sel.value);
+});
+[1,2].forEach(i => {
+  const sel = document.querySelector(`[name=tipo_accion_${i}]`);
+  if (sel) mostrarConfigAcc(i, sel.value);
+});
+</script>
+{% endblock %}

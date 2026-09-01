@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Búsqueda: {{ q }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a> / <span class="current">Buscar</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header-row" style="margin-bottom:16px">
+  <div>
+    <div class="page-title"><i class="bi bi-search me-2"></i>Resultados para "<strong>{{ q }}</strong>"</div>
+    <div class="page-subtitle">{{ total }} resultado{{ 's' if total != 1 else '' }} encontrado{{ 's' if total != 1 else '' }}</div>
+  </div>
+  <form method="get" action="/buscar" style="display:flex;gap:8px;align-items:center">
+    <div class="search-input-wrap" style="min-width:280px">
+      <i class="bi bi-search"></i>
+      <input type="text" name="q" value="{{ q }}" class="search-input" placeholder="Nueva búsqueda..." autofocus>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Buscar</button>
+  </form>
+</div>
+
+{% if not total %}
+<div class="card" style="text-align:center;padding:48px 24px">
+  <i class="bi bi-search" style="font-size:3rem;color:var(--text-muted)"></i>
+  <h3 style="margin-top:16px;color:var(--text-2)">Sin resultados</h3>
+  <p style="color:var(--text-muted)">No se encontró nada para "<strong>{{ q }}</strong>".<br>Prueba con otro término.</p>
+</div>
+{% endif %}
+
+<div style="display:flex;flex-direction:column;gap:16px">
+
+{% if herramientas %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="bi bi-wrench-adjustable"></i> Herramientas</div>
+    <span class="badge badge-primary">{{ herramientas | length }}</span>
+  </div>
+  <div class="card-body-flush">
+    {% for h in herramientas %}
+    <a href="/herramientas/{{ h.id }}" style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);text-decoration:none;transition:background .1s" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background=''">
+      {% if h.foto_path %}
+      <img src="/static/uploads/herramientas/{{ h.foto_path }}" class="foto-badge" alt="">
+      {% else %}
+      <div class="foto-badge" style="background:var(--primary-light);display:flex;align-items:center;justify-content:center;color:var(--primary);font-size:1.3rem"><i class="bi bi-wrench-adjustable"></i></div>
+      {% endif %}
+      <div style="flex:1">
+        <div style="font-size:.9rem;font-weight:600;color:var(--text)">{{ h.codigo }} — {{ h.nombre }}</div>
+        <div style="font-size:.78rem;color:var(--text-muted)">
+          {{ h.categoria or 'Sin categoría' }}
+          {% if h.num_serie %} · Nº {{ h.num_serie }}{% endif %}
+        </div>
+      </div>
+      <span class="badge
+        {% if h.estado == 'disponible' %}badge-success
+        {% elif h.estado in ('en_obra','entregada') %}badge-primary
+        {% elif h.estado == 'en_reparacion' %}badge-orange
+        {% elif h.estado == 'perdida' %}badge-danger
+        {% else %}badge-gray{% endif %}">
+        {{ h.estado | replace('_',' ') | title }}
+      </span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if trabajadores %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="bi bi-people"></i> Trabajadores</div>
+    <span class="badge badge-success">{{ trabajadores | length }}</span>
+  </div>
+  <div class="card-body-flush">
+    {% for t in trabajadores %}
+    <a href="/trabajadores" style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);text-decoration:none;transition:background .1s" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background=''">
+      <div style="width:40px;height:40px;border-radius:50%;background:var(--success-light);display:flex;align-items:center;justify-content:center;color:var(--success);font-size:1rem;font-weight:700;flex-shrink:0">
+        {{ t.nombre[0].upper() if t.nombre else '?' }}
+      </div>
+      <div style="flex:1">
+        <div style="font-size:.9rem;font-weight:600;color:var(--text)">{{ t.nombre_completo }}</div>
+        <div style="font-size:.78rem;color:var(--text-muted)">{{ t.cargo or '' }}{% if t.dni %} · {{ t.dni }}{% endif %}</div>
+      </div>
+      <span class="badge {% if t.activo %}badge-success{% else %}badge-gray{% endif %}">
+        {{ 'Activo' if t.activo else 'Inactivo' }}
+      </span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if obras %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="bi bi-building"></i> Obras</div>
+    <span class="badge badge-info">{{ obras | length }}</span>
+  </div>
+  <div class="card-body-flush">
+    {% for o in obras %}
+    <a href="/obras/{{ o.id }}" style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);text-decoration:none;transition:background .1s" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background=''">
+      <div style="width:40px;height:40px;border-radius:8px;background:var(--info-light);display:flex;align-items:center;justify-content:center;color:var(--info);font-size:1.1rem;flex-shrink:0">
+        <i class="bi bi-building"></i>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:.9rem;font-weight:600;color:var(--text)">{{ o.nombre }}</div>
+        <div style="font-size:.78rem;color:var(--text-muted)">{{ o.numero or '' }}{% if o.direccion %} · {{ o.direccion }}{% endif %}</div>
+      </div>
+      <span class="badge {% if o.activa %}badge-success{% else %}badge-gray{% endif %}">
+        {{ 'Activa' if o.activa else 'Finalizada' }}
+      </span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if maquinaria %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="bi bi-truck-front"></i> Maquinaria</div>
+    <span class="badge badge-gray">{{ maquinaria | length }}</span>
+  </div>
+  <div class="card-body-flush">
+    {% for m in maquinaria %}
+    <a href="/maquinaria/{{ m.id }}" style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);text-decoration:none;transition:background .1s" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background=''">
+      <div style="width:40px;height:40px;border-radius:8px;background:var(--orange-light);display:flex;align-items:center;justify-content:center;color:var(--orange);font-size:1.1rem;flex-shrink:0">
+        <i class="bi bi-truck-front"></i>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:.9rem;font-weight:600;color:var(--text)">{{ m.nombre }}</div>
+        <div style="font-size:.78rem;color:var(--text-muted)">{{ m.tipo or '' }}{% if m.matricula %} · {{ m.matricula }}{% endif %}</div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if albaranes %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="bi bi-file-earmark-text"></i> Albaranes</div>
+    <span class="badge badge-secondary">{{ albaranes | length }}</span>
+  </div>
+  <div class="card-body-flush">
+    {% for a in albaranes %}
+    <a href="/albaranes-salida/{{ a.id }}" style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);text-decoration:none;transition:background .1s" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background=''">
+      <div style="width:40px;height:40px;border-radius:8px;background:var(--gray-light);display:flex;align-items:center;justify-content:center;color:var(--text-2);font-size:1.1rem;flex-shrink:0">
+        <i class="bi bi-file-earmark-text"></i>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:.9rem;font-weight:600;color:var(--text)">{{ a.numero }}</div>
+        <div style="font-size:.78rem;color:var(--text-muted)">{{ a.origen_destino or '' }}</div>
+      </div>
+      <span class="badge {% if a.estado == 'cerrado' %}badge-success{% elif a.estado == 'parcial' %}badge-orange{% else %}badge-primary{% endif %}">
+        {{ a.estado | title }}
+      </span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+</div>
+{% endblock %}
+

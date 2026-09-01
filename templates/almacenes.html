@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}Almacenes — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header">
+  <h2 class="mrd-page-title"><i class="bi bi-house-gear me-2"></i>Almacenes</h2>
+  {% if user.rol == 'admin' %}
+  <button class="btn btn-warning mrd-btn" data-bs-toggle="modal" data-bs-target="#nuevoAlmacenModal">
+    <i class="bi bi-plus-lg me-1"></i>Nuevo almacén
+  </button>
+  {% endif %}
+</div>
+
+{% if request.query_params.get('ok') == 'editado' %}
+<div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+  <i class="bi bi-check-circle me-2"></i>Almacén actualizado.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% elif request.query_params.get('ok') == 'eliminado' %}
+<div class="alert alert-warning alert-dismissible fade show mb-3" role="alert">
+  <i class="bi bi-trash me-2"></i>Almacén eliminado.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{# ── Buscador ── #}
+<div class="mb-3">
+  <input type="search" id="busca-almacen" class="form-control mrd-input"
+         placeholder="🔍  Buscar almacén por nombre, dirección o responsable…"
+         oninput="filtrarAlmacenes(this.value)">
+</div>
+
+{# ── Tarjetas ── #}
+<div class="row g-3" id="lista-almacenes">
+  {% for a in almacenes %}
+  {% set n_herr = a.herramientas | length %}
+  {% set n_mat  = a.materiales   | length %}
+  {% set n_ubi  = a.ubicaciones  | length %}
+  <div class="col-sm-6 col-lg-4 almacen-card"
+       data-busca="{{ (a.nombre ~ ' ' ~ (a.descripcion or '') ~ ' ' ~ (a.direccion or '') ~ ' ' ~ (a.responsable or '')) | lower }}">
+    <div class="mrd-card p-0 overflow-hidden h-100">
+
+      {# Foto o placeholder #}
+      {% if a.foto %}
+      <img src="/static/uploads/almacenes/{{ a.foto }}"
+           style="width:100%;height:120px;object-fit:cover" alt="{{ a.nombre }}">
+      {% else %}
+      <div style="width:100%;height:80px;background:var(--surface-alt);display:flex;align-items:center;justify-content:center">
+        <i class="bi bi-house-gear" style="font-size:2rem;color:var(--text-muted)"></i>
+      </div>
+      {% endif %}
+
+      <div class="p-3">
+        <h5 class="mb-0">{{ a.nombre }}</h5>
+        {% if a.descripcion %}
+        <small class="text-muted">{{ a.descripcion }}</small>
+        {% endif %}
+        {% if a.direccion %}
+        <p class="text-muted small mb-1 mt-2"><i class="bi bi-geo-alt me-1"></i>{{ a.direccion }}</p>
+        {% endif %}
+        {% if a.responsable %}
+        <p class="text-muted small mb-2"><i class="bi bi-person me-1"></i>{{ a.responsable }}</p>
+        {% endif %}
+
+        {# KPIs #}
+        <div class="d-flex gap-2 flex-wrap mb-3">
+          <span class="badge bg-warning text-dark">
+            <i class="bi bi-tools me-1"></i>{{ n_herr }} herramienta{% if n_herr != 1 %}s{% endif %}
+          </span>
+          <span class="badge bg-info text-dark">
+            <i class="bi bi-box-seam me-1"></i>{{ n_mat }} material{% if n_mat != 1 %}es{% endif %}
+          </span>
+          {% if n_ubi %}
+          <span class="badge bg-secondary">
+            <i class="bi bi-diagram-3 me-1"></i>{{ n_ubi }} ubicacion{% if n_ubi != 1 %}es{% endif %}
+          </span>
+          {% endif %}
+        </div>
+
+        {# Botones #}
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="/almacenes/{{ a.id }}" class="btn btn-sm btn-outline-primary flex-fill">
+            <i class="bi bi-eye me-1"></i>Ver detalle
+          </a>
+          <a href="/almacenes/{{ a.id }}/mapa" class="btn btn-sm btn-primary" title="Mapa de la nave">
+            <i class="bi bi-map"></i> Mapa
+          </a>
+          <a href="/almacenes/{{ a.id }}/qr" target="_blank" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-qr-code"></i>
+          </a>
+          {% if user.rol == 'admin' %}
+          <button class="btn btn-sm btn-outline-warning"
+                  data-aid="{{ a.id }}"
+                  data-nombre="{{ a.nombre }}"
+                  data-descripcion="{{ a.descripcion or '' }}"
+                  data-direccion="{{ a.direccion or '' }}"
+                  data-responsable="{{ a.responsable or '' }}"
+                  onclick="editarAlmacen(this)" title="Editar">
+            <i class="bi bi-pencil"></i>
+          </button>
+          {% endif %}
+          {% if user.rol == 'admin' %}
+          <form method="post" action="/almacenes/{{ a.id }}/eliminar" class="d-inline"
+                onsubmit="return confirm('¿Eliminar {{ a.nombre }}? Se desvincularán sus herramientas y materiales.')">
+            <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
+              <i class="bi bi-trash3"></i>
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="col-12 text-center text-muted py-5">
+    <i class="bi bi-house-gear fs-1 d-block mb-2"></i>No hay almacenes creados
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Modal Nuevo almacén -->
+<div class="modal fade" id="nuevoAlmacenModal" tabindex="-1" style="display:none">
+  <div class="modal-dialog">
+    <div class="modal-content mrd-modal-dark">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="bi bi-house-gear me-2"></i>Nuevo almacén</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="/almacenes/nuevo">
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-12">
+              <label class="form-label">Nombre <span class="text-danger">*</span></label>
+              <input type="text" name="nombre" class="form-control mrd-input" required>
+            </div>
+            <div class="col-12 small text-muted"><i class="bi bi-qr-code me-1"></i>El sistema asignará automáticamente una referencia y un QR únicos.</div>
+          </div>
+          <div class="mt-2">
+            <label class="form-label">Descripción</label>
+            <input type="text" name="descripcion" class="form-control mrd-input">
+          </div>
+          <div class="mt-2">
+            <label class="form-label">Dirección</label>
+            <input type="text" name="direccion" class="form-control mrd-input">
+          </div>
+          <div class="mt-2">
+            <label class="form-label">Responsable</label>
+            <input type="text" name="responsable" class="form-control mrd-input">
+          </div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-warning">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Editar almacén -->
+<div class="modal fade" id="editarAlmacenModal" tabindex="-1" style="display:none">
+  <div class="modal-dialog">
+    <div class="modal-content mrd-modal-dark">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Editar almacén</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" id="form-editar-almacen" action="">
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label">Nombre <span class="text-danger">*</span></label>
+            <input type="text" id="ea-nombre" name="nombre" class="form-control mrd-input" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Descripción</label>
+            <input type="text" id="ea-descripcion" name="descripcion" class="form-control mrd-input">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Dirección</label>
+            <input type="text" id="ea-direccion" name="direccion" class="form-control mrd-input">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Responsable</label>
+            <input type="text" id="ea-responsable" name="responsable" class="form-control mrd-input">
+          </div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-warning"><i class="bi bi-floppy me-1"></i>Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function resetWarehouseUI() {
+  document.querySelectorAll('.modal.show').forEach(function(modal) {
+    if (window.bootstrap && bootstrap.Modal) {
+      var instance = bootstrap.Modal.getInstance(modal);
+      if (instance) instance.dispose();
+    }
+    modal.classList.remove('show');
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+    modal.removeAttribute('aria-modal');
+  });
+  document.querySelectorAll('.modal-backdrop').forEach(function(backdrop) { backdrop.remove(); });
+  document.body.classList.remove('modal-open');
+  document.body.style.overflow = '';
+  document.body.style.paddingRight = '';
+}
+document.addEventListener('DOMContentLoaded', resetWarehouseUI);
+window.addEventListener('pageshow', resetWarehouseUI);
+
+function editarAlmacen(btn) {
+  const d = btn.dataset;
+  document.getElementById('form-editar-almacen').action = `/almacenes/${d.aid}/editar`;
+  document.getElementById('ea-nombre').value = d.nombre;
+  document.getElementById('ea-descripcion').value = d.descripcion;
+  document.getElementById('ea-direccion').value = d.direccion;
+  document.getElementById('ea-responsable').value = d.responsable;
+  new bootstrap.Modal(document.getElementById('editarAlmacenModal')).show();
+}
+function filtrarAlmacenes(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('.almacen-card').forEach(c => {
+    c.style.display = (!q || c.dataset.busca.includes(q)) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

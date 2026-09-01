@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}Materiales — Almacén{% endblock %}
+{% block content %}
+
+{% if request.query_params.get('ok') %}
+<div class="alert alert-success alert-dismissible fade show mb-3">
+  {% if request.query_params.get('ok') == 'creado' %}<i class="bi bi-check-circle me-2"></i>Material añadido correctamente.
+  {% elif request.query_params.get('ok') == 'eliminado' %}<i class="bi bi-archive me-2"></i>Material dado de baja.{% endif %}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<!-- Cabecera -->
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title"><i class="bi bi-box-seam me-2 text-success"></i>Materiales / Almacén</div>
+    <div class="page-subtitle">Stock de materiales, tornillería y suministros</div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/panel-salidas" class="btn btn-outline btn-sm"><i class="bi bi-eye me-1"></i>¿Qué está fuera?</a>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNuevo">
+      <i class="bi bi-plus-lg me-1"></i>Nuevo material
+    </button>
+  </div>
+</div>
+
+<!-- KPIs -->
+{% set total = materiales_total if materiales_total is defined else materiales|length %}
+{% set bajos = materiales_bajo_minimo if materiales_bajo_minimo is defined else (materiales | selectattr('bajo_minimo') | list | length) %}
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px">
+  <a href="/materiales" style="text-decoration:none">
+    <div class="card" style="padding:14px;text-align:center">
+      <div style="font-size:1.6rem;font-weight:800;color:var(--primary)">{{ total }}</div>
+      <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">Total materiales</div>
+    </div>
+  </a>
+  <a href="/materiales?solo_bajos=1" style="text-decoration:none">
+    <div class="card" style="padding:14px;text-align:center{% if bajos > 0 %};border:2px solid var(--warning){% endif %}">
+      <div style="font-size:1.6rem;font-weight:800;color:{% if bajos > 0 %}var(--warning){% else %}var(--success){% endif %}">{{ bajos }}</div>
+      <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">Bajo mínimo</div>
+    </div>
+  </a>
+  <a href="/materiales/alertas" style="text-decoration:none">
+    <div class="card" style="padding:14px;text-align:center">
+      <div style="font-size:1.6rem;font-weight:800;color:var(--danger)">!</div>
+      <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">Alertas stock</div>
+    </div>
+  </a>
+</div>
+
+<!-- Filtros -->
+<div class="card" style="margin-bottom:16px">
+  <div class="card-body" style="padding:12px">
+    <form method="get" action="/materiales" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input type="search" name="q" class="form-control" placeholder="Buscar código, nombre..." value="{{ q }}" style="max-width:280px">
+      <select name="cat" class="form-control" style="max-width:200px">
+        <option value="">Todas las categorías</option>
+        {% for c in categorias %}<option value="{{ c }}" {% if cat == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+      </select>
+      <div class="form-check mb-0">
+        <input class="form-check-input" type="checkbox" name="solo_bajos" value="1" id="chkBajos" {% if solo_bajos %}checked{% endif %}>
+        <label class="form-check-label" for="chkBajos">Solo bajo mínimo</label>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+      {% if q or cat or solo_bajos %}
+      <a href="/materiales" class="btn btn-ghost btn-sm">Limpiar</a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- Tabla -->
+<div class="card">
+  <div class="card-body" style="padding:0">
+    {% if materiales %}
+    <table class="table" style="margin:0">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Nombre</th>
+          <th>Categoría</th>
+          <th>Ubicación</th>
+          <th class="text-end">Stock</th>
+          <th class="text-end">Mínimo</th>
+          <th>Estado</th>
+          <th style="width:100px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in materiales %}
+        <tr onclick="location.href='/materiales/{{ m.id }}'" style="cursor:pointer"
+            class="{% if m.bajo_minimo %}table-warning{% endif %}">
+          <td><code style="font-size:.78rem">{{ m.codigo | truncate(20, true, '…') if m.codigo else '—' }}</code></td>
+          <td>
+            <div style="font-weight:600">{{ m.nombre }}</div>
+            {% if m.bajo_minimo %}
+            <div style="font-size:.72rem;color:var(--warning)"><i class="bi bi-exclamation-triangle me-1"></i>Bajo mínimo</div>
+            {% endif %}
+          </td>
+          <td style="font-size:.85rem;color:var(--text-muted)">{{ m.categoria or '—' }}</td>
+          <td style="font-size:.85rem;color:var(--text-muted)">{{ m.ubicacion_texto or m.ubicacion or '—' }}</td>
+          <td class="text-end fw-bold {% if m.bajo_minimo %}text-danger{% endif %}">
+            {{ "%.2f"|format(m.stock_actual) }} <small class="fw-normal text-muted">{{ m.unidad }}</small>
+          </td>
+          <td class="text-end" style="font-size:.85rem;color:var(--text-muted)">
+            {{ "%.2f"|format(m.stock_minimo) }} {{ m.unidad }}
+          </td>
+          <td>
+            {% if m.bajo_minimo %}
+              <span class="badge bg-warning text-dark">Bajo mínimo</span>
+            {% else %}
+              <span class="badge bg-success">OK</span>
+            {% endif %}
+          </td>
+          <td onclick="event.stopPropagation()">
+            <div style="display:flex;gap:4px">
+              <a href="/materiales/{{ m.id }}" class="btn btn-primary btn-sm" title="Ver detalle / movimientos">
+                <i class="bi bi-arrow-left-right"></i>
+              </a>
+              <a href="/materiales/{{ m.id }}/qr" class="btn btn-outline btn-sm" title="Ver QR" target="_blank">
+                <i class="bi bi-qr-code"></i>
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="padding:10px 16px;font-size:.82rem;color:var(--text-muted)">{{ materiales|length }} artículo(s)</div>
+    {% else %}
+    <div style="text-align:center;padding:48px;color:var(--text-muted)">
+      <i class="bi bi-box-seam" style="font-size:2.5rem;display:block;margin-bottom:10px"></i>
+      No hay materiales{% if q or cat %} con esos filtros{% endif %}.
+      <br><br>
+      <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNuevo">
+        Añadir primer material
+      </button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modal nuevo material -->
+<div class="modal fade" id="modalNuevo" tabindex="-1" style="display:none">
+  <div class="modal-dialog modal-lg">
+    <form method="post" action="/materiales" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-box-seam me-2"></i>Nuevo Material</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Referencia MRD</label>
+            <input type="text" class="form-control" value="Automática al guardar" readonly disabled>
+            <div class="form-text">Única e inmutable.</div>
+          </div>
+          <div class="col-md-8">
+            <label class="form-label fw-semibold">Nombre <span class="text-danger">*</span></label>
+            <input type="text" name="nombre" class="form-control" required autofocus>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Categoría</label>
+            <select name="categoria" class="form-select">
+              <option value="">— Sin categoría —</option>
+              {% for c in categorias %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Unidad</label>
+            <select name="unidad" class="form-select">
+              {% for u in unidades %}<option value="{{ u }}" {% if u == 'ud' %}selected{% endif %}>{{ u }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Ubicación (nave)</label>
+            <input type="text" name="ubicacion" class="form-control" placeholder="Estantería A-3">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Stock inicial</label>
+            <input type="number" name="stock_actual" class="form-control" value="0" step="0.01" min="0">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Stock mínimo (alerta)</label>
+            <input type="number" name="stock_minimo" class="form-control" value="0" step="0.01" min="0">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Stock máximo <small class="text-muted">(opcional)</small></label>
+            <input type="number" name="stock_maximo" class="form-control" step="0.01" min="0" placeholder="Sin límite">
+          </div>
+          <div class="col-12">
+            <label class="form-label"><i class="bi bi-tag me-1"></i>Ref. pedido proveedor</label>
+            <input type="text" name="referencia_proveedor" class="form-control font-monospace" placeholder="Código del fabricante/proveedor">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Descripción</label>
+            <textarea name="descripcion" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" name="_action" value="crear_mas" class="btn btn-outline-success">
+          <i class="bi bi-plus-circle me-1"></i>Guardar y añadir otro
+        </button>
+        <button type="submit" name="_action" value="crear" class="btn btn-success">
+          <i class="bi bi-check-lg me-1"></i>Guardar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+if (new URLSearchParams(location.search).get('open') === 'nuevo') {
+  document.addEventListener('DOMContentLoaded', function() {
+    var el = document.getElementById('modalNuevo');
+    if (el) { el.style.display = ''; new bootstrap.Modal(el).show(); }
+  });
+}
+</script>
+{% endblock %}

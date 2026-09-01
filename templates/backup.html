@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block title %}Backups — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center mb-3 gap-2">
+    <i class="bi bi-archive fs-4 text-primary"></i>
+    <h4 class="mb-0 fw-bold">Backups y Recuperación</h4>
+    <span class="badge bg-secondary ms-2" id="totalBkBadge">—</span>
+    <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="bkRefresh()">
+      <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+    </button>
+    <button class="btn btn-sm btn-primary" onclick="bkCreate()">
+      <i class="bi bi-plus-circle me-1"></i>Backup ahora
+    </button>
+  </div>
+
+  <div class="row g-3">
+
+    <!-- Estado -->
+    <div class="col-lg-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-info-circle me-2 text-primary"></i>Estado</div>
+        <div class="card-body">
+          <table class="table table-sm mb-2">
+            <tr><th class="text-muted" style="width:55%">Directorio</th><td id="bkDir" class="small text-break">—</td></tr>
+            <tr><th class="text-muted">Total backups</th><td id="bkTotal">—</td></tr>
+            <tr><th class="text-muted">Tamaño total</th><td id="bkSize">—</td></tr>
+            <tr><th class="text-muted">Límite</th><td id="bkMax">—</td></tr>
+            <tr><th class="text-muted">Último backup</th><td id="bkLast">—</td></tr>
+            <tr><th class="text-muted">Cifrado</th><td id="bkEncrypt">—</td></tr>
+          </table>
+          <div class="fw-semibold small text-muted mb-1">Retención</div>
+          <table class="table table-sm mb-0">
+            <tr><th class="text-muted" style="width:55%">Diario</th><td id="retDaily">—</td></tr>
+            <tr><th class="text-muted">Semanal</th><td id="retWeekly">—</td></tr>
+            <tr><th class="text-muted">Mensual</th><td id="retMonthly">—</td></tr>
+            <tr><th class="text-muted">Pre-acción</th><td id="retPre">—</td></tr>
+          </table>
+          <button class="btn btn-sm btn-outline-danger mt-2 w-100" onclick="bkCleanup()">
+            <i class="bi bi-trash me-1"></i>Limpiar backups antiguos
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tipos de backup -->
+    <div class="col-lg-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-stack me-2 text-success"></i>Por tipo</div>
+        <div class="card-body p-0">
+          <div id="bkByType" class="p-3 text-muted">Cargando...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acciones rápidas -->
+    <div class="col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-lightning me-2 text-warning"></i>Acciones</div>
+        <div class="card-body d-grid gap-2">
+          <button class="btn btn-outline-primary" onclick="bkCreate('daily')">
+            <i class="bi bi-calendar-day me-1"></i>Backup diario
+          </button>
+          <button class="btn btn-outline-primary" onclick="bkCreate('weekly')">
+            <i class="bi bi-calendar-week me-1"></i>Backup semanal
+          </button>
+          <button class="btn btn-outline-primary" onclick="bkCreate('monthly')">
+            <i class="bi bi-calendar3 me-1"></i>Backup mensual
+          </button>
+          <hr class="my-1">
+          <div id="createResult" class="d-none alert mb-0"></div>
+        </div>
+      </div>
+      <div class="card shadow-sm mt-3">
+        <div class="card-header fw-semibold"><i class="bi bi-check-circle me-2 text-info"></i>Verificar backup</div>
+        <div class="card-body">
+          <div class="input-group input-group-sm">
+            <input type="text" id="verifyFilename" class="form-control" placeholder="nombre_backup.db.gz">
+            <button class="btn btn-info" onclick="bkVerify()">Verificar</button>
+          </div>
+          <div id="verifyResult" class="mt-2 small d-none"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Historial -->
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold d-flex align-items-center">
+          <i class="bi bi-clock-history me-2 text-secondary"></i>Historial de backups
+          <span class="ms-auto text-muted small">Los más recientes primero</span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Fecha</th><th>Tipo</th><th>Tamaño</th>
+                  <th>Comprimido</th><th>Cifrado</th><th>Existe</th><th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="bkHistBody">
+                <tr><td colspan="7" class="text-center text-muted py-3">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Restaurar -->
+    <div class="col-12">
+      <div class="card shadow-sm border-warning">
+        <div class="card-header fw-semibold text-warning"><i class="bi bi-exclamation-triangle me-2"></i>Restaurar backup</div>
+        <div class="card-body">
+          <p class="small text-muted mb-3">
+            La restauración detiene la aplicación y reemplaza la base de datos. Se realiza un backup automático antes de restaurar.
+          </p>
+          <div class="row g-2 align-items-end">
+            <div class="col-md-6">
+              <label class="form-label small">Nombre del fichero de backup</label>
+              <input type="text" id="restoreFilename" class="form-control form-control-sm" placeholder="20260713_120000_daily.db.gz">
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-outline-warning btn-sm w-100" onclick="bkRestore(true)">
+                <i class="bi bi-eye me-1"></i>Simulación (dry run)
+              </button>
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-warning btn-sm w-100" onclick="bkRestore(false)">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar ahora
+              </button>
+            </div>
+          </div>
+          <div id="restoreResult" class="mt-2 small d-none"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const CSRF_COOKIE = 'mrd_csrf';
+function getCsrf() {
+  const v = document.cookie.split('; ').find(r => r.startsWith(CSRF_COOKIE + '='));
+  return v ? decodeURIComponent(v.split('=')[1]) : '';
+}
+function fmtBytes(b) {
+  if (b == null) return '—';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(2) + ' MB';
+}
+function fmtDate(s) {
+  if (!s) return '—';
+  return new Date(s + 'Z').toLocaleString('es-ES');
+}
+function tipoBadge(t) {
+  const m = {daily:'primary',weekly:'success',monthly:'info',manual:'secondary',pre_update:'warning',pre_import:'warning',pre_migrate:'warning'};
+  return `<span class="badge bg-${m[t]||'dark'}">${t}</span>`;
+}
+
+async function bkRefresh() {
+  try {
+    const [st, hist] = await Promise.all([
+      fetch('/api/backup/status').then(r=>r.json()),
+      fetch('/api/backup/history?limit=50').then(r=>r.json()),
+    ]);
+
+    document.getElementById('totalBkBadge').textContent = (st.total_backups || 0) + ' backups';
+    document.getElementById('bkDir').textContent    = st.backup_dir || '—';
+    document.getElementById('bkTotal').textContent  = st.total_backups || 0;
+    document.getElementById('bkSize').textContent   = (st.total_size_mb || 0) + ' MB';
+    document.getElementById('bkMax').textContent    = (st.max_size_mb || 500) + ' MB';
+    const lb = st.last_backup;
+    document.getElementById('bkLast').textContent   = lb ? fmtDate(lb.created_at) : 'Nunca';
+    document.getElementById('bkEncrypt').innerHTML  = st.encrypt_enabled
+      ? '<span class="text-success">Activado</span>'
+      : '<span class="text-muted">Desactivado</span>';
+
+    const ret = st.retention || {};
+    document.getElementById('retDaily').textContent   = (ret.daily || '—') + ' días';
+    document.getElementById('retWeekly').textContent  = (ret.weekly || '—') + ' semanas';
+    document.getElementById('retMonthly').textContent = (ret.monthly || '—') + ' meses';
+    document.getElementById('retPre').textContent     = (ret.pre_action || '—') + ' archivos';
+
+    // Por tipo
+    const ct = st.counts_by_type || {};
+    const typeDiv = document.getElementById('bkByType');
+    if (Object.keys(ct).length === 0) {
+      typeDiv.innerHTML = '<span class="text-muted">Sin backups aún.</span>';
+    } else {
+      typeDiv.innerHTML = '<table class="table table-sm mb-0">' +
+        Object.entries(ct).map(([t,n]) => `<tr><td>${tipoBadge(t)}</td><td>${n}</td></tr>`).join('') +
+        '</table>';
+    }
+
+    // Historial
+    const rows = hist.history || [];
+    const tbody = document.getElementById('bkHistBody');
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Sin backups.</td></tr>';
+    } else {
+      tbody.innerHTML = rows.map(b => `
+        <tr class="${b.exists ? '' : 'table-danger'}">
+          <td class="small">${fmtDate(b.created_at)}</td>
+          <td>${tipoBadge(b.tipo)}</td>
+          <td>${fmtBytes(b.size_bytes)}</td>
+          <td>${b.compressed ? '✓' : '—'}</td>
+          <td>${b.encrypted ? '<i class="bi bi-lock-fill text-warning"></i>' : '—'}</td>
+          <td>${b.exists ? '<span class="text-success">Sí</span>' : '<span class="text-danger">No</span>'}</td>
+          <td>
+            ${b.exists ? `
+            <button class="btn btn-xs btn-outline-secondary me-1" style="font-size:.75rem;padding:.1rem .4rem"
+              onclick="fillVerify('${b.filename}')">Verificar</button>
+            <a class="btn btn-xs btn-outline-primary" style="font-size:.75rem;padding:.1rem .4rem"
+              href="/api/backup/download/${b.filename}">Descargar</a>` : '—'}
+          </td>
+        </tr>`).join('');
+    }
+  } catch(e) { console.error(e); }
+}
+
+async function bkCreate(tipo) {
+  tipo = tipo || 'manual';
+  const div = document.getElementById('createResult');
+  div.className = 'alert alert-info mt-2 mb-0';
+  div.classList.remove('d-none');
+  div.textContent = 'Creando backup...';
+  const r = await fetch('/api/backup/create', {
+    method: 'POST',
+    headers: {'X-CSRF-Token': getCsrf(), 'Content-Type': 'application/json'},
+    body: JSON.stringify({label: tipo}),
+  });
+  const d = await r.json();
+  div.className = 'alert mt-2 mb-0 ' + (d.ok ? 'alert-success' : 'alert-danger');
+  div.textContent = d.ok
+    ? `OK: ${d.filename} (${fmtBytes(d.size_bytes)}, ${d.elapsed_ms}ms)`
+    : `Error: ${d.error}`;
+  bkRefresh();
+}
+
+async function bkCleanup() {
+  if (!confirm('¿Eliminar backups que superan la política de retención?')) return;
+  const r = await fetch('/api/backup/cleanup', {
+    method: 'POST', headers: {'X-CSRF-Token': getCsrf()}
+  });
+  const d = await r.json();
+  alert(`Limpieza: ${d.deleted} eliminados, ${d.freed_mb} MB liberados.`);
+  bkRefresh();
+}
+
+function fillVerify(filename) {
+  document.getElementById('verifyFilename').value = filename;
+}
+
+async function bkVerify() {
+  const filename = document.getElementById('verifyFilename').value.trim();
+  if (!filename) return;
+  const div = document.getElementById('verifyResult');
+  div.className = 'mt-2 small';
+  div.classList.remove('d-none');
+  div.textContent = 'Verificando...';
+  const r = await fetch('/api/backup/verify', {
+    method: 'POST',
+    headers: {'X-CSRF-Token': getCsrf(), 'Content-Type': 'application/json'},
+    body: JSON.stringify({filename}),
+  });
+  const d = await r.json();
+  div.className = 'mt-2 small ' + (d.ok ? 'text-success' : 'text-danger');
+  div.innerHTML = d.ok
+    ? `✓ Integridad OK · SHA256: <code>${(d.sha256||'').substring(0,16)}…</code>`
+    : `✗ Error: ${d.error || 'Fallo de integridad'}`;
+}
+
+async function bkRestore(dry) {
+  const filename = document.getElementById('restoreFilename').value.trim();
+  if (!filename) { alert('Introduce el nombre del fichero.'); return; }
+  if (!dry && !confirm('¿RESTAURAR AHORA? Esto REEMPLAZA la base de datos actual. Se hará un backup previo automático.')) return;
+  const div = document.getElementById('restoreResult');
+  div.className = 'mt-2 small';
+  div.classList.remove('d-none');
+  div.textContent = dry ? 'Simulando...' : 'Restaurando...';
+  const r = await fetch('/api/backup/restore', {
+    method: 'POST',
+    headers: {'X-CSRF-Token': getCsrf(), 'Content-Type': 'application/json'},
+    body: JSON.stringify({filename, dry_run: dry}),
+  });
+  const d = await r.json();
+  div.className = 'mt-2 small ' + (d.ok ? 'text-success' : 'text-danger');
+  div.textContent = d.ok
+    ? (dry ? `Simulación OK: ${d.message}` : `Restaurado en: ${d.restored_to} (${d.elapsed_ms}ms)`)
+    : `Error: ${d.error}`;
+  if (d.ok && !dry) bkRefresh();
+}
+
+bkRefresh();
+setInterval(bkRefresh, 60000);
+</script>
+{% endblock %}

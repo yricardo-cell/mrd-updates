@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block title %}Proveedores{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<span class="current">Proveedores</span>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header-row">
+  <div class="page-header">
+    <div class="page-title">Proveedores</div>
+    <div class="page-subtitle">{{ total }} proveedores registrados</div>
+  </div>
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modal-nuevo">
+    <i class="bi bi-plus-lg"></i> Nuevo proveedor
+  </button>
+</div>
+
+<div class="card">
+  <div class="table-toolbar">
+    <div class="filter-group">
+      <div style="position:relative">
+        <i class="bi bi-search" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem"></i>
+        <input type="text" id="filtro-busqueda" class="filter-input" placeholder="Buscar proveedor..."
+               style="padding-left:30px;width:260px" oninput="filtrarTabla()">
+      </div>
+    </div>
+  </div>
+
+  <div style="overflow-x:auto">
+    <table class="smart-table" id="tabla-proveedores">
+      <thead>
+        <tr>
+          <th data-sort="nombre">Nombre ↕</th>
+          <th>CIF</th>
+          <th>Teléfono</th>
+          <th>Email</th>
+          <th>Contacto</th>
+          <th>Estado</th>
+          <th class="col-actions">Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-body">
+        {% for p in proveedores %}
+        <tr data-nombre="{{ p.nombre }}">
+          <td><strong>{{ p.nombre }}</strong></td>
+          <td><span style="font-size:.82rem;font-family:monospace">{{ p.cif or '—' }}</span></td>
+          <td><span style="font-size:.82rem">{{ p.telefono or '—' }}</span></td>
+          <td>
+            {% if p.email %}
+            <a href="mailto:{{ p.email }}" style="font-size:.82rem;color:var(--primary)">{{ p.email }}</a>
+            {% else %}<span style="color:var(--text-muted);font-size:.82rem">—</span>{% endif %}
+          </td>
+          <td><span style="font-size:.82rem">{{ p.contacto or '—' }}</span></td>
+          <td>
+            {% if p.activo %}
+            <span class="badge badge-success">Activo</span>
+            {% else %}
+            <span class="badge badge-gray">Inactivo</span>
+            {% endif %}
+          </td>
+          <td class="col-actions">
+            <div class="table-actions">
+              <button class="btn btn-ghost btn-icon btn-sm" title="Editar"
+                      data-pid="{{ p.id }}"
+                      data-nombre="{{ p.nombre }}"
+                      data-cif="{{ p.cif or '' }}"
+                      data-telefono="{{ p.telefono or '' }}"
+                      data-email="{{ p.email or '' }}"
+                      data-contacto="{{ p.contacto or '' }}"
+                      data-web="{{ p.web or '' }}"
+                      data-direccion="{{ p.direccion or '' }}"
+                      data-obs="{{ (p.observaciones or '')|replace('"','') }}"
+                      onclick="editarProveedor(this)">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <form method="post" action="/proveedores/{{ p.id }}/toggle" style="display:inline">
+                <button type="submit" class="btn btn-ghost btn-icon btn-sm"
+                        title="{{ 'Desactivar' if p.activo else 'Activar' }}">
+                  <i class="bi bi-{{ 'toggle-on' if p.activo else 'toggle-off' }}"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7">
+            <div class="empty-state">
+              <i class="bi bi-shop"></i>
+              <h3>Sin proveedores</h3>
+              <p>Registra el primer proveedor</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal nuevo proveedor -->
+<div class="modal fade" id="modal-nuevo" tabindex="-1" style="display:none">
+  <div class="modal-dialog">
+    <form method="post" action="/proveedores/nuevo" class="modal-content mrd-modal-dark">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="bi bi-shop me-2"></i>Nuevo proveedor</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-sm-8">
+            <label class="form-label">Nombre <span class="text-danger">*</span></label>
+            <input type="text" name="nombre" class="form-control mrd-input" required autofocus>
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label">CIF / NIF</label>
+            <input type="text" name="cif" class="form-control mrd-input" placeholder="B12345678">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">Teléfono</label>
+            <input type="text" name="telefono" class="form-control mrd-input">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">Email</label>
+            <input type="email" name="email" class="form-control mrd-input">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">Persona de contacto</label>
+            <input type="text" name="contacto" class="form-control mrd-input">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">Web</label>
+            <input type="text" name="web" class="form-control mrd-input" placeholder="https://...">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Dirección</label>
+            <input type="text" name="direccion" class="form-control mrd-input">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Observaciones</label>
+            <textarea name="observaciones" class="form-control mrd-input" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-floppy me-1"></i>Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal editar proveedor -->
+<div class="modal fade" id="modal-editar-prov" tabindex="-1" style="display:none">
+  <div class="modal-dialog">
+    <form method="post" id="form-editar-prov" action="" class="modal-content mrd-modal-dark">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Editar proveedor</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-sm-8">
+            <label class="form-label">Nombre <span class="text-danger">*</span></label>
+            <input type="text" id="ep-nombre" name="nombre" class="form-control mrd-input" required>
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label">CIF / NIF</label>
+            <input type="text" id="ep-cif" name="cif" class="form-control mrd-input">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">Teléfono</label>
+            <input type="text" id="ep-telefono" name="telefono" class="form-control mrd-input">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">Email</label>
+            <input type="email" id="ep-email" name="email" class="form-control mrd-input">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">Persona de contacto</label>
+            <input type="text" id="ep-contacto" name="contacto" class="form-control mrd-input">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">Web</label>
+            <input type="text" id="ep-web" name="web" class="form-control mrd-input">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Dirección</label>
+            <input type="text" id="ep-direccion" name="direccion" class="form-control mrd-input">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Observaciones</label>
+            <textarea id="ep-obs" name="observaciones" class="form-control mrd-input" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-floppy me-1"></i>Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function filtrarTabla() {
+  const q = document.getElementById('filtro-busqueda').value.toLowerCase();
+  document.querySelectorAll('#tabla-body tr[data-nombre]').forEach(row => {
+    row.style.display = !q || row.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+document.addEventListener('DOMContentLoaded', () => initSmartTable('tabla-proveedores'));
+
+function editarProveedor(btn) {
+  const d = btn.dataset;
+  document.getElementById('form-editar-prov').action = `/proveedores/${d.pid}/editar`;
+  document.getElementById('ep-nombre').value = d.nombre;
+  document.getElementById('ep-cif').value = d.cif;
+  document.getElementById('ep-telefono').value = d.telefono;
+  document.getElementById('ep-email').value = d.email;
+  document.getElementById('ep-contacto').value = d.contacto;
+  document.getElementById('ep-web').value = d.web;
+  document.getElementById('ep-direccion').value = d.direccion;
+  document.getElementById('ep-obs').value = d.obs;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modal-editar-prov')).show();
+}
+</script>
+{% endblock %}

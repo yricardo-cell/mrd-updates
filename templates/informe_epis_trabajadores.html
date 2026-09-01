@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Informe EPIs por Trabajador — {{ app_name }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a> / <a href="/informes">Informes</a> / EPIs por Trabajador
+{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <h2 class="mrd-page-title"><i class="bi bi-shield-check me-2"></i>Informe EPIs por Trabajador</h2>
+  <div class="d-flex gap-2">
+    <a href="/informes/epis-trabajadores/excel" class="btn btn-success mrd-btn">
+      <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
+    </a>
+    <a href="/informes" class="btn btn-outline-secondary mrd-btn">
+      <i class="bi bi-arrow-left me-1"></i>Informes
+    </a>
+  </div>
+</div>
+
+<!-- KPIs -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="mrd-card text-center p-3" style="border-left:4px solid var(--primary)">
+      <div style="font-size:2rem;font-weight:800;color:var(--primary)">{{ total_trabajadores_con_epis }}</div>
+      <div class="text-muted small">trabajadores con EPIs</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="mrd-card text-center p-3" style="border-left:4px solid var(--success)">
+      {% set total_disponibles = stock_por_tipo.values() | sum(attribute='__len__') %}
+      <div style="font-size:2rem;font-weight:800;color:var(--success)">
+        {% set cnt = namespace(n=0) %}
+        {% for tipo, lista in stock_por_tipo.items() %}{% set cnt.n = cnt.n + lista|length %}{% endfor %}
+        {{ cnt.n }}
+      </div>
+      <div class="text-muted small">EPIs individuales disponibles</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="mrd-card text-center p-3" style="border-left:4px solid var(--orange)">
+      {% set cnt2 = namespace(n=0) %}
+      {% for r in resumen %}{% set cnt2.n = cnt2.n + r.arneses|length %}{% endfor %}
+      <div style="font-size:2rem;font-weight:800;color:var(--orange)">{{ cnt2.n }}</div>
+      <div class="text-muted small">arneses/absorbedores asignados</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="mrd-card text-center p-3" style="border-left:4px solid var(--info)">
+      {% set cnt3 = namespace(n=0) %}
+      {% for r in resumen %}{% set cnt3.n = cnt3.n + r.entregas|length %}{% endfor %}
+      <div style="font-size:2rem;font-weight:800;color:var(--info)">{{ cnt3.n }}</div>
+      <div class="text-muted small">entregas registradas</div>
+    </div>
+  </div>
+</div>
+
+<!-- Stock disponible -->
+{% if stock_por_tipo %}
+<div class="mrd-card mb-4">
+  <h6 class="mb-3"><i class="bi bi-box-seam me-2 text-success"></i>Stock disponible (sin asignar)</h6>
+  <div class="row g-3">
+    {% for tipo, lista in stock_por_tipo.items() %}
+    <div class="col-12 col-md-6">
+      <div class="border rounded p-3" style="border-color:var(--border)!important">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="badge {% if tipo == 'ARNES' %}bg-primary{% else %}bg-info text-dark{% endif %} fs-6">{{ tipo }}</span>
+          <span class="fw-bold text-success">{{ lista|length }} disponibles</span>
+        </div>
+        <div class="d-flex flex-wrap gap-1">
+          {% for epi in lista %}
+          <a href="/epis/individuales/{{ epi.id }}" class="badge bg-light text-dark border text-decoration-none small font-monospace">
+            {{ epi.codigo_fabricacion }}
+            {% if epi.revision_vencida %}<i class="bi bi-exclamation-triangle-fill text-danger ms-1"></i>{% endif %}
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="alert alert-warning mb-4">No hay EPIs individuales disponibles (todo asignado o en baja).</div>
+{% endif %}
+
+<!-- Por trabajador -->
+{% if resumen %}
+<div class="mrd-card">
+  <h6 class="mb-3"><i class="bi bi-people me-2"></i>Detalle por trabajador</h6>
+
+  <!-- Buscador -->
+  <input type="text" id="buscar-trabajador" class="form-control mrd-input mb-3"
+         placeholder="Buscar trabajador..." onkeyup="filtrarTrabajadores(this.value)">
+
+  <div id="lista-trabajadores">
+  {% for r in resumen %}
+  <div class="border rounded mb-3 trabajador-bloque" style="border-color:var(--border)!important"
+       data-nombre="{{ r.trabajador.nombre_completo | lower }}">
+    <!-- Cabecera trabajador -->
+    <div class="d-flex align-items-center justify-content-between p-3"
+         style="background:var(--surface-hover);border-radius:6px 6px 0 0;cursor:pointer"
+         onclick="toggleBloque(this)">
+      <div class="d-flex align-items-center gap-3">
+        <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold text-white"
+             style="width:38px;height:38px;background:var(--primary);font-size:.85rem;flex-shrink:0">
+          {{ r.trabajador.nombre_completo[:2].upper() }}
+        </div>
+        <div>
+          <div class="fw-semibold">{{ r.trabajador.nombre_completo }}</div>
+          <div class="text-muted small">{{ r.trabajador.cargo or 'Sin cargo' }}
+            {% if r.trabajador.empresa %} · {{ r.trabajador.empresa }}{% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="d-flex gap-2 align-items-center">
+        {% if r.arneses %}
+        <span class="badge bg-primary">{{ r.arneses|length }} arnés/abs.</span>
+        {% endif %}
+        {% if r.entregas %}
+        <span class="badge bg-warning text-dark">{{ r.entregas|length }} entregas</span>
+        {% endif %}
+        <i class="bi bi-chevron-down toggle-icon" style="transition:.2s"></i>
+      </div>
+    </div>
+
+    <!-- Cuerpo -->
+    <div class="p-3 bloque-cuerpo">
+      {% if r.arneses %}
+      <div class="mb-3">
+        <div class="fw-semibold small text-muted mb-2"><i class="bi bi-fingerprint me-1"></i>Arneses y absorbedores asignados</div>
+        <div class="d-flex flex-wrap gap-2">
+          {% for epi in r.arneses %}
+          <a href="/epis/individuales/{{ epi.id }}" class="text-decoration-none">
+            <span class="badge {% if epi.tipo == 'ARNES' %}bg-primary{% else %}bg-info text-dark{% endif %} border d-flex align-items-center gap-1 p-2">
+              <span class="font-monospace">{{ epi.codigo_fabricacion }}</span>
+              {% if epi.revision_vencida %}<i class="bi bi-exclamation-triangle-fill text-warning ms-1"></i>{% endif %}
+              {% if epi.proxima_revision and epi.dias_para_revision is not none and epi.dias_para_revision <= 30 and not epi.revision_vencida %}
+              <span class="badge bg-warning text-dark ms-1" style="font-size:.7rem">{{ epi.dias_para_revision }}d</span>
+              {% endif %}
+            </span>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if r.entregas %}
+      <div>
+        <div class="fw-semibold small text-muted mb-2"><i class="bi bi-box-seam me-1"></i>Entregas de EPIs y ropa</div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0" style="font-size:.85rem">
+            <thead class="table-light">
+              <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Artículos</th>
+                <th>Firmado por</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ent in r.entregas %}
+              <tr>
+                <td class="text-nowrap">{{ ent.e.fecha.strftime('%d/%m/%Y') }}</td>
+                <td>
+                  <span class="badge {% if ent.e.tipo == 'epi' %}bg-primary{% else %}bg-warning text-dark{% endif %}">
+                    {{ 'EPI' if ent.e.tipo == 'epi' else 'ROPA' }}
+                  </span>
+                </td>
+                <td>
+                  {% for it in ent['items'] %}
+                  <span class="badge bg-light text-dark border me-1">
+                    {{ it.nombre }} <span class="text-muted">×{{ it.get('cantidad',1) }}</span>
+                    {% if it.get('talla') %}<span class="text-muted"> T.{{ it.talla }}</span>{% endif %}
+                  </span>
+                  {% endfor %}
+                </td>
+                <td class="small text-muted">{{ ent.e.firmado_por or '—' }}</td>
+                <td>
+                  <a href="/trabajadores/{{ r.trabajador.id }}/epis/{{ ent.e.id }}/pdf"
+                     target="_blank" class="btn btn-sm btn-outline-secondary mrd-btn py-0">
+                    <i class="bi bi-file-pdf"></i>
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="mrd-card text-center py-5">
+  <i class="bi bi-shield-x" style="font-size:3rem;opacity:.3"></i>
+  <p class="text-muted mt-3">No hay entregas registradas todavía.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleBloque(header) {
+  const cuerpo = header.nextElementSibling;
+  const icon = header.querySelector('.toggle-icon');
+  const open = cuerpo.style.display !== 'none';
+  cuerpo.style.display = open ? 'none' : 'block';
+  icon.style.transform = open ? 'rotate(-90deg)' : 'rotate(0deg)';
+}
+
+function filtrarTrabajadores(q) {
+  const term = q.toLowerCase().trim();
+  document.querySelectorAll('.trabajador-bloque').forEach(el => {
+    el.style.display = (!term || el.dataset.nombre.includes(term)) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

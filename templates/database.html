@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% block title %}Base de Datos — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center mb-3 gap-2">
+    <i class="bi bi-database fs-4 text-primary"></i>
+    <h4 class="mb-0 fw-bold">Base de Datos</h4>
+    <span class="badge bg-primary ms-2" id="dbEngine">—</span>
+    <span class="badge ms-1" id="dbConnBadge">—</span>
+    <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="dbRefresh()">
+      <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+    </button>
+  </div>
+
+  <div class="row g-3">
+
+    <!-- Estado del motor -->
+    <div class="col-lg-6">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-hdd-stack me-2 text-primary"></i>Estado del motor</div>
+        <div class="card-body">
+          <table class="table table-sm mb-0">
+            <tr><th class="text-muted" style="width:45%">Motor</th><td id="iEngine">—</td></tr>
+            <tr><th class="text-muted">URL (segura)</th><td id="iUrl" class="text-break small">—</td></tr>
+            <tr><th class="text-muted">Conexión</th><td id="iConn">—</td></tr>
+            <tr><th class="text-muted">Latencia</th><td id="iLatency">—</td></tr>
+            <tr><th class="text-muted">Revisión Alembic</th><td id="iAlembic" class="font-monospace small">—</td></tr>
+            <tr><th class="text-muted">Umbral slow query</th><td id="iSlowMs">—</td></tr>
+          </table>
+          <div class="mt-3 d-flex gap-2 flex-wrap">
+            <button class="btn btn-sm btn-outline-primary" onclick="dbCheck()">
+              <i class="bi bi-shield-check me-1"></i>Verificar integridad
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="dbResetStats()">
+              <i class="bi bi-arrow-counterclockwise me-1"></i>Reiniciar contadores
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pool de conexiones (PostgreSQL) -->
+    <div class="col-lg-6">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-diagram-3 me-2 text-success"></i>Pool de conexiones</div>
+        <div class="card-body">
+          <div id="poolSection">
+            <div class="text-muted small">Disponible solo con PostgreSQL.</div>
+          </div>
+          <hr class="my-2">
+          <div class="fw-semibold small text-muted mb-1">Estadísticas de consultas</div>
+          <table class="table table-sm mb-0">
+            <tr><th class="text-muted" style="width:55%">Total consultas</th><td id="sTotal">—</td></tr>
+            <tr><th class="text-muted">Consultas lentas</th><td id="sSlow" class="text-warning">—</td></tr>
+            <tr><th class="text-muted">Errores</th><td id="sErrors" class="text-danger">—</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Migraciones Alembic -->
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-arrow-up-circle me-2 text-info"></i>Migraciones Alembic</div>
+        <div class="card-body">
+          <p class="small text-muted">Aplica o revierte migraciones de esquema. Realiza un backup antes.</p>
+          <div class="d-flex gap-2 flex-wrap mb-3">
+            <button class="btn btn-primary btn-sm" onclick="dbMigrate()">
+              <i class="bi bi-arrow-up me-1"></i>Upgrade (head)
+            </button>
+            <button class="btn btn-warning btn-sm" onclick="dbRollback()">
+              <i class="bi bi-arrow-down me-1"></i>Rollback (−1)
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="dbHistory()">
+              <i class="bi bi-clock-history me-1"></i>Historial
+            </button>
+          </div>
+          <div id="migrationResult" class="d-none">
+            <pre id="migrationOutput" class="bg-dark text-light rounded p-2 small" style="max-height:160px;overflow:auto;white-space:pre-wrap;"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Consultas lentas -->
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-speedometer2 me-2 text-warning"></i>Últimas consultas lentas</div>
+        <div class="card-body p-0">
+          <div id="slowQueriesSection" class="p-3 text-muted small">Sin datos.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resultado integridad -->
+    <div class="col-12 d-none" id="integrityCard">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-shield-check me-2"></i>Resultado de integridad</div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <thead class="table-light">
+              <tr><th>Check</th><th>Estado</th><th>Detalle</th></tr>
+            </thead>
+            <tbody id="integrityBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Migración SQLite→PostgreSQL -->
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-arrow-left-right me-2 text-secondary"></i>Migración SQLite → PostgreSQL</div>
+        <div class="card-body">
+          <p class="small text-muted mb-3">
+            Para migrar a PostgreSQL: instala PostgreSQL, crea la base de datos, ejecuta
+            <code>alembic upgrade head</code> para crear las tablas, luego ejecuta el siguiente comando:
+          </p>
+          <pre class="bg-dark text-light rounded p-2 small mb-3">python db_tools.py migrate --from sqlite:///data/mrd_tool.db --to postgresql://user:pass@host/dbname</pre>
+          <p class="small text-muted mb-2">
+            Actualiza <code>MRD_DATABASE_URL</code> en <code>config/local.env</code> y reinicia el servicio.
+            Para múltiples workers, ajusta también <code>service.yaml</code>.
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const CSRF_COOKIE = 'mrd_csrf';
+function getCsrf() {
+  const v = document.cookie.split('; ').find(r => r.startsWith(CSRF_COOKIE + '='));
+  return v ? decodeURIComponent(v.split('=')[1]) : '';
+}
+
+async function dbRefresh() {
+  try {
+    const r = await fetch('/api/database/status');
+    if (!r.ok) return;
+    const d = await r.json();
+
+    document.getElementById('dbEngine').textContent = d.engine || '—';
+    document.getElementById('dbConnBadge').textContent = d.connected ? 'Conectado' : 'Sin conexión';
+    document.getElementById('dbConnBadge').className = 'badge ms-1 ' + (d.connected ? 'bg-success' : 'bg-danger');
+
+    document.getElementById('iEngine').textContent   = d.engine || '—';
+    document.getElementById('iUrl').textContent      = d.url_safe || '—';
+    document.getElementById('iConn').innerHTML       = d.connected
+      ? '<span class="text-success">OK</span>'
+      : `<span class="text-danger">${d.connection_error || 'Error'}</span>`;
+    document.getElementById('iLatency').textContent  = d.latency_ms != null ? d.latency_ms + ' ms' : '—';
+    document.getElementById('iAlembic').textContent  = d.alembic_current || '—';
+    document.getElementById('iSlowMs').textContent   = (d.slow_query_ms || 200) + ' ms';
+
+    // Pool
+    const pool = d.pool || {};
+    if (Object.keys(pool).length > 0) {
+      document.getElementById('poolSection').innerHTML = `
+        <table class="table table-sm mb-0">
+          <tr><th class="text-muted" style="width:55%">Tamaño del pool</th><td>${pool.size ?? '—'}</td></tr>
+          <tr><th class="text-muted">En uso</th><td>${pool.checked_out ?? '—'}</td></tr>
+          <tr><th class="text-muted">Disponibles</th><td>${pool.checked_in ?? '—'}</td></tr>
+          <tr><th class="text-muted">Overflow</th><td>${pool.overflow ?? '—'}</td></tr>
+        </table>`;
+    }
+
+    // Stats
+    const s = d.stats || {};
+    document.getElementById('sTotal').textContent  = s.total ?? '—';
+    document.getElementById('sSlow').textContent   = s.slow  ?? '—';
+    document.getElementById('sErrors').textContent = s.errors ?? '—';
+
+    // Slow queries
+    const sq = d.slow_queries || [];
+    const sqDiv = document.getElementById('slowQueriesSection');
+    if (sq.length === 0) {
+      sqDiv.innerHTML = '<span class="text-muted">Sin consultas lentas registradas.</span>';
+    } else {
+      sqDiv.innerHTML = '<table class="table table-sm mb-0"><thead class="table-light"><tr><th>Hora</th><th>ms</th><th>SQL</th></tr></thead><tbody>' +
+        sq.reverse().map(q => `<tr><td class="small">${q.ts}</td><td class="text-warning">${q.ms}</td><td class="font-monospace small text-truncate" style="max-width:400px" title="${q.sql.replace(/"/g,'&quot;')}">${q.sql}</td></tr>`).join('') +
+        '</tbody></table>';
+    }
+  } catch(e) { console.error(e); }
+}
+
+async function dbMigrate() {
+  if (!confirm('¿Aplicar migraciones pendientes (upgrade head)?')) return;
+  showMigResult('Ejecutando...');
+  const r = await fetch('/api/database/migrate', {
+    method: 'POST', headers: {'X-CSRF-Token': getCsrf()}
+  });
+  const d = await r.json();
+  showMigResult((d.output || '') + (d.error ? '\nERROR: ' + d.error : ''), d.ok);
+  dbRefresh();
+}
+
+async function dbRollback() {
+  if (!confirm('¿Revertir la última migración?')) return;
+  showMigResult('Revirtiendo...');
+  const r = await fetch('/api/database/rollback', {
+    method: 'POST',
+    headers: {'X-CSRF-Token': getCsrf(), 'Content-Type': 'application/json'},
+    body: JSON.stringify({steps: 1})
+  });
+  const d = await r.json();
+  showMigResult((d.output || '') + (d.error ? '\nERROR: ' + d.error : ''), d.ok);
+  dbRefresh();
+}
+
+async function dbHistory() {
+  showMigResult('Cargando historial...');
+  const r = await fetch('/api/database/history');
+  const d = await r.json();
+  showMigResult(d.output || d.error || '(vacío)', d.ok !== false);
+}
+
+function showMigResult(text, ok) {
+  const card = document.getElementById('migrationResult');
+  const pre  = document.getElementById('migrationOutput');
+  card.classList.remove('d-none');
+  pre.textContent = text;
+  pre.className = 'rounded p-2 small ' + (ok === false ? 'bg-danger text-light' : 'bg-dark text-light');
+}
+
+async function dbCheck() {
+  const card = document.getElementById('integrityCard');
+  const body = document.getElementById('integrityBody');
+  body.innerHTML = '<tr><td colspan="3" class="text-muted">Verificando...</td></tr>';
+  card.classList.remove('d-none');
+  const r = await fetch('/api/database/check', {
+    method: 'POST', headers: {'X-CSRF-Token': getCsrf()}
+  });
+  const d = await r.json();
+  body.innerHTML = (d.checks || []).map(c => `
+    <tr>
+      <td>${c.name}</td>
+      <td>${c.ok ? '<span class="text-success">OK</span>' : '<span class="text-danger">FAIL</span>'}</td>
+      <td class="small">${c.detail || ''}</td>
+    </tr>`).join('');
+}
+
+async function dbResetStats() {
+  if (!confirm('¿Reiniciar contadores de rendimiento?')) return;
+  await fetch('/api/database/reset-stats', {
+    method: 'POST', headers: {'X-CSRF-Token': getCsrf()}
+  });
+  dbRefresh();
+}
+
+dbRefresh();
+setInterval(dbRefresh, 30000);
+</script>
+{% endblock %}

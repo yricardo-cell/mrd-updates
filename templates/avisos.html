@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Buzón — {{ app_name }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<span class="current">Buzón</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">
+      <i class="bi bi-inbox" style="color:var(--primary)"></i> Buzón
+      {% if total_sin_leer > 0 %}
+      <span style="background:var(--danger);color:#fff;border-radius:12px;font-size:.7rem;padding:2px 8px;margin-left:8px;vertical-align:middle;font-weight:700">{{ total_sin_leer }} sin leer</span>
+      {% endif %}
+    </div>
+    <div class="page-subtitle">Mensajes operativos: mantenimiento, revisiones, averías e incidencias</div>
+  </div>
+  <div style="display:flex;gap:6px">
+    {% if total_sin_leer > 0 %}
+    <button class="btn btn-outline btn-sm" onclick="marcarTodosLeidos()">
+      <i class="bi bi-check2-all"></i> Marcar todos como leídos
+    </button>
+    {% endif %}
+    <a href="/mantenimiento" class="btn btn-ghost btn-sm"><i class="bi bi-tools"></i> Plan de mantenimiento</a>
+  </div>
+</div>
+
+<!-- Filtros -->
+<div class="card" style="margin-bottom:16px">
+  <div class="card-body" style="padding:10px 14px">
+    <div style="display:flex;gap:8px;font-size:.84rem">
+      <a href="/avisos?mostrar=activos" class="btn btn-sm {% if mostrar == 'activos' %}btn-primary{% else %}btn-ghost{% endif %}">
+        Activos {% if total_sin_leer > 0 %}<span style="background:var(--danger);color:#fff;border-radius:8px;padding:1px 5px;font-size:.7rem;margin-left:3px">{{ total_sin_leer }}</span>{% endif %}
+      </a>
+      <a href="/avisos?mostrar=todos" class="btn btn-sm {% if mostrar == 'todos' %}btn-primary{% else %}btn-ghost{% endif %}">Todos</a>
+      <a href="/avisos?mostrar=archivados" class="btn btn-sm {% if mostrar == 'archivados' %}btn-primary{% else %}btn-ghost{% endif %}">Archivados</a>
+    </div>
+  </div>
+</div>
+
+{% set pc = {'urgente':'danger','critica':'danger','alta':'warning','media':'primary','baja':'secondary','informacion':'info'} %}
+
+<!-- Lista de avisos -->
+<div class="card">
+  <div class="card-body" style="padding:0">
+    {% if avisos %}
+    {% for av in avisos %}
+    {% set adata = av.datos|fromjson %}
+    <div id="aviso-{{ av.id }}" style="display:flex;align-items:flex-start;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border);{% if not av.leido %}background:rgba(var(--primary-rgb,232,96,10),.04){% endif %};transition:background .2s">
+      <!-- Indicador prioridad -->
+      <div style="flex-shrink:0;width:4px;height:100%;min-height:40px;background:var(--{{ pc.get(av.prioridad,'secondary') == 'danger' and 'danger' or pc.get(av.prioridad,'secondary') == 'warning' and 'warning' or pc.get(av.prioridad,'secondary') == 'primary' and 'primary' or pc.get(av.prioridad,'secondary') == 'info' and 'info' or 'border' }});border-radius:2px"></div>
+
+      <!-- Icono -->
+      <div style="flex-shrink:0;width:36px;height:36px;border-radius:8px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:1rem">
+        {% if av.prioridad in ('urgente','critica') %}<i class="bi bi-exclamation-triangle-fill" style="color:var(--danger)"></i>
+        {% elif av.prioridad == 'alta' %}<i class="bi bi-exclamation-circle-fill" style="color:var(--warning)"></i>
+        {% elif av.tipo == 'revision' %}<i class="bi bi-clipboard2-check-fill" style="color:var(--warning)"></i>
+        {% elif av.tipo in ('averia','reparacion') %}<i class="bi bi-wrench-adjustable-circle-fill" style="color:var(--danger)"></i>
+        {% elif av.tipo == 'mantenimiento' %}<i class="bi bi-tools" style="color:var(--primary)"></i>
+        {% else %}<i class="bi bi-info-circle-fill" style="color:var(--info)"></i>{% endif %}
+      </div>
+
+      <!-- Contenido -->
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap">
+          <div style="font-weight:{% if not av.leido %}700{% else %}500{% endif %};font-size:.9rem;flex:1">{{ av.titulo }}</div>
+          <div style="display:flex;gap:4px;flex-shrink:0">
+            <span class="badge bg-{{ pc.get(av.prioridad,'secondary') }}" style="font-size:.68rem">{{ prioridades_aviso.get(av.prioridad, av.prioridad) }}</span>
+          {% if not av.leido %}<span class="badge bg-primary" style="font-size:.68rem">Nuevo</span>{% endif %}
+          {% if adata.estado == 'terminado' %}<span class="badge bg-success" style="font-size:.68rem">Terminado</span>{% elif adata.estado == 'no_real' %}<span class="badge bg-secondary" style="font-size:.68rem">No era real</span>{% endif %}
+          </div>
+        </div>
+        {% if av.mensaje %}
+        <div style="font-size:.82rem;color:var(--text-secondary);margin-top:3px">{{ av.mensaje }}</div>
+        {% endif %}
+        <div style="display:flex;gap:12px;align-items:center;margin-top:6px;font-size:.76rem;color:var(--text-muted);flex-wrap:wrap">
+          <span><i class="bi bi-clock me-1"></i>{{ av.creado_en.strftime('%d/%m/%Y %H:%M') if av.creado_en else '—' }}</span>
+          {% if av.tipo %}<span><i class="bi bi-tag me-1"></i>{{ av.tipo }}</span>{% endif %}
+          {% if av.enlace %}
+          <a href="{{ av.enlace }}" style="color:var(--primary)"><i class="bi bi-arrow-right-circle me-1"></i>Ver activo</a>
+          {% endif %}
+          {% if adata.cerrado_por %}<span><i class="bi bi-person-check me-1"></i>{{ adata.cerrado_por }}</span>{% endif %}
+        </div>
+      </div>
+
+      <!-- Acciones -->
+      <div style="flex-shrink:0;display:flex;gap:4px">
+        {% if puede_cerrar and not av.archivado %}
+        <button class="btn btn-success btn-sm" title="Dar por terminado" onclick="cerrarAviso({{ av.id }},'terminar')"><i class="bi bi-check2-circle"></i> Terminado</button>
+        <button class="btn btn-outline btn-sm" title="Marcar como no real" onclick="cerrarAviso({{ av.id }},'no-real')"><i class="bi bi-x-circle"></i> No es real</button>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div style="padding:56px;text-align:center;color:var(--text-muted)">
+      <i class="bi bi-bell-slash" style="font-size:2.5rem;display:block;margin-bottom:12px;opacity:.4"></i>
+      <div style="font-weight:600;margin-bottom:6px">No hay avisos{% if mostrar == 'archivados' %} archivados{% endif %}</div>
+      {% if mostrar == 'activos' %}
+      <div style="font-size:.84rem">No hay mantenimientos, revisiones, averías o incidencias pendientes.</div>
+      <br>
+      <a href="/mantenimiento" class="btn btn-primary btn-sm"><i class="bi bi-tools"></i> Abrir mantenimiento</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function leerAviso(id) {
+  await fetch(`/api/v1/avisos/${id}/leer`, { method: 'POST' });
+  const row = document.getElementById(`aviso-${id}`);
+  if (row) {
+    row.style.background = '';
+    row.querySelectorAll('[onclick^="leerAviso"]').forEach(b => b.remove());
+    // Remove "Nuevo" badge
+    row.querySelectorAll('.badge').forEach(b => { if (b.textContent.trim() === 'Nuevo') b.remove(); });
+    // Bold -> normal
+    row.querySelector('div[style*="font-weight:700"]')?.setAttribute('style', row.querySelector('div[style*="font-weight:700"]').getAttribute('style').replace('700','500'));
+  }
+}
+
+async function archivarAviso(id) {
+  await fetch(`/api/v1/avisos/${id}/archivar`, { method: 'POST' });
+  const row = document.getElementById(`aviso-${id}`);
+  if (row) {
+    row.style.opacity = '0';
+    setTimeout(() => row.remove(), 300);
+  }
+}
+
+async function cerrarAviso(id, accion) {
+  const texto = accion === 'terminar' ? '¿Dar este aviso por terminado?' : '¿Confirmas que este aviso no es real?';
+  if (!confirm(texto)) return;
+  const response = await fetch(`/api/v1/avisos/${id}/${accion}`, {method:'POST'});
+  if (!response.ok) { Toast.error('No se pudo actualizar el aviso.'); return; }
+  const row = document.getElementById(`aviso-${id}`);
+  if (row) { row.style.opacity='0'; setTimeout(()=>row.remove(),250); }
+  Toast.success(accion === 'terminar' ? 'Aviso terminado.' : 'Aviso descartado como no real.');
+}
+
+async function marcarTodosLeidos() {
+  const rows = document.querySelectorAll('[id^="aviso-"]');
+  for (const row of rows) {
+    const id = row.id.replace('aviso-', '');
+    const btnLeer = row.querySelector('[onclick^="leerAviso"]');
+    if (btnLeer) await leerAviso(parseInt(id));
+  }
+}
+</script>
+{% endblock %}

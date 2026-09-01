@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}Inventario masivo — {{ app_name }}{% endblock %}
+
+{% block content %}
+<section class="inventory-v2-hero">
+  <div>
+    <span class="inventory-v2-eyebrow">Operación de patio y almacén</span>
+    <h1><i class="bi bi-boxes"></i> Inventario masivo</h1>
+    <p>Conteo ciego, doble validación y cierre transaccional sin perder movimientos simultáneos.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-primary mrd-btn" href="/inventario/estado">
+      <i class="bi bi-pie-chart-fill"></i> Estado visual
+    </a>
+    <a class="btn btn-success mrd-btn" href="/inventario/recepcion">
+      <i class="bi bi-box-arrow-in-down"></i> Centro de recepción
+    </a>
+    <button class="btn btn-outline-primary mrd-btn" data-bs-toggle="modal" data-bs-target="#inventory-supply-modal">
+      <i class="bi bi-box-arrow-in-down"></i> Dar de alta suministro
+    </button>
+    <button class="btn btn-warning mrd-btn" data-bs-toggle="modal" data-bs-target="#inventory-session-modal">
+      <i class="bi bi-plus-lg"></i> Nueva sesión
+    </button>
+  </div>
+</section>
+
+<div class="inventory-v2-grid">
+  <section class="mrd-card inventory-v2-main">
+    <div class="mrd-card-header"><span>Sesiones recientes</span><span class="badge text-bg-secondary">{{ sesiones|length }}</span></div>
+    <div class="mrd-card-body inventory-session-list">
+      {% for sesion in sesiones %}
+      <a class="inventory-session-row" href="/inventario/sesiones/{{ sesion.id }}" data-session-id="{{ sesion.id }}">
+        <span class="inventory-session-icon"><i class="bi bi-clipboard-check"></i></span>
+        <span><strong>{{ sesion.nombre }}</strong><small>{{ sesion.tipo_articulo|replace('_', ' ') }} · {{ sesion.scope }}</small></span>
+        <span class="inventory-status is-{{ sesion.estado }}">{{ sesion.estado|replace('_', ' ') }}</span>
+      </a>
+      {% else %}
+      <div class="inventory-empty"><i class="bi bi-clipboard"></i><strong>Sin sesiones</strong><span>Crea una sesión para congelar el punto de partida.</span></div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <aside class="inventory-v2-side">
+    <section class="mrd-card">
+      <div class="mrd-card-header">Escáner de conteo</div>
+      <div class="mrd-card-body">
+        <label class="form-label" for="inventory-scan-input">Código o referencia</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+          <input id="inventory-scan-input" class="form-control" autocomplete="off" placeholder="Escanea con la pistola">
+        </div>
+        <button id="inventory-camera-button" class="btn btn-outline-primary w-100 mt-3" type="button" hidden>
+          <i class="bi bi-camera"></i> Activar cámara
+        </button>
+        <p id="inventory-camera-message" class="inventory-help">La pistola USB y la introducción manual están siempre disponibles.</p>
+        <div id="inventory-scan-result" class="inventory-form-result" role="status" hidden></div>
+        <video id="inventory-camera-video" class="inventory-camera" playsinline hidden></video>
+      </div>
+    </section>
+    <section class="mrd-card">
+      <div class="mrd-card-header">Pendientes de entrega</div>
+      <div class="mrd-card-body inventory-mini-list">
+        {% for dotacion in dotaciones if dotacion.estado in ['pendiente','preparada'] %}
+        <a href="/inventario/dotaciones/{{ dotacion.id }}"><span>Dotación #{{ dotacion.id }}</span><strong>{{ dotacion.estado }}</strong></a>
+        {% else %}<span class="inventory-help">No hay dotaciones pendientes.</span>{% endfor %}
+      </div>
+    </section>
+  </aside>
+</div>
+
+<section class="mrd-card mt-4">
+  <div class="mrd-card-header"><span>Variantes activas</span><span class="badge text-bg-secondary">{{ variantes|length }}</span></div>
+  <div class="mrd-card-body inventory-variant-grid">
+    {% for variante in variantes %}
+    <a href="/inventario/variantes/{{ variante.id }}" data-inventory-code="{{ variante.codigo_qr }} {{ variante.referencia_interna }} {{ variante.referencia_proveedor or '' }}"><article><span class="inventory-variant-qr"><i class="bi bi-qr-code"></i></span><div><strong>{{ variante.referencia_interna }}</strong><small>{{ variante.modelo }} · {{ variante.color }} · T. {{ variante.talla }}</small></div></article></a>
+    {% else %}<div class="inventory-empty">Todavía no hay variantes.</div>{% endfor %}
+  </div>
+</section>
+
+<div class="modal fade" id="inventory-supply-modal" tabindex="-1">
+  <div class="modal-dialog modal-lg"><div class="modal-content mrd-modal-dark">
+    <div class="modal-header"><div><h2 class="modal-title fs-5">Alta progresiva de suministro</h2><small class="inventory-help">El programa crea la referencia y el QR únicos. Tú solo introduces los datos reales.</small></div><button class="btn-close" data-bs-dismiss="modal"></button></div>
+    <form id="inventory-supply-form">
+      <div class="modal-body row g-3">
+        <div class="col-md-6"><label class="form-label">Artículo</label><select name="catalogo_epi_id" class="form-select" required><option value="">Seleccionar…</option>{% for item in catalogos %}<option value="{{ item.id }}">{{ item.nombre }} · {{ item.categoria }}</option>{% endfor %}</select><div class="form-text">¿No aparece? <a href="/epis/catalogo">Añádelo al catálogo</a>.</div></div>
+        <div class="col-md-6"><label class="form-label">Almacén</label><select name="almacen_id" class="form-select" required><option value="">Seleccionar…</option>{% for almacen in almacenes %}<option value="{{ almacen.id }}" {% if almacen.id == almacen_predeterminado_id %}selected{% endif %}>{{ almacen.nombre }}</option>{% endfor %}</select></div>
+        <div class="col-md-4"><label class="form-label">Modelo</label><input name="modelo" class="form-control" maxlength="100" placeholder="Cargo, Softshell…"></div>
+        <div class="col-md-4"><label class="form-label">Color</label><input name="color" class="form-control" maxlength="50" placeholder="Azul marino"></div>
+        <div class="col-md-4"><label class="form-label">Talla / medida</label><input name="talla" class="form-control" maxlength="20" placeholder="L, 43, M8x80…"></div>
+        <div class="col-md-4"><label class="form-label">Cantidad recibida</label><input name="cantidad" type="number" class="form-control" min="0" step="1" value="0" required></div>
+        <div class="col-md-4"><label class="form-label">Stock mínimo</label><input name="stock_minimo" type="number" class="form-control" min="0" step="1" value="0"></div>
+        <div class="col-md-4"><label class="form-label">Referencia proveedor</label><input name="referencia_proveedor" class="form-control" maxlength="100"></div>
+        <div class="col-md-6"><label class="form-label">Lote (opcional)</label><input name="numero_lote" class="form-control" maxlength="100"></div>
+        <div class="col-md-6"><label class="form-label">Caducidad (opcional)</label><input name="fecha_caducidad" type="date" class="form-control"></div>
+        <div class="col-12"><div class="inventory-safety-note"><i class="bi bi-shield-check"></i><span>No puedes escribir ni cambiar el código interno o el QR: quedan reservados automáticamente para evitar solapes.</span></div></div>
+        <div class="col-12"><div id="inventory-supply-result" class="inventory-form-result" role="status"></div></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal" type="button">Cancelar</button><button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle"></i> Crear y registrar entrada</button></div>
+    </form>
+  </div></div>
+</div>
+
+<div class="modal fade" id="inventory-session-modal" tabindex="-1">
+  <div class="modal-dialog"><div class="modal-content mrd-modal-dark">
+    <div class="modal-header"><h2 class="modal-title fs-5">Nueva sesión</h2><button class="btn-close" data-bs-dismiss="modal"></button></div>
+    <form id="inventory-session-form">
+      <div class="modal-body row g-3">
+        <div class="col-12"><label class="form-label">Nombre</label><input name="nombre" class="form-control" required maxlength="200"></div>
+        <div class="col-sm-6"><label class="form-label">Alcance</label><select name="scope" class="form-select"><option value="almacen">Almacén</option><option value="total">Total</option></select></div>
+        <div class="col-sm-6"><label class="form-label">Artículos</label><select name="tipo_articulo" class="form-select"><option value="material">Materiales</option><option value="epi_ropa">Ropa y variantes</option><option value="epi_individual">EPI individual</option><option value="todo">Todo</option></select></div>
+        <div class="col-12"><div id="inventory-form-result" class="inventory-form-result" role="status"></div></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal" type="button">Cancelar</button><button class="btn btn-warning" type="submit">Crear sesión</button></div>
+    </form>
+  </div></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const cameraButton = document.getElementById('inventory-camera-button');
+  const cameraMessage = document.getElementById('inventory-camera-message');
+  const cameraVideo = document.getElementById('inventory-camera-video');
+  const touch = navigator.maxTouchPoints > 0 || matchMedia('(pointer: coarse)').matches;
+  const compact = Math.min(screen.width, screen.height) <= 1024;
+  const mobileSystem = /Android|iPad|iPhone|Mobile/i.test(navigator.userAgent);
+  const cameraEligible = touch && compact && mobileSystem;
+  const scannerInput = document.getElementById('inventory-scan-input');
+  const scanResult = document.getElementById('inventory-scan-result');
+  function showInventoryItem(item) {
+    scanResult.hidden = false;
+    scanResult.className = 'inventory-form-result is-success';
+    scanResult.replaceChildren();
+    const title = document.createElement('strong');
+    title.textContent = item.nombre || 'Artículo reconocido';
+    const details = document.createElement('div');
+    details.textContent = [item.tipo, item.codigo, item.estado_label || item.estado, item.ubicacion].filter(Boolean).join(' · ');
+    scanResult.append(title, details);
+    if (item.url && String(item.url).startsWith('/')) {
+      const link = document.createElement('a');
+      link.href = item.url; link.textContent = 'Abrir ficha'; link.className = 'btn btn-sm btn-outline-primary mt-2';
+      scanResult.append(link);
+    }
+  }
+  async function useInventoryScan(raw) {
+    const normalized = window.MRDGlobalScanner.normalize(raw);
+    scannerInput.value = normalized;
+    cameraMessage.textContent = 'Identificando código…';
+    let resolvedCode = normalized;
+    try {
+      const response = await fetch('/scan/buscar?codigo=' + encodeURIComponent(raw), {
+        cache: 'no-store', headers: {'Accept':'application/json'}, redirect:'manual'
+      });
+      if (response.status === 0 || response.type === 'opaqueredirect' || response.status === 401) {
+        location.href = '/login'; return;
+      }
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.found) throw new Error(payload.detail || 'Código no reconocido');
+      resolvedCode = window.MRDGlobalScanner.normalize(payload.codigo || normalized);
+      showInventoryItem(payload);
+    } catch (error) {
+      cameraMessage.textContent = 'No reconocido: ' + normalized + '. ' + error.message;
+      scannerInput.value = '';
+      scannerInput.focus();
+      return;
+    }
+    const cards = [...document.querySelectorAll('[data-inventory-code]')];
+    const match = cards.find(card => {
+      const codes = card.dataset.inventoryCode.split(/\s+/).map(value => window.MRDGlobalScanner.normalize(value));
+      return codes.includes(resolvedCode) || codes.includes(normalized);
+    });
+    cards.forEach(card => card.classList.toggle('inventory-scan-match', card === match));
+    if (match) {
+      match.scrollIntoView({behavior:'smooth', block:'center'});
+      cameraMessage.textContent = 'Código reconocido dentro del inventario masivo: ' + resolvedCode;
+    } else {
+      cameraMessage.textContent = 'Código reconocido en el inventario general: ' + resolvedCode;
+    }
+    scannerInput.value = '';
+    scannerInput.focus();
+  }
+  scannerInput.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); useInventoryScan(scannerInput.value); } });
+  document.addEventListener('mrd:scanner-code', event => { event.preventDefault(); useInventoryScan(event.detail.code); });
+  document.querySelectorAll('.modal').forEach(modal => modal.addEventListener('hidden.bs.modal', () => scannerInput.focus()));
+  setTimeout(() => scannerInput.focus(), 100);
+  cameraButton.hidden = !cameraEligible;
+  cameraButton.addEventListener('click', async function () {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      cameraMessage.textContent = 'Este dispositivo no ofrece cámara. Usa la pistola o escribe el código.';
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: {ideal: 'environment'}}, audio: false});
+      cameraVideo.srcObject = stream;
+      cameraVideo.hidden = false;
+      await cameraVideo.play();
+      cameraMessage.textContent = 'Cámara activa. La pistola y el campo manual siguen disponibles.';
+    } catch (error) {
+      cameraMessage.textContent = 'No se pudo activar la cámara. Comprueba el permiso o usa la pistola/manual.';
+    }
+  });
+
+  const form = document.getElementById('inventory-session-form');
+  form.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    const result = document.getElementById('inventory-form-result');
+    const data = Object.fromEntries(new FormData(form));
+    data.almacen_id = null;
+    data.umbral_desviacion = 5;
+    try {
+      const response = await fetch('/inventario/sesiones/nueva', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
+      const type = response.headers.get('content-type') || '';
+      if (!type.includes('application/json')) throw new Error('La sesión ha caducado. Vuelve a iniciar sesión.');
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || 'No se pudo crear la sesión.');
+      result.className = 'inventory-form-result is-success';
+      result.textContent = 'Sesión creada correctamente.';
+      location.reload();
+    } catch (error) {
+      result.className = 'inventory-form-result is-error';
+      result.textContent = error.message;
+    }
+  });
+
+  const supplyForm = document.getElementById('inventory-supply-form');
+  supplyForm.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    const result = document.getElementById('inventory-supply-result');
+    const data = Object.fromEntries(new FormData(supplyForm));
+    for (const key of ['catalogo_epi_id', 'almacen_id', 'cantidad', 'stock_minimo']) data[key] = Number(data[key]);
+    data.ubicacion_id = null;
+    for (const key of ['referencia_proveedor', 'numero_lote', 'fecha_caducidad']) if (!data[key]) data[key] = null;
+    try {
+      const response = await fetch('/inventario/variantes/nueva', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
+      const type = response.headers.get('content-type') || '';
+      if (!type.includes('application/json')) throw new Error('La sesión ha caducado. Vuelve a iniciar sesión.');
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || 'No se pudo registrar el suministro.');
+      result.className = 'inventory-form-result is-success';
+      result.textContent = `Suministro registrado · ${payload.referencia_interna} · QR ${payload.codigo_qr}`;
+      supplyForm.querySelector('button[type="submit"]').disabled = true;
+      setTimeout(() => location.reload(), 1800);
+    } catch (error) {
+      result.className = 'inventory-form-result is-error';
+      result.textContent = error.message;
+    }
+  });
+}());
+</script>
+{% endblock %}

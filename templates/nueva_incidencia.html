@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Nueva incidencia{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/incidencias">Incidencias</a><span class="sep">/</span>
+<span class="current">Nueva</span>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">Nueva incidencia</div>
+    <div class="page-subtitle">Registra un problema o avería</div>
+  </div>
+  <a href="/incidencias" class="btn btn-outline btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
+</div>
+
+<div style="max-width:640px">
+  <form method="post" action="/incidencias/nueva">
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-exclamation-triangle"></i> Datos de la incidencia</div></div>
+      <div class="card-body">
+
+        <div class="form-group">
+          <label class="form-label">Título <span class="required">*</span></label>
+          <input type="text" name="titulo" class="form-control" required autofocus
+                 placeholder="Describe brevemente el problema">
+        </div>
+
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <select name="tipo" class="form-control">
+              <option value="averia">Avería</option>
+              <option value="golpe">Golpe / daño físico</option>
+              <option value="rotura">Rotura</option>
+              <option value="perdida">Pérdida</option>
+              <option value="robo">Robo</option>
+              <option value="mal_funcionamiento">Mal funcionamiento</option>
+              <option value="mantenimiento">Mantenimiento</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Prioridad</label>
+            <select name="prioridad" class="form-control">
+              <option value="baja">Baja</option>
+              <option value="media" selected>Media</option>
+              <option value="alta">Alta</option>
+              <option value="critica">Crítica</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Herramienta afectada</label>
+          <select name="herramienta_id" class="form-control">
+            <option value="">Sin herramienta específica</option>
+            {% for h in herramientas %}
+            <option value="{{ h.id }}" {% if herramienta_sel and herramienta_sel.id == h.id %}selected{% endif %}>
+              {{ h.codigo }} — {{ h.nombre }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Descripción detallada</label>
+          <textarea name="descripcion" class="form-control" rows="4"
+                    placeholder="Describe el problema con detalle..."></textarea>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:8px">
+          <a href="/incidencias" class="btn btn-ghost">Cancelar</a>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Registrar incidencia</button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

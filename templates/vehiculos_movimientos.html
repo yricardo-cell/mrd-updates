@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+{% block title %}Control Vehicular{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="page-header-left">
+    <h1 class="page-title"><i class="bi bi-truck text-primary"></i> Vehículos</h1>
+    <p class="page-subtitle d-none d-md-block">Movimientos y combustible</p>
+  </div>
+  <div class="page-header-actions">
+    <a href="/surtidor" class="btn btn-outline-warning btn-sm">
+      <i class="bi bi-fuel-pump-fill"></i><span class="d-none d-sm-inline ms-1">Surtidor</span>
+    </a>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalSalida">
+      <i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline ms-1">Salida</span>
+    </button>
+  </div>
+</div>
+
+{% if request.query_params.get('ok') %}
+<div class="alert alert-success alert-dismissible fade show py-2 mb-3">
+  {% if request.query_params.get('ok') == 'salida' %}<i class="bi bi-check-circle me-2"></i>Salida registrada.
+  {% elif request.query_params.get('ok') == 'retorno' %}<i class="bi bi-check-circle me-2"></i>Retorno registrado.
+  {% elif request.query_params.get('ok') == 'repostaje' %}<i class="bi bi-fuel-pump me-2"></i>Repostaje registrado.
+  {% endif %}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{# ── Banner vehículos en ruta ── #}
+{% if en_ruta %}
+<div class="alert alert-warning d-flex align-items-start gap-2 mb-3 py-2">
+  <i class="bi bi-truck fs-5 mt-1 flex-shrink-0"></i>
+  <div>
+    <strong>{{ en_ruta|length }} vehículo{% if en_ruta|length != 1 %}s{% endif %} fuera ahora</strong>
+    <div class="mt-1 d-flex flex-wrap gap-1">
+      {% for m in en_ruta %}
+      <span class="badge bg-warning text-dark">
+        {{ (m.vehiculo.matricula ~ " " ~ (m.vehiculo.marca or ""))|trim if m.vehiculo else "---" }}
+        {% if m.conductor %}&mdash; {{ m.conductor.nombre_completo }}{% endif %}
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Tabs ── #}
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item">
+    <a class="nav-link active" data-bs-toggle="tab" href="#tabMovs">
+      <i class="bi bi-arrow-left-right me-1"></i>Movimientos
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" data-bs-toggle="tab" href="#tabCombustible">
+      <i class="bi bi-fuel-pump me-1"></i>Combustible
+      {% if repostajes %}<span class="badge bg-success ms-1">{{ repostajes|length }}</span>{% endif %}
+    </a>
+  </li>
+</ul>
+
+<div class="tab-content">
+
+  {# ── TAB MOVIMIENTOS ── #}
+  <div class="tab-pane fade show active" id="tabMovs">
+    {% if movimientos %}
+
+    {# Vista móvil: tarjetas #}
+    <div class="d-md-none">
+      {% for mv in movimientos %}
+      <div class="card mb-2 {% if mv.en_ruta %}border-warning{% endif %}">
+        <div class="card-body py-2 px-3">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <i class="bi bi-truck {% if mv.en_ruta %}text-warning{% else %}text-success{% endif %}"></i>
+            <span class="fw-semibold">{{ (mv.vehiculo.matricula ~ " " ~ (mv.vehiculo.marca or ""))|trim if mv.vehiculo else "---" }}</span>
+            {% if mv.en_ruta %}
+            <span class="badge bg-warning text-dark ms-auto">En ruta</span>
+            {% else %}
+            <span class="badge bg-success ms-auto">Retornado</span>
+            {% endif %}
+          </div>
+          <div class="small text-muted">
+            {% if mv.conductor %}<i class="bi bi-person me-1"></i>{{ mv.conductor.nombre_completo }}<br>{% endif %}
+            {% if mv.obra %}<i class="bi bi-building me-1"></i>{{ mv.obra.nombre }}<br>
+            {% elif mv.destino %}<i class="bi bi-geo-alt me-1"></i>{{ mv.destino }}<br>{% endif %}
+            <i class="bi bi-calendar me-1"></i>{{ mv.fecha_salida.strftime("%d/%m/%Y %H:%M") if mv.fecha_salida else "---" }}
+            {% if mv.km_salida %} · {{ "{:,}".format(mv.km_salida) }} km{% endif %}
+          </div>
+          {% if mv.en_ruta %}
+          <div class="mt-2">
+            <button class="btn btn-success btn-sm w-100"
+                    data-bs-toggle="modal" data-bs-target="#modalRetorno{{ mv.id }}">
+              <i class="bi bi-box-arrow-in-left me-1"></i>Registrar retorno
+            </button>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {# Vista escritorio: tabla #}
+    <div class="d-none d-md-block">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle table-sm">
+          <thead class="table-dark">
+            <tr>
+              <th>Vehículo</th><th>Conductor</th><th>Destino / Obra</th>
+              <th>Salida</th><th>KM sal.</th><th>Retorno</th><th>KM rec.</th>
+              <th>Estado</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for mv in movimientos %}
+            <tr class="{% if mv.en_ruta %}table-warning{% endif %}">
+              <td class="fw-semibold">{{ (mv.vehiculo.matricula ~ " " ~ (mv.vehiculo.marca or ""))|trim if mv.vehiculo else "---" }}</td>
+              <td>{{ mv.conductor.nombre_completo if mv.conductor else "---" }}</td>
+              <td>
+                {% if mv.obra %}<small>{{ mv.obra.nombre }}</small>
+                {% elif mv.destino %}<small>{{ mv.destino }}</small>
+                {% else %}---{% endif %}
+              </td>
+              <td><small>{{ mv.fecha_salida.strftime("%d/%m %H:%M") if mv.fecha_salida else "---" }}</small></td>
+              <td class="text-end"><small>{{ "{:,}".format(mv.km_salida) if mv.km_salida else "---" }}</small></td>
+              <td>
+                {% if mv.fecha_retorno %}<small>{{ mv.fecha_retorno.strftime("%d/%m %H:%M") }}</small>
+                {% else %}<span class="text-warning fw-semibold">En ruta</span>{% endif %}
+              </td>
+              <td class="text-end">
+                {% if mv.km_recorridos is not none %}<small>{{ "{:,}".format(mv.km_recorridos) }} km</small>
+                {% else %}---{% endif %}
+              </td>
+              <td>
+                {% if mv.en_ruta %}<span class="badge bg-warning text-dark">Fuera</span>
+                {% else %}<span class="badge bg-success">Retornado</span>{% endif %}
+              </td>
+              <td>
+                {% if mv.en_ruta %}
+                <button class="btn btn-sm btn-success"
+                        data-bs-toggle="modal" data-bs-target="#modalRetorno{{ mv.id }}">
+                  <i class="bi bi-box-arrow-in-left me-1"></i>Retorno
+                </button>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="bi bi-truck display-4 d-block mb-2 opacity-25"></i>
+      Sin movimientos registrados.
+      <div class="mt-3">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalSalida">
+          <i class="bi bi-plus-lg me-1"></i>Registrar primera salida
+        </button>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── TAB COMBUSTIBLE ── #}
+  <div class="tab-pane fade" id="tabCombustible">
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-3">
+      <i class="bi bi-info-circle-fill"></i>
+      El registro de combustible se gestiona desde el <a href="/surtidor" class="fw-semibold">Surtidor</a>,
+      donde puedes registrar repostajes de vehículos y maquinaria (toros).
+    </div>
+
+    {% if repostajes %}
+    <div class="row g-2 mb-3">
+      <div class="col-6 col-md-3">
+        <div class="card text-center">
+          <div class="card-body py-2">
+            <div class="fs-5 fw-bold text-success">{{ "%.1f"|format(repostajes|sum(attribute='litros')) }} L</div>
+            <small class="text-muted">Total litros</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card text-center">
+          <div class="card-body py-2">
+            {% set total_e = namespace(v=0) %}
+            {% for r in repostajes %}{% if r.total_euros %}{% set total_e.v = total_e.v + r.total_euros %}{% endif %}{% endfor %}
+            <div class="fs-5 fw-bold text-warning">{{ "%.2f"|format(total_e.v) }}€</div>
+            <small class="text-muted">Gasto total</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card text-center">
+          <div class="card-body py-2">
+            <div class="fs-5 fw-bold">{{ repostajes|length }}</div>
+            <small class="text-muted">Repostajes</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card text-center">
+          <div class="card-body py-2">
+            {% set con_precio = repostajes|selectattr('precio_litro')|list %}
+            {% if con_precio %}
+            {% set suma_p = namespace(v=0) %}
+            {% for r in con_precio %}{% set suma_p.v = suma_p.v + r.precio_litro %}{% endfor %}
+            <div class="fs-5 fw-bold text-info">{{ "%.3f"|format(suma_p.v / con_precio|length) }}€</div>
+            {% else %}<div class="fs-5 fw-bold text-muted">---</div>{% endif %}
+            <small class="text-muted">Precio medio/L</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# Móvil: tarjetas repostaje #}
+    <div class="d-md-none">
+      {% for r in repostajes %}
+      <div class="card mb-2">
+        <div class="card-body py-2 px-3">
+          <div class="d-flex justify-content-between">
+            <span class="fw-semibold">{{ r.activo_nombre }}</span>
+            <small class="text-muted">{{ r.fecha.strftime("%d/%m/%Y") if r.fecha else "—" }}</small>
+          </div>
+          <div class="d-flex gap-3 mt-1 small">
+            <span class="text-success">{{ "%.1f"|format(r.litros) }} L</span>
+            {% if r.total_euros %}<span class="text-warning fw-semibold">{{ "%.2f"|format(r.total_euros) }}€</span>{% endif %}
+            {% if r.precio_litro %}<span class="text-muted">{{ "%.3f"|format(r.precio_litro) }}€/L</span>{% endif %}
+            {% if r.km_actuales %}<span class="text-muted">{{ "{:,}".format(r.km_actuales) }} km</span>{% endif %}
+          </div>
+          {% if r.gasolinera %}<div class="small text-muted mt-1"><i class="bi bi-geo-alt me-1"></i>{{ r.gasolinera }}</div>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {# Escritorio: tabla #}
+    <div class="d-none d-md-block table-responsive">
+      <table class="table table-hover align-middle table-sm">
+        <thead class="table-dark">
+          <tr>
+            <th>Fecha</th><th>Vehículo</th>
+            <th class="text-end">Litros</th><th class="text-end">€/L</th>
+            <th class="text-end">Total</th><th class="text-end">KM</th>
+            <th>Gasolinera</th><th>Notas</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in repostajes %}
+          <tr>
+            <td><small>{{ r.fecha.strftime("%d/%m/%Y") if r.fecha else "---" }}</small></td>
+            <td class="fw-semibold">{{ r.activo_nombre }}</td>
+            <td class="text-end text-success fw-semibold">{{ "%.1f"|format(r.litros) }} L</td>
+            <td class="text-end text-muted"><small>{% if r.precio_litro %}{{ "%.3f"|format(r.precio_litro) }}€{% else %}---{% endif %}</small></td>
+            <td class="text-end">{% if r.total_euros %}<span class="text-warning fw-semibold">{{ "%.2f"|format(r.total_euros) }}€</span>{% else %}---{% endif %}</td>
+            <td class="text-end text-muted"><small>{{ "{:,}".format(r.km_actuales) if r.km_actuales else "---" }}</small></td>
+            <td><small>{{ r.gasolinera or "---" }}</small></td>
+            <td><small class="text-muted">{{ r.notas or "" }}</small></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% else %}
+    <div class="text-center text-muted py-4">
+      <i class="bi bi-fuel-pump display-4 d-block mb-2 opacity-25"></i>
+      Sin repostajes.<br>
+      <a href="/surtidor" class="btn btn-warning mt-3">
+        <i class="bi bi-fuel-pump-fill me-1"></i>Ir al surtidor
+      </a>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{# ── Modals retorno ── #}
+{% for mv in movimientos %}{% if mv.en_ruta %}
+<div class="modal fade" id="modalRetorno{{ mv.id }}" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <form method="post" action="/vehiculos/movimientos/{{ mv.id }}/retorno" class="modal-content">
+      
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="bi bi-box-arrow-in-left me-2"></i>Registrar retorno</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="fw-semibold mb-3">{{ (mv.vehiculo.matricula ~ " " ~ (mv.vehiculo.marca or ""))|trim if mv.vehiculo else "---" }}</p>
+        <div class="mb-3">
+          <label class="form-label">KM actuales</label>
+          <input type="number" name="km_retorno" class="form-control"
+                 {% if mv.km_salida %}min="{{ mv.km_salida }}"{% endif %} placeholder="KM al volver">
+        </div>
+        <div>
+          <label class="form-label">Observaciones</label>
+          <input type="text" name="obs_retorno" class="form-control" placeholder="Incidencias, etc.">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i>Confirmar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}{% endfor %}
+
+{# ── Modal salida ── #}
+<div class="modal fade" id="modalSalida" tabindex="-1">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-box-arrow-right me-2"></i>Registrar Salida</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        {% for v in vehiculos %}
+        <div class="card mb-2 border"
+             onclick="var d=this.querySelector('.fs-inner');d.classList.toggle('d-none');this.classList.toggle('border-primary')"
+             style="cursor:pointer">
+          <div class="card-body py-2 d-flex align-items-center gap-2">
+            <i class="bi bi-truck fs-5 text-primary"></i>
+            <span class="fw-semibold">{{ v.matricula }}</span>
+            <small class="text-muted">{{ v.marca or "" }} {{ v.modelo or "" }}</small>
+            <i class="bi bi-chevron-down ms-auto text-muted"></i>
+          </div>
+          <div class="fs-inner d-none">
+            <form method="post" action="/vehiculos/{{ v.id }}/salida" class="card-body pt-0"
+                  onclick="event.stopPropagation()">
+              
+              <div class="row g-2">
+                <div class="col-12">
+                  <label class="form-label">Conductor</label>
+                  <select name="conductor_id" class="form-select form-select-sm">
+                    <option value="">--- Sin conductor ---</option>
+                    {% for t in trabajadores %}<option value="{{ t.id }}">{{ t.nombre_completo }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="col-12">
+                  <label class="form-label">Obra</label>
+                  <select name="obra_id" class="form-select form-select-sm">
+                    <option value="">--- Sin obra ---</option>
+                    {% for o in obras %}<option value="{{ o.id }}">{{ o.nombre }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="col-7">
+                  <label class="form-label">Destino libre</label>
+                  <input type="text" name="destino" class="form-control form-control-sm" placeholder="Si no es obra">
+                </div>
+                <div class="col-5">
+                  <label class="form-label">KM salida</label>
+                  <input type="number" name="km_salida" class="form-control form-control-sm" value="{{ v.kilometros or '' }}">
+                </div>
+                <div class="col-12">
+                  <label class="form-label">Observaciones</label>
+                  <input type="text" name="observaciones" class="form-control form-control-sm">
+                </div>
+                <div class="col-12 mt-1">
+                  <button type="submit" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-box-arrow-right me-1"></i>Salida — {{ v.matricula }}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+        {% else %}
+        <p class="text-muted text-center py-3">No hay vehículos registrados.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

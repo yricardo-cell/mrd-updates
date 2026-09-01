@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Control multi almacén{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+  <div>
+    <div class="text-primary fw-semibold text-uppercase small">Administración central</div>
+    <h2 class="mb-1"><i class="bi bi-buildings me-2"></i>Madrid y Barcelona</h2>
+    <p class="text-muted mb-0">Inventarios separados, visión conjunta y traspasos con recepción confirmada.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="/mostrador" class="btn btn-primary"><i class="bi bi-grid-3x3-gap me-1"></i>Mostrador</a>
+    <a href="/inventario/recepcion" class="btn btn-outline-primary"><i class="bi bi-box-arrow-in-down me-1"></i>Recepción</a>
+    <a href="/inventario/v2" class="btn btn-outline-primary"><i class="bi bi-clipboard-check me-1"></i>Inventario masivo</a>
+    <a href="/almacenes" class="btn btn-outline-primary"><i class="bi bi-map me-1"></i>Mapas</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  {% for card in tarjetas %}
+  <div class="col-xl-6">
+    <section class="card h-100 shadow-sm border-0">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div><div class="small text-muted">Almacén</div><h3 class="h4 mb-0">{{ card.almacen.nombre }}</h3></div>
+          <a href="/almacenes/{{ card.almacen.id }}" class="btn btn-sm btn-outline-primary">Abrir</a>
+        </div>
+        <div class="row g-2 text-center">
+          <div class="col-4"><div class="p-2 rounded bg-light"><strong class="d-block fs-4">{{ card.herramientas }}</strong><span class="small text-muted">Herramientas</span></div></div>
+          <div class="col-4"><div class="p-2 rounded bg-light"><strong class="d-block fs-4">{{ card.maquinaria }}</strong><span class="small text-muted">Máquinas</span></div></div>
+          <div class="col-4"><div class="p-2 rounded bg-light"><strong class="d-block fs-4">{{ card.trabajadores }}</strong><span class="small text-muted">Trabajadores</span></div></div>
+          <div class="col-4"><div class="p-2 rounded {{ 'bg-danger-subtle text-danger' if card.incidencias else 'bg-light' }}"><strong class="d-block fs-4">{{ card.incidencias }}</strong><span class="small">Incidencias</span></div></div>
+          <div class="col-4"><div class="p-2 rounded bg-light"><strong class="d-block fs-4">{{ '%.0f'|format(card.material_stock) }}</strong><span class="small text-muted">Consumibles</span></div></div>
+          <div class="col-4"><div class="p-2 rounded bg-light"><strong class="d-block fs-4">{{ card.variant_stock }}</strong><span class="small text-muted">Ropa/EPI</span></div></div>
+          <div class="col-4"><div class="p-2 rounded {{ 'bg-danger-subtle text-danger' if card.stock_bajo else 'bg-success-subtle text-success' }}"><strong class="d-block fs-4">{{ card.stock_bajo }}</strong><span class="small">Stock bajo</span></div></div>
+        </div>
+      </div>
+    </section>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-7">
+    <section class="card shadow-sm border-0">
+      <div class="card-header bg-primary text-white py-3"><strong><i class="bi bi-arrow-left-right me-2"></i>Nuevo traspaso escaneado</strong></div>
+      <div class="card-body">
+        <div class="row g-2 mb-3">
+          <div class="col-md-6"><label class="form-label">Origen</label><select id="transfer-origin" class="form-select">{% for a in almacenes %}<option value="{{ a.id }}" {% if request.query_params.get('origen')|int == a.id %}selected{% endif %}>{{ a.nombre }}</option>{% endfor %}</select></div>
+          <div class="col-md-6"><label class="form-label">Destino</label><select id="transfer-destination" class="form-select">{% for a in almacenes %}<option value="{{ a.id }}" {% if loop.index == 2 %}selected{% endif %}>{{ a.nombre }}</option>{% endfor %}</select></div>
+        </div>
+        <label class="form-label">Pistola, QR o búsqueda por nombre</label>
+        <div class="input-group input-group-lg">
+          <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+          <input id="transfer-scan" class="form-control" autocomplete="off" placeholder="Escanea o escribe una referencia">
+          <button id="transfer-search" class="btn btn-primary" type="button">Buscar</button>
+        </div>
+        <div id="transfer-results" class="list-group mt-2"></div>
+        <div id="transfer-state" class="small text-muted mt-2">La pistola funciona dentro de esta pantalla y no salta al escáner general.</div>
+        <div class="table-responsive mt-3">
+          <table class="table align-middle"><thead><tr><th>Artículo</th><th style="width:130px">Cantidad</th><th style="width:55px"></th></tr></thead><tbody id="transfer-cart"><tr><td colspan="3" class="text-center text-muted py-4">Escanea el primer artículo.</td></tr></tbody></table>
+        </div>
+        <label class="form-label">Notas del envío</label><textarea id="transfer-notes" class="form-control" rows="2"></textarea>
+        <button id="transfer-confirm" class="btn btn-success btn-lg w-100 mt-3" type="button" disabled><i class="bi bi-truck me-2"></i>Crear salida y poner en tránsito</button>
+      </div>
+    </section>
+  </div>
+  <div class="col-xl-5">
+    <section class="card shadow-sm border-0">
+      <div class="card-header py-3"><strong><i class="bi bi-clock-history me-2"></i>Traspasos</strong></div>
+      <div class="list-group list-group-flush">
+        {% for t in transferencias %}
+        <a href="/multi-almacen/traspasos/{{ t.id }}" class="list-group-item list-group-item-action d-flex justify-content-between gap-2 py-3">
+          <span><strong>{{ t.numero }}</strong><small class="d-block text-muted">{{ t.origen.nombre }} → {{ t.destino.nombre }} · {{ t.lineas|length }} líneas</small></span>
+          <span class="badge {{ 'bg-warning text-dark' if t.estado == 'en_transito' else ('bg-success' if t.estado == 'recibida' else 'bg-secondary') }} align-self-center">{{ t.estado|replace('_',' ') }}</span>
+        </a>
+        {% else %}<div class="p-4 text-center text-muted">Todavía no hay traspasos.</div>{% endfor %}
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const scan = document.getElementById('transfer-scan');
+  const origin = document.getElementById('transfer-origin');
+  const destination = document.getElementById('transfer-destination');
+  const state = document.getElementById('transfer-state');
+  const results = document.getElementById('transfer-results');
+  const body = document.getElementById('transfer-cart');
+  const confirmButton = document.getElementById('transfer-confirm');
+  const cart = new Map();
+  let busy = false;
+  const key = item => `${item.tipo}:${item.id}`;
+  const safeText = value => document.createTextNode(String(value ?? ''));
+
+  function render() {
+    body.replaceChildren();
+    if (!cart.size) {
+      const row = body.insertRow(); const cell = row.insertCell(); cell.colSpan = 3;
+      cell.className = 'text-center text-muted py-4'; cell.textContent = 'Escanea el primer artículo.';
+    }
+    for (const item of cart.values()) {
+      const row = body.insertRow();
+      const detail = row.insertCell(); detail.append(safeText(item.nombre));
+      const code = document.createElement('small'); code.className = 'd-block text-muted'; code.textContent = `${item.codigo} · ${item.tipo}`; detail.append(code);
+      const amountCell = row.insertCell();
+      const amount = document.createElement('input'); amount.type = 'number'; amount.min = '1'; amount.step = item.permite_cantidad ? '1' : '1'; amount.max = String(item.stock || 1); amount.value = String(item.cantidad || 1); amount.className = 'form-control'; amount.disabled = !item.permite_cantidad;
+      amount.onchange = () => { item.cantidad = Math.max(1, Math.min(Number(amount.value)||1, Number(item.stock)||1)); amount.value = item.cantidad; };
+      amountCell.append(amount);
+      const removeCell = row.insertCell(); const remove = document.createElement('button'); remove.type='button'; remove.className='btn btn-outline-danger'; remove.innerHTML='<i class="bi bi-x-lg"></i>'; remove.onclick=()=>{cart.delete(key(item));render()}; removeCell.append(remove);
+    }
+    confirmButton.disabled = busy || !cart.size;
+  }
+  function add(item) {
+    const itemKey = key(item);
+    if (cart.has(itemKey)) { state.className='small text-warning mt-2'; state.textContent='Ese artículo ya estaba en la cesta.'; return; }
+    item.cantidad = 1; cart.set(itemKey, item); render();
+    state.className='small text-success mt-2'; state.textContent=`Añadido: ${item.nombre}`;
+    scan.value=''; scan.focus();
+  }
+  async function resolve(code) {
+    code=String(code||'').trim(); if(!code||busy)return;
+    busy=true; state.className='small text-muted mt-2'; state.textContent='Buscando…';
+    try {
+      const response=await fetch(`/api/traspasos/resolver?codigo=${encodeURIComponent(code)}&origen_id=${origin.value}`,{headers:{Accept:'application/json'},redirect:'manual'});
+      const data=await response.json(); if(!response.ok)throw new Error(data.detail||'Código no reconocido'); add(data.item);
+    } catch(error) { state.className='small text-danger mt-2'; state.textContent=error.message; scan.select(); }
+    finally { busy=false; render(); scan.focus(); }
+  }
+  async function searchByName() {
+    const q=scan.value.trim(); if(q.length<2)return resolve(q);
+    results.replaceChildren();
+    try {
+      const response=await fetch(`/api/traspasos/buscar?q=${encodeURIComponent(q)}&origen_id=${origin.value}`,{headers:{Accept:'application/json'},redirect:'manual'});
+      const data=await response.json(); if(!response.ok)throw new Error(data.detail||'No se pudo buscar');
+      for(const item of data.items){const button=document.createElement('button');button.type='button';button.className='list-group-item list-group-item-action';button.textContent=`${item.codigo} · ${item.nombre} · ${item.estado}`;button.onclick=()=>{add(item);results.replaceChildren()};results.append(button)}
+      if(!data.items.length){const empty=document.createElement('div');empty.className='list-group-item text-muted';empty.textContent='Sin resultados en el almacén de origen.';results.append(empty)}
+    } catch(error){state.className='small text-danger mt-2';state.textContent=error.message}
+  }
+  scan.addEventListener('keydown', event=>{if(event.key==='Enter'||event.key==='Tab'){event.preventDefault();resolve(scan.value)}});
+  document.addEventListener('mrd:scanner-code',event=>{event.preventDefault();resolve(event.detail.code)});
+  document.getElementById('transfer-search').onclick=searchByName;
+  origin.onchange=()=>{cart.clear();results.replaceChildren();render();scan.focus()};
+  confirmButton.onclick=async()=>{
+    if(busy||!cart.size)return;
+    if(origin.value===destination.value){state.className='small text-danger mt-2';state.textContent='Origen y destino deben ser distintos.';return}
+    if(!window.confirm(`¿Enviar ${cart.size} líneas al almacén de destino?`))return;
+    busy=true;render();state.className='small text-muted mt-2';state.textContent='Creando traspaso transaccional…';
+    const payload={event_id:'transfer-'+crypto.randomUUID().replaceAll('-',''),origen_id:Number(origin.value),destino_id:Number(destination.value),notas:document.getElementById('transfer-notes').value,lineas:[...cart.values()].map(item=>({tipo:item.tipo,id:Number(item.id),cantidad:Number(item.cantidad)||1}))};
+    try{const response=await fetch('/api/traspasos',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload),redirect:'manual'});if(response.status===0||response.type==='opaqueredirect'||response.status===401){location.href='/login';return}const data=await response.json();if(!response.ok)throw new Error(data.detail||'No se creó el traspaso');location.href=data.url}catch(error){busy=false;render();state.className='small text-danger mt-2';state.textContent=error.message+' No se ha movido ninguna línea.'}
+  };
+  render(); scan.focus();
+})();
+</script>
+{% endblock %}

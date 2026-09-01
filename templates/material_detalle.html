@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% block title %}{{ mat.nombre }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <a href="/materiales" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Volver
+  </a>
+  <div>
+    <h4 class="mb-0"><i class="bi bi-box-seam text-success me-2"></i>{{ mat.nombre }}</h4>
+    <small class="text-muted">{{ mat.codigo or "" }}{% if mat.categoria %} &mdash; {{ mat.categoria }}{% endif %}</small>
+  </div>
+  <button class="btn btn-success btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#modalMov">
+    <i class="bi bi-arrow-left-right me-1"></i>Registrar movimiento
+  </button>
+  <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#modalEditar">
+    <i class="bi bi-pencil"></i>
+  </button>
+</div>
+
+{% if request.query_params.get('ok') %}
+<div class="alert alert-success alert-dismissible fade show py-2">
+  {% if request.query_params.get('ok') == 'mov' %}Movimiento registrado.
+  {% elif request.query_params.get('ok') == 'editado' %}Datos actualizados.{% endif %}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<!-- Tarjetas de resumen -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card text-center {% if mat.bajo_minimo %}border-warning{% endif %}">
+      <div class="card-body py-3">
+        <div class="display-5 fw-bold {% if mat.bajo_minimo %}text-warning{% else %}text-success{% endif %}">
+          {{ "%.2f"|format(mat.stock_actual) }}
+        </div>
+        <div class="text-muted small">Stock actual ({{ mat.unidad }})</div>
+        {% if mat.bajo_minimo %}
+        <span class="badge bg-warning text-dark mt-1"><i class="bi bi-exclamation-triangle me-1"></i>Bajo minimo</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="display-5 fw-bold text-secondary">{{ "%.2f"|format(mat.stock_minimo) }}</div>
+        {% if mat.stock_maximo %}<div class="text-muted small" style="font-size:.7rem">Máx: {{ "%.2f"|format(mat.stock_maximo) }}</div>{% endif %}
+        <div class="text-muted small">Stock mínimo ({{ mat.unidad }})</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="h6 fw-bold text-info font-monospace">{{ mat.referencia_proveedor or "---" }}</div>
+        <div class="text-muted small">Ref. pedido proveedor</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="h5 fw-bold text-primary">{{ mat.ubicacion_texto or "---" }}</div>
+        <div class="text-muted small">Ubicacion en nave</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="h5 fw-bold">{{ mat_movs|length }}</div>
+        <div class="text-muted small">Movimientos totales</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if mat.precio_unidad is not none %}
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="h5 fw-bold text-success">{{ "%.2f"|format(mat.precio_unidad) }} €</div>
+        <div class="text-muted small">Precio / {{ mat.unidad }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="h5 fw-bold">{{ "%.2f"|format(mat.stock_actual * mat.precio_unidad) }} €</div>
+        <div class="text-muted small">Valor de stock actual</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Historial de cambios de precio / stock mínimo -->
+<h6 class="text-muted mb-3">Historial de cambios de precio / stock mínimo</h6>
+{% if historial_valores %}
+<div class="table-responsive mb-4">
+  <table class="table table-sm table-hover align-middle">
+    <thead class="table-dark">
+      <tr>
+        <th>Fecha</th>
+        <th>Cambio</th>
+        <th>Precio anterior</th>
+        <th>Precio nuevo</th>
+        <th>Stock mín. anterior</th>
+        <th>Stock mín. nuevo</th>
+        <th>Usuario</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in historial_valores %}
+      {% set ant = log.datos_anteriores | fromjson if log.datos_anteriores else {} %}
+      {% set nvo = log.datos_nuevos | fromjson if log.datos_nuevos else {} %}
+      <tr>
+        <td><small>{{ log.fecha.strftime("%d/%m/%Y %H:%M") if log.fecha else "---" }}</small></td>
+        <td><small>{{ log.resumen or "---" }}</small></td>
+        <td><small>{{ "%.2f"|format(ant.precio_unidad) + " €" if ant.precio_unidad is not none else "---" }}</small></td>
+        <td><small>{{ "%.2f"|format(nvo.precio_unidad) + " €" if nvo.precio_unidad is not none else "---" }}</small></td>
+        <td><small>{{ ant.stock_minimo if ant.stock_minimo is not none else "---" }}</small></td>
+        <td><small>{{ nvo.stock_minimo if nvo.stock_minimo is not none else "---" }}</small></td>
+        <td><small>{{ log.usuario.nombre if log.usuario else "Sistema" }}</small></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center text-muted py-4">
+  <i class="bi bi-graph-up display-4 d-block mb-2 opacity-25"></i>
+  Sin cambios de precio o stock mínimo registrados todavía.
+</div>
+{% endif %}
+
+<!-- Historial de movimientos -->
+<h6 class="text-muted mb-3">Historial de movimientos</h6>
+{% if mat_movs %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover align-middle">
+    <thead class="table-dark">
+      <tr>
+        <th>Fecha</th>
+        <th>Tipo</th>
+        <th class="text-end">Cantidad</th>
+        <th>Obra</th>
+        <th>Responsable</th>
+        <th>Referencia</th>
+        <th>Notas</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for mv in mat_movs %}
+      <tr>
+        <td><small>{{ mv.fecha.strftime("%d/%m/%Y %H:%M") if mv.fecha else "---" }}</small></td>
+        <td>
+          {% if mv.tipo == 'salida' %}
+            <span class="badge bg-danger">Salida</span>
+          {% elif mv.tipo == 'entrada' %}
+            <span class="badge bg-success">Entrada</span>
+          {% else %}
+            <span class="badge bg-info text-dark">Ajuste</span>
+          {% endif %}
+        </td>
+        <td class="text-end fw-bold {% if mv.tipo == 'salida' %}text-danger{% elif mv.tipo == 'entrada' %}text-success{% endif %}">
+          {% if mv.tipo == 'salida' %}-{% elif mv.tipo == 'entrada' %}+{% endif %}{{ "%.2f"|format(mv.cantidad) }} {{ mat.unidad }}
+        </td>
+        <td><small>{{ mv.obra.nombre if mv.obra else "---" }}</small></td>
+        <td><small>{{ mv.trabajador.nombre_completo if mv.trabajador else "---" }}</small></td>
+        <td><small class="font-monospace">{{ mv.referencia or "---" }}</small></td>
+        <td><small>{{ mv.notas or "" }}</small></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center text-muted py-4">
+  <i class="bi bi-arrow-left-right display-4 d-block mb-2 opacity-25"></i>
+  Sin movimientos registrados.
+</div>
+{% endif %}
+
+<!-- Modal: Registrar movimiento -->
+<div class="modal fade" id="modalMov" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="/materiales/{{ mat.id }}/movimiento" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-arrow-left-right me-2"></i>Registrar Movimiento</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Tipo</label>
+          <select name="tipo" class="form-select" id="selTipo">
+            {% for t in tipos %}
+            <option value="{{ t }}" {% if t == 'salida' %}selected{% endif %}>
+              {{ t.capitalize() }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Cantidad ({{ mat.unidad }}) <span class="text-danger">*</span></label>
+          <input type="number" name="cantidad" class="form-control" required step="0.01" min="0.01"
+            placeholder="Ej: 5">
+          <div id="hintAjuste" class="form-text text-info d-none">
+            En "Ajuste" pon el stock REAL que hay ahora mismo.
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Obra</label>
+          <select name="obra_id" class="form-select">
+            <option value="">--- Sin obra ---</option>
+            {% for o in obras %}<option value="{{ o.id }}">{{ o.nombre }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Responsable</label>
+          <select name="trabajador_id" class="form-select">
+            <option value="">--- Sin responsable ---</option>
+            {% for t in trabajadores %}<option value="{{ t.id }}">{{ t.nombre_completo }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Referencia (albaran, pedido...)</label>
+          <input type="text" name="referencia" class="form-control">
+        </div>
+        <div class="mb-1">
+          <label class="form-label">Notas</label>
+          <textarea name="notas" class="form-control" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i>Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Editar material -->
+<div class="modal fade" id="modalEditar" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="/materiales/{{ mat.id }}/editar" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>Editar Material</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-5">
+            <label class="form-label">Referencia MRD</label>
+            <input type="text" class="form-control" value="{{ mat.codigo }}" readonly disabled>
+            <div class="form-text">La referencia no se puede modificar.</div>
+          </div>
+          <div class="col-md-7">
+            <label class="form-label fw-semibold">Nombre *</label>
+            <input type="text" name="nombre" class="form-control" value="{{ mat.nombre }}" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Categoria</label>
+            <select name="categoria" class="form-select">
+              <option value="">--- Sin categoria ---</option>
+              {% for c in categorias %}
+              <option value="{{ c }}" {% if mat.categoria == c %}selected{% endif %}>{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Unidad</label>
+            <input type="text" name="unidad" class="form-control" value="{{ mat.unidad }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Stock mínimo</label>
+            <input type="number" name="stock_minimo" class="form-control" value="{{ mat.stock_minimo }}" step="0.01" min="0">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Stock máximo <small class="text-muted">(opcional)</small></label>
+            <input type="number" name="stock_maximo" class="form-control" value="{{ mat.stock_maximo or '' }}" step="0.01" min="0" placeholder="Sin límite">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Precio/unidad <small class="text-muted">(€)</small></label>
+            <input type="number" name="precio_unidad" class="form-control" value="{{ mat.precio_unidad if mat.precio_unidad is not none else '' }}" step="0.01" min="0" placeholder="Sin definir">
+          </div>
+          <div class="col-md-9">
+            <label class="form-label"><i class="bi bi-tag me-1"></i>Ref. pedido proveedor <small class="text-muted">(código del fabricante/proveedor)</small></label>
+            <input type="text" name="referencia_proveedor" class="form-control font-monospace" value="{{ mat.referencia_proveedor or '' }}" placeholder="Ej: 400719">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Ubicacion</label>
+            <input type="text" name="ubicacion_texto" class="form-control" value="{{ mat.ubicacion_texto or '' }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold"><i class="bi bi-upc-scan me-1"></i>Tipo de seguimiento QR</label>
+            <div class="d-flex gap-2 flex-wrap">
+              <label class="d-flex align-items-center gap-2 p-2 border rounded" style="cursor:pointer;flex:1;min-width:140px">
+                <input type="radio" name="tipo_seguimiento" value="generico" {% if (mat.tipo_seguimiento or 'generico') == 'generico' %}checked{% endif %}>
+                <span><strong>Genérico</strong><br><small class="text-muted">Un QR por tipo · cantidad al escanear</small></span>
+              </label>
+              <label class="d-flex align-items-center gap-2 p-2 border rounded" style="cursor:pointer;flex:1;min-width:140px">
+                <input type="radio" name="tipo_seguimiento" value="individual" {% if mat.tipo_seguimiento == 'individual' %}checked{% endif %}>
+                <span><strong>Individual</strong><br><small class="text-muted">Código único por pieza física</small></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a href="/materiales/{{ mat.id }}/qr" class="btn btn-outline-secondary me-auto" target="_blank"><i class="bi bi-qr-code me-1"></i>Ver QR</a>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.getElementById('selTipo').addEventListener('change', function(){
+  document.getElementById('hintAjuste').classList.toggle('d-none', this.value !== 'ajuste');
+});
+</script>
+{% endblock %}

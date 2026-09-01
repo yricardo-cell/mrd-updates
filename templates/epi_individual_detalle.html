@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+{% block title %}{{ epi.tipo }} {{ epi.codigo_fabricacion }} — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <div>
+    <h2 class="mrd-page-title mb-0">
+      <span class="badge {% if epi.tipo == 'ARNES' %}bg-primary{% else %}bg-info text-dark{% endif %} me-2">{{ epi.tipo }}</span>
+      <span class="font-monospace">{{ epi.codigo_fabricacion }}</span>
+    </h2>
+    <div class="text-muted small mt-1">
+      {% if epi.marca %}{{ epi.marca }}{% endif %}
+      {% if epi.modelo %} · {{ epi.modelo }}{% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if user.rol in ['admin','almacen','encargado_patio'] %}
+    <button class="btn btn-success mrd-btn" data-bs-toggle="modal" data-bs-target="#modalRenovar"
+            title="Marcar revisión realizada hoy y calcular próxima automáticamente">
+      <i class="bi bi-arrow-repeat me-1"></i>Renovar revisión
+    </button>
+    <button class="btn btn-primary mrd-btn" data-bs-toggle="modal" data-bs-target="#modalRevision">
+      <i class="bi bi-clipboard2-check me-1"></i>Revisión manual
+    </button>
+    {% if epi.tipo not in ['ARNES','ABSORBEDOR'] %}
+      <button class="btn btn-outline-secondary mrd-btn" data-bs-toggle="modal" data-bs-target="#modalAsignar">
+        <i class="bi bi-person-badge me-1"></i>{% if epi.trabajador %}Reasignar{% else %}Asignar{% endif %}
+      </button>
+    {% endif %}
+    {% if epi.trabajador %}
+    <form method="post" action="/epis/individuales/{{ epi.id }}/devolver"
+          onsubmit="return confirm('¿Devolver este equipo? Quedará disponible para otro trabajador.')">
+      <button type="submit" class="btn btn-warning mrd-btn">
+        <i class="bi bi-arrow-counterclockwise me-1"></i>Devolver
+      </button>
+    </form>
+    {% endif %}
+    {% if epi.estado != 'baja' %}
+    <form method="post" action="/epis/individuales/{{ epi.id }}/baja"
+          onsubmit="return confirm('¿Dar de baja este equipo?')">
+      <button type="submit" class="btn btn-outline-danger mrd-btn">
+        <i class="bi bi-x-circle me-1"></i>Dar de baja
+      </button>
+    </form>
+    {% endif %}
+    {% endif %}
+    <a href="/epis/individuales" class="btn btn-outline-secondary mrd-btn">
+      <i class="bi bi-arrow-left me-1"></i>Volver
+    </a>
+  </div>
+</div>
+
+{% set ok_param = request.query_params.get('ok') %}
+{% if ok_param == 'devuelto' %}
+<div class="alert alert-success py-2 mb-3"><i class="bi bi-check-circle me-1"></i>Equipo devuelto correctamente. Ya está disponible para asignar.</div>
+{% elif ok_param == 'revision' %}
+<div class="alert alert-success py-2 mb-3"><i class="bi bi-check-circle me-1"></i>Revisión renovada correctamente. Próxima revisión calculada.</div>
+{% elif ok_param == 'foto' %}
+<div class="alert alert-success py-2 mb-3"><i class="bi bi-check-circle me-1"></i>Foto guardada correctamente.</div>
+{% elif ok_param == 'foto_eliminada' %}
+<div class="alert alert-info py-2 mb-3"><i class="bi bi-info-circle me-1"></i>Foto eliminada.</div>
+{% endif %}
+
+<!-- Fila superior: datos + revisión + foto -->
+<div class="row g-3 mb-4">
+  <div class="col-12 col-md-4">
+    <div class="mrd-card h-100">
+      <h6 class="mb-3"><i class="bi bi-info-circle me-2"></i>Datos del equipo</h6>
+      <dl class="row mb-0 small">
+        <dt class="col-5 text-muted">Código/Serie</dt>
+        <dd class="col-7 font-monospace fw-semibold">{{ epi.codigo_fabricacion }}</dd>
+        <dt class="col-5 text-muted">Referencia MRD</dt>
+        <dd class="col-7 font-monospace fw-semibold" id="epi-reference">{{ epi.referencia_interna or 'Pendiente de generar' }}</dd>
+        <dt class="col-5 text-muted">QR seguro</dt>
+        <dd class="col-7 font-monospace" id="epi-qr">{{ epi.codigo_qr or '—' }}</dd>
+        <dt class="col-5 text-muted">Estado</dt>
+        <dd class="col-7">
+          {% if epi.estado == 'activo' %}<span class="badge bg-success">Activo</span>
+          {% elif epi.estado == 'en_revision' %}<span class="badge bg-warning text-dark">En revisión</span>
+          {% else %}<span class="badge bg-secondary">Baja</span>{% endif %}
+        </dd>
+        {% if epi.marca %}
+        <dt class="col-5 text-muted">Marca</dt>
+        <dd class="col-7">{{ epi.marca }}</dd>
+        {% endif %}
+        {% if epi.modelo %}
+        <dt class="col-5 text-muted">Modelo</dt>
+        <dd class="col-7">{{ epi.modelo }}</dd>
+        {% endif %}
+        {% if epi.fecha_fabricacion %}
+        <dt class="col-5 text-muted">Fabricación</dt>
+        <dd class="col-7">{{ epi.fecha_fabricacion.strftime('%d/%m/%Y') }}</dd>
+        {% endif %}
+        {% if epi.fecha_puesta_servicio %}
+        <dt class="col-5 text-muted">En servicio</dt>
+        <dd class="col-7">{{ epi.fecha_puesta_servicio.strftime('%d/%m/%Y') }}</dd>
+        {% endif %}
+        {% if epi.notas %}
+        <dt class="col-5 text-muted">Notas</dt>
+        <dd class="col-7">{{ epi.notas }}</dd>
+        {% endif %}
+      </dl>
+      {% if not epi.codigo_qr and user.rol in ['admin','almacen','encargado_patio'] %}
+      <button class="btn btn-sm btn-primary mt-3" type="button" id="generate-epi-id">
+        <i class="bi bi-qr-code"></i> Generar referencia y QR
+      </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="mrd-card h-100">
+      <h6 class="mb-3"><i class="bi bi-calendar-check me-2"></i>Próxima revisión</h6>
+      {% if epi.proxima_revision %}
+        {% if epi.revision_vencida %}
+        <div class="text-danger mb-2">
+          <div style="font-size:2rem;font-weight:800">{{ epi.proxima_revision.strftime('%d/%m/%Y') }}</div>
+          <div class="mt-1 small"><i class="bi bi-exclamation-octagon-fill me-1"></i><strong>REVISIÓN VENCIDA</strong></div>
+        </div>
+        {% elif epi.dias_para_revision is not none and epi.dias_para_revision <= 30 %}
+        <div class="text-warning mb-2">
+          <div style="font-size:2rem;font-weight:800">{{ epi.proxima_revision.strftime('%d/%m/%Y') }}</div>
+          <div class="small mt-1"><i class="bi bi-clock me-1"></i>en {{ epi.dias_para_revision }} días</div>
+        </div>
+        {% else %}
+        <div class="text-success mb-2">
+          <div style="font-size:2rem;font-weight:800">{{ epi.proxima_revision.strftime('%d/%m/%Y') }}</div>
+          <div class="text-muted small mt-1">en {{ epi.dias_para_revision }} días</div>
+        </div>
+        {% endif %}
+      {% else %}
+      <p class="text-muted">Sin fecha de revisión programada.</p>
+      {% endif %}
+      <hr>
+      <h6 class="mb-2 small"><i class="bi bi-person-badge me-2"></i>Asignado a</h6>
+      {% if epi.trabajador %}
+      <a href="/trabajadores/{{ epi.trabajador.id }}" class="text-decoration-none fw-semibold">
+        {{ epi.trabajador.nombre_completo }}
+      </a>
+      <div class="text-muted small">{{ epi.trabajador.cargo or '' }}</div>
+      {% else %}
+      <span class="badge bg-success">Disponible</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="mrd-card h-100">
+      <h6 class="mb-3"><i class="bi bi-camera me-2"></i>Foto del equipo</h6>
+      {% if epi.foto_path %}
+      <img src="/static/uploads/epis/{{ epi.foto_path }}"
+           class="img-fluid rounded mb-2" style="max-height:180px;object-fit:contain;width:100%"
+           alt="Foto {{ epi.codigo_fabricacion }}">
+      {% if user.rol in ['admin','almacen','encargado_patio'] %}
+      <form method="post" action="/epis/individuales/{{ epi.id }}/foto/eliminar"
+            onsubmit="return confirm('¿Eliminar la foto?')" class="mt-1">
+        <button class="btn btn-outline-danger btn-sm w-100">
+          <i class="bi bi-trash me-1"></i>Eliminar foto
+        </button>
+      </form>
+      {% endif %}
+      {% else %}
+      <div class="text-muted text-center py-3 mb-2" style="border:2px dashed var(--bs-border-color);border-radius:8px">
+        <i class="bi bi-image" style="font-size:2rem;opacity:.3"></i>
+        <div class="small mt-1">Sin foto</div>
+      </div>
+      {% if user.rol in ['admin','almacen','encargado_patio'] %}
+      <form method="post" action="/epis/individuales/{{ epi.id }}/foto" enctype="multipart/form-data">
+        <div class="d-flex gap-2">
+          <input type="file" name="foto" class="form-control form-control-sm mrd-input"
+                 accept="image/*" required style="flex:1">
+          <button type="submit" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-upload"></i>
+          </button>
+        </div>
+      </form>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Historial de asignaciones -->
+{% if historial_epi %}
+<div class="mrd-card mb-4">
+  <h6 class="mb-3"><i class="bi bi-people me-2"></i>Historial de asignaciones</h6>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0" style="font-size:.85rem">
+      <thead class="table-light">
+        <tr>
+          <th>Trabajador</th>
+          <th>Fecha asignación</th>
+          <th>Fecha devolución</th>
+          <th>Duración</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in historial_epi %}
+        <tr>
+          <td>
+            {% if h.trabajador %}
+            <a href="/trabajadores/{{ h.trabajador.id }}" class="text-decoration-none">
+              {{ h.trabajador.nombre_completo }}
+            </a>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td class="text-nowrap">{{ h.fecha_asignacion.strftime('%d/%m/%Y') }}</td>
+          <td class="text-nowrap">
+            {% if h.fecha_devolucion %}
+              {{ h.fecha_devolucion.strftime('%d/%m/%Y') }}
+            {% else %}
+              <span class="badge bg-primary">Actualmente asignado</span>
+            {% endif %}
+          </td>
+          <td class="text-muted small">
+            {% if h.fecha_devolucion %}
+              {% set dias = (h.fecha_devolucion - h.fecha_asignacion).days %}
+              {{ dias }} días
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Historial de revisiones -->
+<div class="mrd-card">
+  <h6 class="mb-3"><i class="bi bi-clock-history me-2"></i>Historial de revisiones</h6>
+  {% if epi.revisiones %}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" style="font-size:.85rem">
+      <thead class="table-light">
+        <tr>
+          <th>Fecha</th>
+          <th>Resultado</th>
+          <th>Técnico</th>
+          <th>Próxima revisión</th>
+          <th>Observaciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rev in epi.revisiones %}
+        <tr>
+          <td class="small text-nowrap">{{ rev.fecha.strftime('%d/%m/%Y %H:%M') }}</td>
+          <td>
+            {% if rev.resultado == 'apto' %}
+            <span class="badge bg-success"><i class="bi bi-check-lg me-1"></i>Apto</span>
+            {% elif rev.resultado == 'apto_con_obs' %}
+            <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>Apto c/ obs.</span>
+            {% elif rev.resultado == 'en_revision' %}
+            <span class="badge bg-info text-dark"><i class="bi bi-hourglass-split me-1"></i>En revisión</span>
+            {% else %}
+            <span class="badge bg-danger"><i class="bi bi-x-lg me-1"></i>Retirar</span>
+            {% endif %}
+          </td>
+          <td class="small">{{ rev.tecnico or '—' }}</td>
+          <td class="small text-nowrap">
+            {% if rev.proxima_revision %}{{ rev.proxima_revision.strftime('%d/%m/%Y') }}
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td class="small text-muted">{{ rev.observaciones or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted text-center py-4">No hay revisiones registradas.</p>
+  {% endif %}
+</div>
+
+<!-- Modales -->
+{% if user.rol in ['admin','almacen','encargado_patio'] %}
+
+<!-- Modal Renovar revisión rápida -->
+<div class="modal fade" id="modalRenovar" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-arrow-repeat me-2"></i>Renovar revisión</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="/epis/individuales/{{ epi.id }}/renovar-revision">
+        <div class="modal-body">
+          <p class="text-muted small">Marca la revisión como realizada <strong>hoy</strong> (resultado: Apto) y calcula la próxima automáticamente en {{ intervalo_dias }} días.</p>
+          <div class="mb-2">
+            <label class="form-label fw-semibold small">Técnico</label>
+            <input type="text" name="tecnico" class="form-control mrd-input form-control-sm"
+                   placeholder="{{ user.nombre }}">
+          </div>
+          <div class="mb-0">
+            <label class="form-label fw-semibold small">Observaciones (opcional)</label>
+            <input type="text" name="observaciones" class="form-control mrd-input form-control-sm"
+                   placeholder="Revisión periódica realizada">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success btn-sm">
+            <i class="bi bi-check-lg me-1"></i>Renovar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Revisión manual completa -->
+<div class="modal fade" id="modalRevision" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-clipboard2-check me-2"></i>Registrar revisión</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="/epis/individuales/{{ epi.id }}/revision">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Resultado <span class="text-danger">*</span></label>
+            <select name="resultado" class="form-select mrd-input" required>
+              <option value="apto">✅ Apto</option>
+              <option value="apto_con_obs">⚠️ Apto con observaciones</option>
+              <option value="en_revision">🔄 Pendiente de revisión externa</option>
+              <option value="retirar">❌ Retirar del servicio</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Técnico / Inspector</label>
+            <input type="text" name="tecnico" class="form-control mrd-input"
+                   placeholder="Nombre del técnico que revisa">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Próxima revisión</label>
+            <input type="date" name="proxima_revision" class="form-control mrd-input"
+                   value="{{ (epi.proxima_revision.isoformat() if epi.proxima_revision else '') }}">
+            <div class="form-text">Revisión anual recomendada ({{ intervalo_dias }} días).</div>
+          </div>
+          <div class="mb-0">
+            <label class="form-label fw-semibold">Observaciones</label>
+            <textarea name="observaciones" class="form-control mrd-input" rows="3"
+                      placeholder="Desgaste, defectos observados, condiciones..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary mrd-btn" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary mrd-btn">
+            <i class="bi bi-check-lg me-1"></i>Guardar revisión
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Asignar trabajador -->
+<div class="modal fade" id="modalAsignar" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-person-badge me-2"></i>Asignar a trabajador</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="/epis/individuales/{{ epi.id }}/asignar">
+        <div class="modal-body">
+          <select name="trabajador_id" class="form-select mrd-input">
+            <option value="">Sin asignar</option>
+            {% for t in trabajadores %}
+            <option value="{{ t.id }}" {% if epi.trabajador_id == t.id %}selected{% endif %}>
+              {{ t.nombre_completo }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary mrd-btn" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary mrd-btn">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('generate-epi-id')?.addEventListener('click', async function () {
+  this.disabled = true;
+  try {
+    const response = await fetch('/epis/individuales/{{ epi.id }}/identificador', {method:'POST', redirect:'manual'});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'No se pudo generar el identificador.');
+    document.getElementById('epi-reference').textContent = data.referencia_interna;
+    document.getElementById('epi-qr').textContent = data.codigo_qr;
+    this.remove();
+  } catch (error) { alert(error.message); this.disabled = false; }
+});
+</script>
+{% endblock %}

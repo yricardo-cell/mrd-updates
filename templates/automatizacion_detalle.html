@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+{% block title %}{{ auto.nombre }} — Automatización{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/automatizaciones">Automatizaciones</a><span class="sep">/</span>
+<span class="current">{{ auto.nombre }}</span>
+{% endblock %}
+
+{% block content %}
+{% set bc = {'activa':'success','inactiva':'secondary','pausada':'warning','error':'danger','archivada':'dark'} %}
+{% set bc_auto = bc.get(auto.estado, 'secondary') %}
+
+<!-- Header -->
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">
+      <i class="bi bi-lightning-charge" style="color:var(--primary)"></i>
+      {{ auto.nombre }}
+    </div>
+    <div class="page-subtitle">
+      <span class="badge bg-{{ bc_auto }}">{{ estados_auto.get(auto.estado, auto.estado) }}</span>
+      &nbsp;·&nbsp;{{ tipos_disparador.get(auto.tipo_disparador, auto.tipo_disparador) }}
+      &nbsp;·&nbsp;v{{ auto.version }}
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    {% if es_admin %}
+      {% if auto.estado == 'activa' %}
+      <form method="post" action="/automatizaciones/{{ auto.id }}/pausar" style="display:inline">
+        <button class="btn btn-warning btn-sm"><i class="bi bi-pause-fill"></i> Pausar</button>
+      </form>
+      {% elif auto.estado in ('inactiva','pausada','error') %}
+      <form method="post" action="/automatizaciones/{{ auto.id }}/activar" style="display:inline">
+        <button class="btn btn-success btn-sm"><i class="bi bi-play-fill"></i> Activar</button>
+      </form>
+      {% endif %}
+      {% if auto.estado != 'archivada' %}
+      <form method="post" action="/automatizaciones/{{ auto.id }}/ejecutar" style="display:inline">
+        <button class="btn btn-primary btn-sm"><i class="bi bi-play-circle"></i> Ejecutar ahora</button>
+      </form>
+      <form method="post" action="/automatizaciones/{{ auto.id }}/simular" style="display:inline">
+        <button class="btn btn-outline btn-sm"><i class="bi bi-eye"></i> Simular</button>
+      </form>
+      <form method="post" action="/automatizaciones/{{ auto.id }}/duplicar" style="display:inline">
+        <button class="btn btn-ghost btn-sm"><i class="bi bi-copy"></i> Duplicar</button>
+      </form>
+      <form method="post" action="/automatizaciones/{{ auto.id }}/archivar" style="display:inline"
+            onsubmit="return confirm('¿Archivar esta automatización?')">
+        <button class="btn btn-ghost btn-sm text-danger"><i class="bi bi-archive"></i></button>
+      </form>
+      {% endif %}
+    {% endif %}
+    <a href="/automatizaciones" class="btn btn-ghost btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
+  </div>
+</div>
+
+<!-- Mensaje de ejecución completada -->
+{% if request.query_params.get('ejecutado') == '1' %}
+<div style="background:var(--success-light);border:1px solid var(--success);border-radius:8px;padding:12px 16px;margin-bottom:16px;color:var(--success);font-size:.85rem;display:flex;align-items:center;gap:8px">
+  <i class="bi bi-check-circle-fill"></i>
+  <strong>Ejecución manual completada.</strong> Revisa el historial y los avisos generados.
+</div>
+{% endif %}
+
+<!-- Resultado de simulación -->
+{% if resultado_simulacion %}
+{% set rs = resultado_simulacion %}
+<div style="background:{% if rs.ok %}var(--info-light, #e8f4fd){% else %}var(--danger-light){% endif %};border:1px solid {% if rs.ok %}var(--info, #0dcaf0){% else %}var(--danger){% endif %};border-radius:10px;padding:16px 20px;margin-bottom:20px">
+  <div style="font-weight:700;font-size:.95rem;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+    <i class="bi bi-{% if rs.ok %}eye-fill{% else %}exclamation-triangle-fill{% endif %}"></i>
+    SIMULACIÓN — {{ 'Sin errores' if rs.ok else 'Con errores' }}
+    <span style="font-size:.78rem;font-weight:400;color:var(--text-muted);margin-left:auto">{{ rs.duracion_ms }}ms</span>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;font-size:.84rem;margin-bottom:12px">
+    <div><span style="color:var(--text-muted)">Items encontrados</span><br><strong>{{ rs.items_afectados }}</strong></div>
+    <div><span style="color:var(--text-muted)">Acciones simuladas</span><br><strong>{{ rs.acciones_ejecutadas }}</strong></div>
+    <div><span style="color:var(--text-muted)">Resultado</span><br>
+      <span class="badge bg-{% if rs.resultado == 'ok' %}success{% elif rs.resultado == 'sin_accion' %}secondary{% else %}danger{% endif %}">{{ rs.resultado }}</span>
+    </div>
+  </div>
+  {% if rs.contexto %}
+  <div style="font-size:.8rem;font-weight:600;color:var(--text-muted);margin-bottom:6px">ÍTEMS QUE CUMPLEN LA CONDICIÓN:</div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px">
+    {% for item in rs.contexto[:20] %}
+    <span style="background:rgba(0,0,0,.06);border-radius:4px;padding:3px 8px;font-size:.78rem">
+      {{ item.nombre }} {% if item.dias is defined %}<span style="color:var(--text-muted)">({{ item.dias }}d)</span>{% endif %}
+    </span>
+    {% endfor %}
+    {% if rs.contexto | length > 20 %}<span style="font-size:.78rem;color:var(--text-muted)">... y {{ rs.contexto | length - 20 }} más</span>{% endif %}
+  </div>
+  {% elif rs.resultado == 'sin_accion' %}
+  <div style="font-size:.84rem;color:var(--text-muted)"><i class="bi bi-check-circle"></i> Ningún activo cumple la condición actualmente. No se crearían avisos.</div>
+  {% endif %}
+  {% if rs.errores %}
+  <div style="margin-top:10px;font-size:.8rem;color:var(--danger)">
+    {% for e in rs.errores %}<div><i class="bi bi-exclamation-circle"></i> {{ e }}</div>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start">
+
+  <!-- Columna principal -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+
+    <!-- Configuración -->
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-gear"></i> Configuración</div></div>
+      <div class="card-body">
+        {% if auto.descripcion %}
+        <div style="margin-bottom:14px;color:var(--text-secondary);font-size:.88rem;padding:10px;background:var(--surface-2);border-radius:6px">{{ auto.descripcion }}</div>
+        {% endif %}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:.84rem">
+          <div>
+            <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">Disparador</div>
+            <div style="font-weight:600;margin-top:3px">
+              <i class="bi bi-clock"></i> {{ tipos_disparador.get(auto.tipo_disparador, auto.tipo_disparador) }}
+              {% if config_disp %}
+              <span style="font-weight:400;color:var(--text-muted);font-size:.8rem">
+                {% if auto.tipo_disparador == 'intervalo' %} · cada {{ config_disp.get('intervalo_min',60) }} min{% endif %}
+                {% if auto.tipo_disparador == 'diario' %} · a las {{ config_disp.get('hora','08:00') }}{% endif %}
+              </span>
+              {% endif %}
+            </div>
+          </div>
+          <div>
+            <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">Prioridad</div>
+            <div style="font-weight:600;margin-top:3px">{{ prioridades_auto.get(auto.prioridad, auto.prioridad) }}</div>
+          </div>
+        </div>
+
+        <!-- Condiciones -->
+        <div style="margin-top:14px">
+          <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Condiciones ({{ condiciones | length }})</div>
+          {% if condiciones %}
+          {% for cond in condiciones %}
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface-2);border-radius:6px;margin-bottom:6px;font-size:.84rem">
+            <i class="bi bi-funnel" style="color:var(--primary)"></i>
+            <span>{{ tipos_condicion.get(cond.tipo, cond.tipo) }}</span>
+            {% if cond.dias is defined %}
+            <span class="badge bg-secondary" style="font-size:.7rem">{{ cond.dias }} días</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+          {% else %}
+          <div style="font-size:.82rem;color:var(--text-muted)">Sin condiciones configuradas.</div>
+          {% endif %}
+        </div>
+
+        <!-- Acciones -->
+        <div style="margin-top:14px">
+          <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Acciones ({{ acciones | length }})</div>
+          {% if acciones %}
+          {% for acc in acciones %}
+          <div style="padding:10px 12px;background:var(--surface-2);border-radius:6px;margin-bottom:6px;font-size:.84rem">
+            <div style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px">
+              <i class="bi bi-{% if acc.tipo == 'crear_aviso' %}bell{% else %}journal-text{% endif %}" style="color:var(--primary)"></i>
+              {{ tipos_accion.get(acc.tipo, acc.tipo) }}
+              {% if acc.prioridad %}
+              <span class="badge bg-{% if acc.prioridad == 'urgente' or acc.prioridad == 'critica' %}danger{% elif acc.prioridad == 'alta' %}warning{% elif acc.prioridad == 'media' %}primary{% else %}secondary{% endif %}" style="font-size:.68rem">{{ acc.prioridad }}</span>
+              {% endif %}
+            </div>
+            {% if acc.titulo %}<div style="color:var(--text-secondary)"><strong>Título:</strong> {{ acc.titulo }}</div>{% endif %}
+            {% if acc.mensaje %}<div style="color:var(--text-muted);font-size:.8rem;margin-top:2px">{{ acc.mensaje }}</div>{% endif %}
+          </div>
+          {% endfor %}
+          {% else %}
+          <div style="font-size:.82rem;color:var(--text-muted)">Sin acciones configuradas.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Historial de ejecuciones -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="bi bi-clock-history"></i> Historial de ejecuciones</div>
+        <span style="font-size:.8rem;color:var(--text-muted)">Últimas 30</span>
+      </div>
+      <div class="card-body" style="padding:0">
+        {% if historial %}
+        <table class="table" style="margin:0;font-size:.82rem">
+          <thead><tr><th>Fecha</th><th>Modo</th><th>Resultado</th><th>Ítems</th><th>Acciones</th><th>Tiempo</th></tr></thead>
+          <tbody>
+            {% for e in historial %}
+            <tr>
+              <td>{{ e.fecha.strftime('%d/%m %H:%M') if e.fecha else '—' }}</td>
+              <td><span class="badge bg-{% if e.modo == 'manual' %}primary{% elif e.modo == 'simulacion' %}info{% else %}secondary{% endif %}" style="font-size:.7rem">{{ e.modo }}</span></td>
+              <td>
+                <span class="badge bg-{% if e.resultado == 'ok' %}success{% elif e.resultado == 'error' %}danger{% elif e.resultado == 'sin_accion' %}secondary{% else %}secondary{% endif %}" style="font-size:.7rem">
+                  {{ e.resultado or '—' }}
+                </span>
+              </td>
+              <td>{{ e.items_afectados or 0 }}</td>
+              <td>{{ e.acciones_ejecutadas or 0 }}</td>
+              <td style="color:var(--text-muted)">{{ e.duracion_ms or '—' }}ms</td>
+            </tr>
+            {% if e.error %}
+            <tr>
+              <td colspan="6" style="background:var(--danger-light);color:var(--danger);font-size:.75rem;padding:4px 12px">
+                <i class="bi bi-exclamation-circle"></i> {{ e.error[:200] }}
+              </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div style="padding:32px;text-align:center;color:var(--text-muted);font-size:.84rem">
+          <i class="bi bi-clock-history" style="font-size:1.8rem;display:block;margin-bottom:8px;opacity:.4"></i>
+          Todavía no hay ejecuciones registradas.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Avisos generados -->
+    {% if avisos %}
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-bell"></i> Avisos generados</div></div>
+      <div class="card-body" style="padding:0">
+        <table class="table" style="margin:0;font-size:.82rem">
+          <thead><tr><th>Aviso</th><th>Prioridad</th><th>Fecha</th><th>Leído</th></tr></thead>
+          <tbody>
+            {% for av in avisos %}
+            {% set pc = {'urgente':'danger','critica':'danger','alta':'warning','media':'primary','baja':'secondary','informacion':'info'} %}
+            <tr {% if not av.leido %}style="background:rgba(var(--primary-rgb, 232,96,10),.05)"{% endif %}>
+              <td>
+                <div style="font-weight:{% if not av.leido %}600{% else %}400{% endif %}">{{ av.titulo }}</div>
+                {% if av.mensaje %}<div style="font-size:.76rem;color:var(--text-muted)">{{ av.mensaje[:80] }}{% if av.mensaje | length > 80 %}…{% endif %}</div>{% endif %}
+                {% if av.enlace %}<a href="{{ av.enlace }}" style="font-size:.76rem;color:var(--primary)"><i class="bi bi-arrow-right-circle"></i> Ver activo</a>{% endif %}
+              </td>
+              <td><span class="badge bg-{{ pc.get(av.prioridad,'secondary') }}" style="font-size:.7rem">{{ av.prioridad }}</span></td>
+              <td style="color:var(--text-muted)">{{ av.creado_en.strftime('%d/%m %H:%M') if av.creado_en else '—' }}</td>
+              <td>
+                {% if av.leido %}<i class="bi bi-check-circle-fill" style="color:var(--success)"></i>
+                {% else %}<i class="bi bi-circle" style="color:var(--text-muted)"></i>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Panel lateral -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+
+    <!-- Estadísticas -->
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-bar-chart"></i> Estadísticas</div></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:10px;font-size:.84rem">
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-muted)">Total ejecuciones</span>
+          <strong>{{ auto.total_ejecuciones or 0 }}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-muted)">Acciones lanzadas</span>
+          <strong>{{ auto.total_acciones or 0 }}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-muted)">Último resultado</span>
+          {% if auto.ultimo_resultado %}
+          <span class="badge bg-{% if auto.ultimo_resultado == 'ok' %}success{% elif auto.ultimo_resultado == 'error' %}danger{% else %}secondary{% endif %}">{{ auto.ultimo_resultado }}</span>
+          {% else %}<span style="color:var(--text-muted)">—</span>{% endif %}
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-muted)">Última ejecución</span>
+          <span>{{ auto.ultima_ejecucion.strftime('%d/%m %H:%M') if auto.ultima_ejecucion else '—' }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-muted)">Próxima ejecución</span>
+          <span>{{ auto.proxima_ejecucion.strftime('%d/%m %H:%M') if auto.proxima_ejecucion else '—' }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-muted)">Creada</span>
+          <span>{{ auto.creado_en.strftime('%d/%m/%Y') if auto.creado_en else '—' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Último error -->
+    {% if auto.ultimo_error %}
+    <div class="card" style="border-color:var(--danger)">
+      <div class="card-header" style="background:var(--danger-light)">
+        <div class="card-title" style="color:var(--danger)"><i class="bi bi-exclamation-triangle-fill"></i> Último error</div>
+      </div>
+      <div class="card-body" style="font-size:.8rem;color:var(--danger);white-space:pre-wrap">{{ auto.ultimo_error[:300] }}</div>
+    </div>
+    {% endif %}
+
+    <!-- Acciones rápidas -->
+    {% if es_admin and auto.estado != 'archivada' %}
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-lightning"></i> Acciones rápidas</div></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
+        <form method="post" action="/automatizaciones/{{ auto.id }}/ejecutar">
+          <button class="btn btn-primary w-100 btn-sm">
+            <i class="bi bi-play-circle"></i> Ejecutar ahora
+          </button>
+        </form>
+        <form method="post" action="/automatizaciones/{{ auto.id }}/simular">
+          <button class="btn btn-outline w-100 btn-sm">
+            <i class="bi bi-eye"></i> Simular (sin cambios)
+          </button>
+        </form>
+        <form method="post" action="/automatizaciones/{{ auto.id }}/duplicar">
+          <button class="btn btn-ghost w-100 btn-sm">
+            <i class="bi bi-copy"></i> Duplicar
+          </button>
+        </form>
+        <hr style="margin:4px 0">
+        {% if auto.estado == 'activa' %}
+        <form method="post" action="/automatizaciones/{{ auto.id }}/pausar">
+          <button class="btn btn-ghost w-100 btn-sm text-warning">
+            <i class="bi bi-pause-fill"></i> Pausar
+          </button>
+        </form>
+        {% else %}
+        <form method="post" action="/automatizaciones/{{ auto.id }}/activar">
+          <button class="btn btn-ghost w-100 btn-sm text-success">
+            <i class="bi bi-play-fill"></i> Activar
+          </button>
+        </form>
+        {% endif %}
+        <form method="post" action="/automatizaciones/{{ auto.id }}/archivar"
+              onsubmit="return confirm('¿Archivar esta automatización?')">
+          <button class="btn btn-ghost w-100 btn-sm text-danger">
+            <i class="bi bi-archive"></i> Archivar
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

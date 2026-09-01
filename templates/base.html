@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{{ app_name }}{% endblock %} — MRD</title>
+
+  <!-- PWA + iOS -->
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#1E3A5F">
+  <!-- iOS: instalar como app desde Safari → Compartir → Añadir a pantalla de inicio -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MRD Tool">
+  <!-- Iconos por tamaño de pantalla iOS -->
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="/static/icons/icon-120.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="/static/icons/icon-152.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="/static/icons/icon-167.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/icon-180.png">
+  <!-- Favicon estándar -->
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/static/icons/icon-512.png">
+
+  <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/css/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/static/css/mrd.css?v={{ version }}-cyan-v5">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+{% set nav_user = user if user is defined else (usuario if usuario is defined else none) %}
+
+<!-- Sprint 5.2: CSRF fetch interceptor — debe ejecutarse ANTES de cualquier script de template -->
+<script>
+(function(){
+  // Compatibilidad con móviles/WebViews que aún no implementan randomUUID.
+  if(window.crypto&&!window.crypto.randomUUID){
+    window.crypto.randomUUID=function(){
+      var b=new Uint8Array(16);window.crypto.getRandomValues(b);
+      b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;
+      var h=Array.from(b,function(x){return x.toString(16).padStart(2,'0');}).join('');
+      return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
+    };
+  }
+  function _csrfTok(){
+    var m=document.cookie.match(/(?:^|; )mrd_csrf=([^;]*)/);
+    return m?decodeURIComponent(m[1]):'';
+  }
+  // Patch global fetch para añadir X-CSRF-Token en peticiones mutantes
+  var _origFetch=window.fetch;
+  window.fetch=function(url,opts){
+    opts=opts||{};
+    var m=((opts.method||'GET')).toUpperCase();
+    if(m==='POST'||m==='PUT'||m==='PATCH'||m==='DELETE'){
+      var h=new Headers(opts.headers||{});
+      if(!h.has('X-CSRF-Token'))h.set('X-CSRF-Token',_csrfTok());
+      opts=Object.assign({},opts,{headers:h});
+    }
+    return _origFetch.call(window,url,opts).then(function(response){
+      var finalUrl='';
+      try{finalUrl=new URL(response.url,location.href).pathname;}catch(_e){}
+      if(response.status===401||response.status===419||(response.redirected&&finalUrl==='/login')){
+        var next=location.pathname+location.search;
+        location.replace('/login?next='+encodeURIComponent(next));
+        throw new Error('Sesión caducada. Abriendo el acceso…');
+      }
+      return response;
+    });
+  };
+  // Interceptor de formularios: añadir campo _csrf_token antes del submit
+  function _injectCsrf(form){
+    if(!form||form.tagName!=='FORM')return;
+    var meth=(form.method||'get').toLowerCase();
+    if(meth!=='post'&&meth!=='put'&&meth!=='patch'&&meth!=='delete')return;
+    if(!form.querySelector('[name="_csrf_token"]')){
+      var inp=document.createElement('input');
+      inp.type='hidden';inp.name='_csrf_token';inp.value=_csrfTok();
+      form.appendChild(inp);
+    }
+  }
+  document.addEventListener('submit',function(e){ _injectCsrf(e.target); },true);
+  // Patch HTMLFormElement.prototype.submit para capturar llamadas directas
+  // (ej: onchange="this.form.submit()" no dispara el evento submit del DOM)
+  var _origSubmit=HTMLFormElement.prototype.submit;
+  HTMLFormElement.prototype.submit=function(){
+    _injectCsrf(this);
+    _origSubmit.call(this);
+  };
+})();
+</script>
+
+<div class="app-layout">
+
+  <!-- ═══ SIDEBAR ═══════════════════════════════════════════ -->
+  <aside class="app-sidebar" id="app-sidebar">
+
+    <div class="sidebar-brand">
+      <div class="sidebar-brand-icon">
+        <!-- Logo MRD Tool — inline SVG -->
+        <svg viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg" width="42" height="42" aria-label="MRD Tool">
+          <defs>
+            <linearGradient id="mrd-bg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#2B4C7A"/>
+              <stop offset="100%" stop-color="#1A3155"/>
+            </linearGradient>
+            <clipPath id="mrd-clip"><rect width="42" height="42" rx="10"/></clipPath>
+          </defs>
+          <!-- Fondo navy con degradado -->
+          <rect width="42" height="42" rx="10" fill="url(#mrd-bg)"/>
+          <!-- Barra naranja inferior (acento de marca) -->
+          <rect y="32" width="42" height="10" fill="#E07B00" clip-path="url(#mrd-clip)"/>
+          <!-- Linea separadora sutil -->
+          <rect y="31" width="42" height="1" fill="#c26a00" opacity="0.6" clip-path="url(#mrd-clip)"/>
+          <!-- Tres vigas estructurales (M-R-D) como iconografía -->
+          <rect x="6"  y="10" width="5" height="19" rx="1.5" fill="white" opacity="0.95"/>
+          <rect x="13" y="14" width="5" height="15" rx="1.5" fill="white" opacity="0.80"/>
+          <rect x="20" y="10" width="5" height="19" rx="1.5" fill="white" opacity="0.95"/>
+          <rect x="27" y="13" width="5" height="16" rx="1.5" fill="white" opacity="0.80"/>
+          <!-- Viga horizontal superior conectora -->
+          <rect x="6" y="10" width="26" height="3" rx="1.5" fill="white" opacity="0.95"/>
+          <!-- Destello superior izquierdo (profundidad) -->
+          <rect y="0" width="42" height="1" fill="white" opacity="0.06" clip-path="url(#mrd-clip)"/>
+        </svg>
+      </div>
+      <div class="sidebar-logo-text">
+        <strong>MRD TOOL</strong>
+        <span>CONTROL</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      {% if not nav_user %}
+      <div class="sidebar-section">Acceso público</div>
+      <ul class="sidebar-list">
+        <li class="nav-item"><a href="/scan" class="{% if '/scan' in request.url.path %}active{% endif %}"><i class="bi bi-qr-code-scan"></i><span class="nav-label">Escanear</span></a></li>
+        <li class="nav-item"><a href="/instalar" class="{% if '/instalar' in request.url.path %}active{% endif %}"><i class="bi bi-phone-fill"></i><span class="nav-label">Instalar app</span></a></li>
+        <li class="nav-item"><a href="/login"><i class="bi bi-box-arrow-in-right"></i><span class="nav-label">Iniciar sesión</span></a></li>
+      </ul>
+      {% elif nav_user.rol == 'consulta' %}
+      <div class="sidebar-section">Mi acceso</div>
+      <ul class="sidebar-list">
+        <li class="nav-item"><a href="/scan" class="{% if '/scan' in request.url.path %}active{% endif %}"><i class="bi bi-qr-code-scan"></i><span class="nav-label">Consultar QR</span></a></li>
+        <li class="nav-item"><a href="/perfil"><i class="bi bi-person-circle"></i><span class="nav-label">Mi perfil</span></a></li>
+        <li class="nav-item"><a href="/instalar"><i class="bi bi-phone-fill"></i><span class="nav-label">Instalar app</span></a></li>
+        <li class="nav-item"><a href="/logout"><i class="bi bi-box-arrow-left"></i><span class="nav-label">Cerrar sesión</span></a></li>
+      </ul>
+      {% else %}
+
+      <div class="sidebar-section">Principal</div>
+      <ul class="sidebar-list">
+        <li class="nav-item">
+          <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">
+            <i class="bi bi-speedometer2"></i>
+            <span class="nav-label">Dashboard</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-section">Inventario</div>
+      <ul class="sidebar-list">
+        <li class="nav-item">
+          <a href="/herramientas" class="{% if '/herramientas' in request.url.path %}active{% endif %}">
+            <i class="bi bi-wrench-adjustable"></i>
+            <span class="nav-label">Herramientas</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/maquinaria" class="{% if '/maquinaria' in request.url.path %}active{% endif %}">
+            <i class="bi bi-truck-front"></i>
+            <span class="nav-label">Maquinaria</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/materiales" class="{% if '/materiales' in request.url.path and '/alertas' not in request.url.path %}active{% endif %}">
+            <i class="bi bi-boxes"></i>
+            <span class="nav-label">Materiales</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/materiales/alertas" class="{% if '/materiales/alertas' in request.url.path %}active{% endif %}{% if dash_mat_bajo_minimo is defined and dash_mat_bajo_minimo > 0 %} nav-link-alert{% endif %}">
+            <i class="bi bi-exclamation-triangle{% if dash_mat_bajo_minimo is defined and dash_mat_bajo_minimo > 0 %}-fill{% endif %}"></i>
+            <span class="nav-label">Stock bajo
+              {% if dash_mat_bajo_minimo is defined and dash_mat_bajo_minimo > 0 %}
+              <span class="badge bg-danger ms-1 sidebar-count-badge">{{ dash_mat_bajo_minimo }}</span>
+              {% endif %}
+            </span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/vehiculos" class="{% if '/vehiculos' in request.url.path %}active{% endif %}">
+            <i class="bi bi-truck"></i>
+            <span class="nav-label">Vehículos</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/surtidor" class="{% if request.url.path == '/surtidor' or request.url.path.startswith('/surtidor') %}active{% endif %}">
+            <i class="bi bi-fuel-pump-fill"></i>
+            <span class="nav-label">Surtidor</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/epis" class="{% if '/epis' in request.url.path and '/epis/individuales' not in request.url.path and '/epis/stock' not in request.url.path %}active{% endif %}">
+            <i class="bi bi-shield-shaded"></i>
+            <span class="nav-label">Entregas de EPI</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/epis/individuales" class="{% if '/epis/individuales' in request.url.path %}active{% endif %}">
+            <i class="bi bi-life-preserver"></i>
+            <span class="nav-label">Arneses y absorbedores</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/epis/stock" class="{% if '/epis/stock' in request.url.path %}active{% endif %}">
+            <i class="bi bi-bag-fill"></i>
+            <span class="nav-label">Ropa y variantes</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/etiquetas" class="{% if '/etiquetas' in request.url.path and '/scan' not in request.url.path %}active{% endif %}">
+            <i class="bi bi-qr-code"></i>
+            <span class="nav-label">Etiquetas</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/scan" class="{% if '/scan' in request.url.path %}active{% endif %}">
+            <i class="bi bi-upc-scan"></i>
+            <span class="nav-label">Escanear</span>
+          </a>
+        </li>
+        {% if nav_user and nav_user.rol in ['admin', 'almacen', 'encargado_patio'] %}
+        <li class="nav-item">
+          <a href="/inventario/v2" class="{% if request.url.path != '/inventario/estado' and '/inventario/' in request.url.path %}active{% endif %}">
+            <i class="bi bi-clipboard-data"></i>
+            <span class="nav-label">Inventario masivo</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/inventario/estado" class="{% if request.url.path == '/inventario/estado' %}active{% endif %}">
+            <i class="bi bi-pie-chart-fill"></i>
+            <span class="nav-label">Estado visual</span>
+          </a>
+        </li>
+        {% endif %}
+      </ul>
+
+      <div class="sidebar-section sidebar-section-operations">Operaciones</div>
+      <ul class="sidebar-list sidebar-list-operations">
+        {% if nav_user and nav_user.rol in ['admin', 'almacen', 'encargado', 'encargado_patio'] %}
+        <li class="nav-item">
+          <a href="/salida-rapida" class="nav-emphasis-outside {% if '/mostrador' in request.url.path or '/salida-rapida' in request.url.path %}active{% endif %}">
+            <i class="bi bi-upc-scan text-success"></i>
+            <span class="nav-label"><strong>Mostrador Único</strong></span>
+          </a>
+        </li>
+        {% endif %}
+        {% if nav_user and nav_user.rol in ['admin', 'almacen', 'encargado_patio'] %}
+        <li class="nav-item">
+          <a href="/panel-patio" class="{% if '/panel-patio' in request.url.path %}active{% endif %}">
+            <i class="bi bi-command"></i>
+            <span class="nav-label">Centro de Patio</span>
+          </a>
+        </li>
+        <li class="nav-item"><a href="/tablet" class="{% if request.url.path == '/tablet' %}active{% endif %}"><i class="bi bi-tablet-landscape"></i><span class="nav-label">Centro de tableta</span></a></li>
+        <li class="nav-item"><a href="/pendientes" class="{% if request.url.path == '/pendientes' %}active{% endif %}"><i class="bi bi-command"></i><span class="nav-label"><strong>Centro de pendientes</strong></span></a></li>
+        <li class="nav-item"><a href="/solicitudes-trabajadores" class="{% if '/solicitudes-trabajadores' in request.url.path %}active{% endif %}"><i class="bi bi-bag-check"></i><span class="nav-label">Solicitudes trabajadores</span></a></li>
+        <li class="nav-item"><a href="/operaciones-portal-trabajadores" class="{% if '/operaciones-portal-trabajadores' in request.url.path %}active{% endif %}"><i class="bi bi-phone"></i><span class="nav-label">Portal trabajadores</span></a></li>
+        {% if nav_user.rol == 'admin' %}<li class="nav-item"><a href="/buzon-trabajadores" class="{% if '/buzon-trabajadores' in request.url.path %}active{% endif %}"><i class="bi bi-chat-heart-fill"></i><span class="nav-label"><strong>Buzón privado</strong></span></a></li>{% endif %}
+        {% endif %}
+        <li class="nav-item">
+          <a href="/panel-salidas" class="nav-emphasis-outside {% if '/panel-salidas' in request.url.path %}active{% endif %}">
+            <i class="bi bi-eye-fill text-warning"></i>
+            <span class="nav-label"><strong>¿Qué está fuera?</strong></span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/albaranes-salida" class="{% if '/albaranes-salida' in request.url.path %}active{% endif %}">
+            <i class="bi bi-file-earmark-text"></i>
+            <span class="nav-label">Registro de albaranes</span>
+          </a>
+        </li>
+        {% if nav_user and nav_user.rol == 'admin' %}
+        <li class="nav-item">
+          <a href="/multi-almacen" class="{% if '/multi-almacen' in request.url.path %}active{% endif %}">
+            <i class="bi bi-buildings"></i>
+            <span class="nav-label"><strong>Control multi almacén</strong></span>
+          </a>
+        </li>
+        <li class="nav-item"><a href="/preparaciones-entrega" class="{% if '/preparaciones-entrega' in request.url.path %}active{% endif %}"><i class="bi bi-box2-heart"></i><span class="nav-label">Entregas preparadas</span></a></li>
+        <li class="nav-item"><a href="/pedidos-proveedor" class="{% if '/pedidos-proveedor' in request.url.path %}active{% endif %}"><i class="bi bi-cart-check"></i><span class="nav-label">Pedidos y recepción</span></a></li>
+        <li class="nav-item"><a href="/localizador" class="{% if '/localizador' in request.url.path %}active{% endif %}"><i class="bi bi-geo-alt-fill"></i><span class="nav-label">Localizador visual</span></a></li>
+        <li class="nav-item"><a href="/centro-etiquetas" class="{% if '/centro-etiquetas' in request.url.path %}active{% endif %}"><i class="bi bi-printer"></i><span class="nav-label">Centro de etiquetas</span></a></li>
+        <li class="nav-item"><a href="/cierres-diarios" class="{% if '/cierres-diarios' in request.url.path %}active{% endif %}"><i class="bi bi-journal-check"></i><span class="nav-label">Cierre diario</span></a></li>
+        {% endif %}
+        <li class="nav-item">
+          <a href="/historial" class="{% if '/historial' in request.url.path %}active{% endif %}">
+            <i class="bi bi-clock-history"></i>
+            <span class="nav-label">Historial global</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/movimientos" class="{% if '/movimientos' in request.url.path %}active{% endif %}">
+            <i class="bi bi-arrow-left-right"></i>
+            <span class="nav-label">Movimientos</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/incidencias" class="{% if '/incidencias' in request.url.path %}active{% endif %}">
+            <i class="bi bi-exclamation-triangle"></i>
+            <span class="nav-label">Incidencias</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/reparaciones" class="{% if '/reparaciones' in request.url.path %}active{% endif %}">
+            <i class="bi bi-hammer"></i>
+            <span class="nav-label">Reparaciones</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-section">Empresa</div>
+      <ul class="sidebar-list">
+        <li class="nav-item">
+          <a href="/trabajadores" class="{% if '/trabajadores' in request.url.path and '/epis' not in request.url.path %}active{% endif %}">
+            <i class="bi bi-people"></i>
+            <span class="nav-label">Trabajadores</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/obras" class="{% if '/obras' in request.url.path %}active{% endif %}">
+            <i class="bi bi-building"></i>
+            <span class="nav-label">Obras</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/almacenes" class="{% if '/almacenes' in request.url.path %}active{% endif %}">
+            <i class="bi bi-house-gear"></i>
+            <span class="nav-label">Almacenes</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/proveedores" class="{% if '/proveedores' in request.url.path %}active{% endif %}">
+            <i class="bi bi-shop"></i>
+            <span class="nav-label">Proveedores</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-section">Análisis</div>
+      <ul class="sidebar-list">
+        <li class="nav-item">
+          <a href="/informes" class="{% if '/informes' in request.url.path %}active{% endif %}">
+            <i class="bi bi-bar-chart"></i>
+            <span class="nav-label">Informes</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-section">Automatización</div>
+      <ul class="sidebar-list">
+        <li class="nav-item">
+          <a href="/panel-ia" class="{% if '/panel-ia' in request.url.path %}active{% endif %}">
+            <i class="bi bi-cpu"></i>
+            <span class="nav-label">Panel IA</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/automatizaciones" class="{% if '/automatizaciones' in request.url.path %}active{% endif %}">
+            <i class="bi bi-lightning-charge"></i>
+            <span class="nav-label">Automatizaciones</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/avisos" class="nav-has-indicator {% if '/avisos' in request.url.path %}active{% endif %}">
+            <i class="bi bi-bell"></i>
+            <span class="nav-label">Buzón</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/notificaciones" class="{% if '/notificaciones' in request.url.path %}active{% endif %}">
+            <i class="bi bi-send"></i>
+            <span class="nav-label">Notificaciones</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/anomalias" class="{% if '/anomalias' in request.url.path %}active{% endif %}">
+            <i class="bi bi-activity"></i>
+            <span class="nav-label">Anomalías</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/mantenimiento" class="{% if '/mantenimiento' in request.url.path %}active{% endif %}">
+            <i class="bi bi-tools"></i>
+            <span class="nav-label">Mantenimiento</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-section">Sistema</div>
+      <ul class="sidebar-list">
+        {% if nav_user and nav_user.rol == 'admin' %}
+        <li class="nav-item">
+          <a href="/configuracion" class="{% if '/configuracion' in request.url.path %}active{% endif %}">
+            <i class="bi bi-gear"></i>
+            <span class="nav-label">Configuración</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/actualizaciones" class="{% if '/actualizaciones' in request.url.path %}active{% endif %}">
+            <i class="bi bi-cloud-download"></i>
+            <span class="nav-label">Actualizaciones</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/acceso-remoto" class="{% if '/acceso-remoto' in request.url.path %}active{% endif %}">
+            <i class="bi bi-globe"></i>
+            <span class="nav-label">Acceso remoto</span>
+          </a>
+        </li>
+        {% endif %}
+        <li class="nav-item">
+          <a href="/instalar" class="{% if '/instalar' in request.url.path %}active{% endif %}">
+            <i class="bi bi-phone-fill"></i>
+            <span class="nav-label">Instalar app</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/perfil" class="{% if '/perfil' in request.url.path %}active{% endif %}">
+            <i class="bi bi-person-circle"></i>
+            <span class="nav-label">Mi perfil</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/logout">
+            <i class="bi bi-box-arrow-left"></i>
+            <span class="nav-label">Cerrar sesión</span>
+          </a>
+        </li>
+      </ul>
+
+      {% endif %}
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="sidebar-user-avatar">
+          {{ nav_user.nombre[0].upper() if nav_user and nav_user.nombre else 'V' }}
+        </div>
+        <div class="sidebar-user-info">
+          <strong>{{ nav_user.nombre if nav_user else 'Visitante' }}</strong>
+          <span>{{ nav_user.rol | title if nav_user else 'Acceso público' }}</span>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ═══ MAIN ════════════════════════════════════════════════ -->
+  <div class="app-main" id="app-main">
+
+    <!-- Header -->
+    <header class="app-header">
+      <button class="btn-toggle-sidebar" id="btn-sidebar" title="Contraer menú">
+        <i class="bi bi-list"></i>
+      </button>
+
+      <!-- Breadcrumb -->
+      <div class="header-breadcrumb">
+        {% if nav_user %}
+        {% block breadcrumb %}
+        <a href="/">Inicio</a>
+        {% endblock %}
+        {% else %}
+        <a href="/scan">Escanear</a>
+        {% endif %}
+      </div>
+
+      <!-- Buscador global -->
+      {% if nav_user %}
+      <div class="header-search">
+        <div class="search-input-wrap">
+          <i class="bi bi-search"></i>
+          <input type="text" id="global-search" class="search-input"
+                 placeholder="Buscar herramientas, obras, trabajadores..."
+                 autocomplete="off">
+          <span class="search-kbd">Ctrl K</span>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Acciones header -->
+      <div class="header-actions">
+        {% if nav_user and almacen_actual %}
+          {% if nav_user.rol == 'admin' and almacenes_visibles | length > 1 %}
+          <form method="post" action="/almacen-activo" class="d-flex align-items-center gap-1 m-0 warehouse-switcher" aria-label="Almacén de trabajo">
+            <input type="hidden" name="volver" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+            <i class="bi bi-building" aria-hidden="true"></i>
+            <select name="almacen_id" class="form-select form-select-sm mrd-warehouse-select" onchange="this.form.submit()" aria-label="Cambiar almacén de trabajo">
+              {% for warehouse in almacenes_visibles %}<option value="{{ warehouse.id }}" {% if warehouse.id == almacen_actual.id %}selected{% endif %}>{{ warehouse.nombre }}</option>{% endfor %}
+            </select>
+          </form>
+          {% else %}
+          <span class="warehouse-chip d-none d-md-inline-flex align-items-center gap-1"><i class="bi bi-building"></i>{{ almacen_actual.nombre }}</span>
+          {% endif %}
+        {% endif %}
+        <button class="header-btn" id="btn-theme" title="Cambiar tema">
+          <i class="bi bi-moon" id="theme-icon"></i>
+        </button>
+        {% if nav_user %}
+        <button class="header-btn" id="btn-push" title="Activar notificaciones push">
+          <i class="bi bi-bell-slash" id="push-icon"></i>
+        </button>
+        {% endif %}
+        {% if nav_user %}<a href="/avisos" class="header-btn header-alert-link" title="Avisos">
+          <i class="bi bi-bell"></i>
+          {% if avisos_sin_leer and avisos_sin_leer > 0 %}
+          <span class="header-alert-count">{{ avisos_sin_leer if avisos_sin_leer < 100 else '99+' }}</span>
+          {% else %}
+          <span class="badge-dot"></span>
+          {% endif %}
+        </a>{% endif %}
+        <span class="header-version">v{{ version }}</span>
+      </div>
+    </header>
+
+    <!-- Contenido -->
+    <main class="app-content">
+      {% block content %}{% endblock %}
+    </main>
+
+  </div><!-- /app-main -->
+
+</div><!-- /app-layout -->
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- Flash messages -->
+{% if msg_ok %}
+<script>document.addEventListener('DOMContentLoaded',()=>Toast.success('{{ msg_ok }}'));</script>
+{% endif %}
+{% if msg_error %}
+<script>document.addEventListener('DOMContentLoaded',()=>Toast.error('{{ msg_error }}'));</script>
+{% endif %}
+
+<!-- Scripts -->
+<script src="/static/js/bootstrap.bundle.min.js" defer></script>
+<script src="/static/js/scanner_hid.js?v={{ version }}"></script>
+<script src="/static/js/mrd.js?v={{ version }}-scanner-inventory-v3" defer></script>
+{% block extra_js %}{% endblock %}
+
+<!-- Service Worker PWA -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js?v={{ version }}', { scope: '/' })
+      .catch(err => console.warn('SW no registrado:', err));
+  });
+}
+</script>
+
+</body>
+</html>

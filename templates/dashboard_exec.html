@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}Dashboard Ejecutivo{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<span class="current">Dashboard Ejecutivo</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header-row" style="margin-bottom:24px">
+  <div class="page-header">
+    <div class="page-title"><i class="bi bi-graph-up-arrow" style="color:#0891b2"></i> Dashboard Ejecutivo</div>
+    <div class="page-subtitle">KPIs de gestión de herramientas, costos y productividad</div>
+  </div>
+  <a href="/dashboard-exec?export=pdf" class="btn btn-outline btn-sm">
+    <i class="bi bi-file-pdf"></i> Exportar PDF
+  </a>
+</div>
+
+<!-- ── KPIs principales ──────────────────────────────── -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px">
+
+  <div class="card" style="border-left:4px solid #0891b2">
+    <div class="card-body" style="padding:20px">
+      <div style="font-size:11px;text-transform:uppercase;color:#888;letter-spacing:1px">Total herramientas</div>
+      <div style="font-size:36px;font-weight:800;color:#0891b2;line-height:1.1">{{ total_herr }}</div>
+      <div style="font-size:13px;color:#666;margin-top:4px">Valor: {{ "{:,.0f}".format(valor_total) }} €</div>
+    </div>
+  </div>
+
+  <div class="card" style="border-left:4px solid #7b61ff">
+    <div class="card-body" style="padding:20px">
+      <div style="font-size:11px;text-transform:uppercase;color:#888;letter-spacing:1px">En campo</div>
+      <div style="font-size:36px;font-weight:800;color:#7b61ff;line-height:1.1">{{ herr_campo }}</div>
+      <div style="font-size:13px;color:#666;margin-top:4px">Valor: {{ "{:,.0f}".format(valor_campo) }} €</div>
+    </div>
+  </div>
+
+  <div class="card" style="border-left:4px solid #198754">
+    <div class="card-body" style="padding:20px">
+      <div style="font-size:11px;text-transform:uppercase;color:#888;letter-spacing:1px">Disponibles</div>
+      <div style="font-size:36px;font-weight:800;color:#198754;line-height:1.1">{{ total_herr - herr_campo - herr_perdidas }}</div>
+      <div style="font-size:13px;color:#666;margin-top:4px">En almacén / taller</div>
+    </div>
+  </div>
+
+  <div class="card" style="border-left:4px solid #dc3545">
+    <div class="card-body" style="padding:20px">
+      <div style="font-size:11px;text-transform:uppercase;color:#888;letter-spacing:1px">Pérdidas / robos</div>
+      <div style="font-size:36px;font-weight:800;color:#dc3545;line-height:1.1">{{ herr_perdidas }}</div>
+      <div style="font-size:13px;color:#666;margin-top:4px">
+        {{ tasa_perdida }}% · {{ "{:,.0f}".format(valor_perdido) }} €
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Gráficos fila 1 ────────────────────────────────── -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <div class="card chart-card">
+    <div class="card-header"><div class="card-title"><i class="bi bi-bar-chart"></i> Movimientos por semana</div></div>
+    <div class="card-body" style="padding:16px">
+      <canvas id="chartMovimientos" height="180"></canvas>
+    </div>
+  </div>
+
+  <div class="card chart-card">
+    <div class="card-header"><div class="card-title"><i class="bi bi-pie-chart"></i> Herramientas por categoría</div></div>
+    <div class="card-body" style="padding:16px">
+      <canvas id="chartCategorias" height="180"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Gráficos fila 2 ────────────────────────────────── -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <div class="card chart-card">
+    <div class="card-header"><div class="card-title"><i class="bi bi-building"></i> Valor en campo por obra (Top 10)</div></div>
+    <div class="card-body" style="padding:16px">
+      {% if top_obras %}
+      <canvas id="chartObras" height="220"></canvas>
+      {% else %}
+      <div style="text-align:center;color:#94a3b8;padding:40px 0"><i class="bi bi-inbox fs-2"></i><br>Sin obras con herramientas asignadas</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card chart-card">
+    <div class="card-header"><div class="card-title"><i class="bi bi-people"></i> Herramientas por trabajador (Top 10)</div></div>
+    <div class="card-body" style="padding:16px">
+      {% if top_trab %}
+      <canvas id="chartTrabajadores" height="220"></canvas>
+      {% else %}
+      <div style="text-align:center;color:#94a3b8;padding:40px 0"><i class="bi bi-inbox fs-2"></i><br>Sin herramientas asignadas</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Tablas detalle ─────────────────────────────────── -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+  <div class="card">
+    <div class="card-header"><div class="card-title">Ranking de obras por coste en campo</div></div>
+    <div class="card-body" style="padding:0">
+      <table class="table table-hover table-sm" style="margin:0">
+        <thead><tr><th>#</th><th>Obra</th><th style="text-align:right">Valor (€)</th></tr></thead>
+        <tbody>
+          {% for nombre, valor in top_obras %}
+          <tr>
+            <td style="color:#888;width:30px">{{ loop.index }}</td>
+            <td>{{ nombre }}</td>
+            <td style="text-align:right;font-weight:600">{{ "{:,.0f}".format(valor) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" style="text-align:center;color:#888;padding:20px">Sin datos</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title">Ranking de trabajadores</div></div>
+    <div class="card-body" style="padding:0">
+      <table class="table table-hover table-sm" style="margin:0">
+        <thead><tr><th>#</th><th>Trabajador</th><th style="text-align:right">Herr.</th><th style="text-align:right">Valor (€)</th></tr></thead>
+        <tbody>
+          {% for nombre, info in top_trab %}
+          <tr>
+            <td style="color:#888;width:30px">{{ loop.index }}</td>
+            <td>{{ nombre }}</td>
+            <td style="text-align:right">{{ info.count }}</td>
+            <td style="text-align:right;font-weight:600">{{ "{:,.0f}".format(info.valor) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" style="text-align:center;color:#888;padding:20px">Sin datos</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
+        integrity="sha512-ZwR1/gSZM3ai6vCdI+LVF1zSq/5HznD3oD+sCoJrzXJ+yKiralyQLcW8dX9hWOQ+uJo6Eo/5/o0p+IzGHatQ=="
+        crossorigin="anonymous"></script>
+<script>
+const PALETTE = ['#0891b2','#0e7490','#22d3ee','#67e8f9','#7b61ff','#a78bfa','#c4b5fd','#e0e7ff'];
+const PALETTE2 = ['#22d3ee','#7b61ff','#2dd4bf','#f472b6','#a78bfa','#0891b2','#c084fc','#64748b'];
+Chart.defaults.color = '#94a3b8';
+const gridColor = 'rgba(255,255,255,.08)';
+
+// Movimientos por semana
+new Chart(document.getElementById('chartMovimientos'), {
+  type: 'bar',
+  data: {
+    labels: {{ semanas_labels | tojson }},
+    datasets: [{ label: 'Movimientos', data: {{ semanas_data | tojson }},
+      backgroundColor: '#0891b2', borderRadius: 4 }]
+  },
+  options: { responsive:true, plugins:{legend:{display:false}},
+    scales:{ y:{beginAtZero:true, ticks:{precision:0}, grid:{color:gridColor}}, x:{grid:{color:gridColor}} } }
+});
+
+// Categorías donut
+new Chart(document.getElementById('chartCategorias'), {
+  type: 'doughnut',
+  data: {
+    labels: {{ cat_labels | tojson }},
+    datasets: [{ data: {{ cat_data | tojson }}, backgroundColor: PALETTE2,
+      borderWidth: 2, borderColor: '#0a1428' }]
+  },
+  options: { responsive:true, plugins:{ legend:{ position:'right', labels:{font:{size:11}} } } }
+});
+
+{% if top_obras %}
+new Chart(document.getElementById('chartObras'), {
+  type: 'bar',
+  data: {
+    labels: {{ top_obras | map(attribute=0) | list | tojson }},
+    datasets: [{ label: 'Valor (€)', data: {{ top_obras | map(attribute=1) | list | tojson }},
+      backgroundColor: '#7b61ff', borderRadius: 4 }]
+  },
+  options: { indexAxis:'y', responsive:true, plugins:{legend:{display:false}},
+    scales:{ x:{beginAtZero:true, grid:{color:gridColor}}, y:{grid:{color:gridColor}} } }
+});
+{% endif %}
+
+{% if top_trab %}
+new Chart(document.getElementById('chartTrabajadores'), {
+  type: 'bar',
+  data: {
+    labels: {{ top_trab | map(attribute=0) | list | tojson }},
+    datasets: [{ label: 'Herramientas', data: {{ top_trab | map(attribute=1) | map(attribute='count') | list | tojson }},
+      backgroundColor: '#2dd4bf', borderRadius: 4 }]
+  },
+  options: { indexAxis:'y', responsive:true, plugins:{legend:{display:false}},
+    scales:{ x:{beginAtZero:true, ticks:{precision:0}, grid:{color:gridColor}}, y:{grid:{color:gridColor}} } }
+});
+{% endif %}
+</script>
+{% endblock %}

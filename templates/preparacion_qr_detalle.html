@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Entrega {{ preparacion.numero }}{% endblock %}
+{% block content %}
+<style>
+.bundle-hero{padding:24px;border-radius:20px;background:linear-gradient(135deg,#312e81,#2563eb);color:#fff}.bundle-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}.bundle-meta div,.bundle-line{background:#fff;border:1px solid var(--border);border-radius:14px;padding:14px}.bundle-meta small,.bundle-line small{display:block;color:var(--text-muted)}.bundle-lines{display:grid;gap:10px}.bundle-line{display:grid;grid-template-columns:1fr auto;align-items:center}.bundle-line strong{font-size:1.02rem}.bundle-qty{font-size:1.25rem;font-weight:900;color:#2563eb}@media(max-width:760px){.bundle-meta{grid-template-columns:1fr 1fr}}
+</style>
+<section class="bundle-hero"><span>QR DE ENTREGA PREPARADA</span><h1>{{ preparacion.numero }}</h1><p>Este código reúne todo el contenido del lote en una sola consulta.</p></section>
+<section class="bundle-meta">
+  <div><small>Estado</small><strong>{{ preparacion.estado|capitalize }}</strong></div>
+  <div><small>Almacén</small><strong>{{ preparacion.almacen.nombre }}</strong></div>
+  <div><small>Destinatario</small><strong>{{ preparacion.trabajador.nombre_completo if preparacion.trabajador else (preparacion.obra.nombre if preparacion.obra else preparacion.destino or 'Sin destino') }}</strong></div>
+  <div><small>Preparada</small><strong>{{ preparacion.creado_en.strftime('%d/%m/%Y %H:%M') }}</strong></div>
+</section>
+<section class="card"><div class="card-header"><strong>Contenido completo · {{ lineas|length }} líneas</strong></div><div class="card-body bundle-lines">
+{% for linea in lineas %}<article class="bundle-line"><div><strong>{{ linea.nombre }}</strong><small>{{ linea.tipo|replace('_',' ')|capitalize }} · {{ linea.codigo }}</small></div><span class="bundle-qty">× {{ linea.cantidad }}</span></article>{% else %}<p class="text-muted">Esta preparación no contiene líneas.</p>{% endfor %}
+</div></section>
+{% if preparacion.notas %}<div class="alert alert-info mt-3"><strong>Notas:</strong> {{ preparacion.notas }}</div>{% endif %}
+<div class="d-flex gap-2 mt-3 flex-wrap">
+  <a class="btn btn-outline-secondary" href="/preparaciones-entrega"><i class="bi bi-arrow-left"></i> Volver</a>
+  {% if preparacion.estado == 'preparada' %}<button id="deliver-bundle" class="btn btn-primary btn-lg"><i class="bi bi-check2-circle"></i> Confirmar entrega y crear albarán</button>{% elif preparacion.albaran_id %}<a class="btn btn-primary" href="/albaranes-salida/{{ preparacion.albaran_id }}">Abrir albarán</a>{% endif %}
+</div>
+<div id="bundle-state" class="mt-2"></div>
+{% if preparacion.estado == 'preparada' %}<script>document.getElementById('deliver-bundle').addEventListener('click',async function(){if(!confirm('¿Confirmar la entrega completa de este lote?'))return;this.disabled=true;const state=document.getElementById('bundle-state');try{const response=await fetch('/api/preparaciones-entrega/{{ preparacion.id }}/entregar',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({operation_id:'prep-'+crypto.randomUUID().replaceAll('-','')})});if(!(response.headers.get('content-type')||'').includes('application/json'))throw new Error('La sesión ha caducado');const data=await response.json();if(!response.ok)throw new Error(data.detail||'No se pudo completar');location.href=data.albaran_url}catch(error){state.className='alert alert-danger mt-2';state.textContent=error.message;this.disabled=false}});</script>{% endif %}
+{% endblock %}
+

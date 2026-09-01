@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+{% block title %}Nueva automatización{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/automatizaciones">Automatizaciones</a><span class="sep">/</span>
+<span class="current">Nueva</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title"><i class="bi bi-lightning-charge" style="color:var(--primary)"></i> Nueva automatización</div>
+    <div class="page-subtitle">Define cuándo se ejecuta, qué comprueba y qué hace</div>
+  </div>
+  <a href="/automatizaciones" class="btn btn-ghost btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
+</div>
+
+{% if error %}
+<div style="background:var(--danger-light);border:1px solid var(--danger);border-radius:8px;padding:12px 16px;margin-bottom:16px;color:var(--danger);font-size:.84rem;display:flex;align-items:center;gap:8px">
+  <i class="bi bi-exclamation-circle-fill"></i> {{ error }}
+</div>
+{% endif %}
+
+<form method="post" action="/automatizaciones/nueva" id="form-auto">
+  <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start">
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <!-- Paso 1: Identidad -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span style="background:var(--primary);color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;margin-right:8px">1</span>Identificación</div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Nombre <span class="required">*</span></label>
+            <input type="text" name="nombre" class="form-control" required autofocus
+                   placeholder="Ej: Herramientas sin devolver más de 30 días">
+          </div>
+          <div class="form-row form-row-2">
+            <div class="form-group">
+              <label class="form-label">Descripción</label>
+              <textarea name="descripcion" class="form-control" rows="2"
+                        placeholder="Para qué sirve esta automatización..."></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Prioridad</label>
+              <select name="prioridad" class="form-control">
+                {% for key, label in prioridades_auto.items() %}
+                <option value="{{ key }}" {% if key == 'media' %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paso 2: Disparador -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span style="background:var(--primary);color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;margin-right:8px">2</span>¿Cuándo se ejecuta? <span style="font-size:.78rem;font-weight:400;color:var(--text-muted)">(Disparador)</span></div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Tipo de disparador</label>
+            <select name="tipo_disparador" class="form-control" id="sel-disparador" onchange="mostrarConfigDisparador(this.value)">
+              {% for key, label in tipos_disparador.items() %}
+              <option value="{{ key }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Config: Intervalo -->
+          <div id="cfg-intervalo" style="display:none">
+            <div class="form-group">
+              <label class="form-label">Cada cuántos minutos</label>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="number" name="intervalo_min" class="form-control" min="5" max="1440" value="60" style="max-width:120px">
+                <span style="color:var(--text-muted);font-size:.84rem">minutos (mín. 5, máx. 1440)</span>
+              </div>
+              <div class="form-hint">Ejemplos: 60 = cada hora · 1440 = cada día</div>
+            </div>
+          </div>
+
+          <!-- Config: Diario -->
+          <div id="cfg-diario" style="display:none">
+            <div class="form-group">
+              <label class="form-label">Hora de ejecución</label>
+              <input type="time" name="hora_diario" class="form-control" value="08:00" style="max-width:150px">
+              <div class="form-hint">Se ejecutará todos los días a esta hora.</div>
+            </div>
+          </div>
+
+          <!-- Manual: info -->
+          <div id="cfg-manual">
+            <div style="background:var(--surface-2);border-radius:6px;padding:10px 14px;font-size:.82rem;color:var(--text-muted)">
+              <i class="bi bi-info-circle" style="color:var(--primary)"></i>
+              Solo se ejecutará cuando lo hagas manualmente desde la ficha de la automatización.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paso 3: Condición -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span style="background:var(--primary);color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;margin-right:8px">3</span>¿Qué comprueba? <span style="font-size:.78rem;font-weight:400;color:var(--text-muted)">(Condición)</span></div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Condición</label>
+            <select name="tipo_condicion" class="form-control" id="sel-condicion" onchange="mostrarConfigCondicion(this.value)">
+              <option value="siempre">Siempre (sin condición adicional)</option>
+              {% for key, label in tipos_condicion.items() %}
+              {% if key != 'siempre' %}
+              <option value="{{ key }}">{{ label }}</option>
+              {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+
+          <div id="cfg-cond-dias" style="display:none">
+            <div class="form-group">
+              <label class="form-label" id="lbl-cond-dias">Días</label>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="number" name="cond_dias" class="form-control" min="1" max="365" value="30" style="max-width:100px">
+                <span style="color:var(--text-muted);font-size:.84rem">días</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Descripción dinámica -->
+          <div id="cond-desc" style="background:var(--surface-2);border-radius:6px;padding:10px 14px;font-size:.82rem;color:var(--text-muted);margin-top:8px">
+            <i class="bi bi-info-circle" style="color:var(--primary)"></i>
+            <span id="cond-desc-txt">Esta automatización siempre encontrará contexto para ejecutarse.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paso 4: Acción -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span style="background:var(--primary);color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;margin-right:8px">4</span>¿Qué hace? <span style="font-size:.78rem;font-weight:400;color:var(--text-muted)">(Acción)</span></div>
+        </div>
+        <div class="card-body">
+          <div class="form-row form-row-2">
+            <div class="form-group">
+              <label class="form-label">Tipo de acción</label>
+              <select name="tipo_accion" class="form-control" id="sel-accion" onchange="mostrarConfigAccion(this.value)">
+                {% for key, label in tipos_accion.items() %}
+                <option value="{{ key }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group" id="grp-accion-prioridad">
+              <label class="form-label">Prioridad del aviso</label>
+              <select name="accion_prioridad" class="form-control">
+                {% for key, label in prioridades_aviso.items() %}
+                <option value="{{ key }}" {% if key == 'alta' %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div id="cfg-accion-aviso">
+            <div class="form-group">
+              <label class="form-label">Título del aviso</label>
+              <input type="text" name="accion_titulo" class="form-control"
+                     value="Aviso: {nombre}" placeholder="Aviso: {nombre}">
+              <div class="form-hint">Variables: {nombre}, {codigo}, {estado}, {dias}, {enlace}</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Mensaje</label>
+              <textarea name="accion_mensaje" class="form-control" rows="2"
+                        placeholder="El activo {nombre} ({codigo}) requiere atención.">El activo {nombre} ({codigo}) requiere atención. Días en estado actual: {dias}.</textarea>
+              <div class="form-hint">Usa {nombre}, {codigo}, {dias}, {estado}, {marca}, {enlace}</div>
+            </div>
+          </div>
+
+          <div id="cfg-accion-log" style="display:none">
+            <div class="form-group">
+              <label class="form-label">Mensaje de log</label>
+              <input type="text" name="accion_mensaje" class="form-control"
+                     value="Automatización ejecutada: {nombre_auto} → {nombre} ({codigo})">
+              <div class="form-hint">Variables: {nombre_auto}, {nombre}, {codigo}, {estado}, {dias}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Panel lateral -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="card">
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="bi bi-lightning-charge"></i> Crear automatización
+          </button>
+          <a href="/automatizaciones" class="btn btn-ghost w-100">Cancelar</a>
+        </div>
+      </div>
+
+      <!-- Templates de ejemplo -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-bookmark-star"></i> Plantillas rápidas</div></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
+          <button type="button" class="btn btn-ghost btn-sm text-start" onclick="cargarPlantilla('sin_devolver')">
+            <i class="bi bi-tools" style="color:var(--primary)"></i> Herramientas sin devolver
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm text-start" onclick="cargarPlantilla('reparacion')">
+            <i class="bi bi-wrench" style="color:var(--warning)"></i> Reparaciones retrasadas
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm text-start" onclick="cargarPlantilla('itv')">
+            <i class="bi bi-truck" style="color:var(--info)"></i> ITV próxima maquinaria
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm text-start" onclick="cargarPlantilla('parada')">
+            <i class="bi bi-pause-circle" style="color:var(--danger)"></i> Maquinaria sin movimiento
+          </button>
+        </div>
+      </div>
+
+      <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:.79rem;color:var(--text-muted)">
+        <i class="bi bi-shield-check" style="color:var(--success)"></i>
+        <strong> Seguridad:</strong> Las automatizaciones de Sprint 4.1 solo crean avisos o registran logs.
+        No modifican estados ni eliminan datos. Puedes simularlas antes de activarlas.
+      </div>
+    </div>
+
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const COND_DESCS = {
+  'siempre':                      'Esta automatización siempre encontrará contexto para ejecutarse.',
+  'herramienta_dias_entregada':   'Busca herramientas en estado "entregada" que llevan más de X días sin devolverse.',
+  'reparacion_retrasada':         'Busca herramientas en estado "en reparación" que llevan más de X días sin resolverse.',
+  'mantenimiento_proximo_itv':    'Busca maquinaria cuya ITV vence en los próximos X días.',
+  'maquinaria_sin_movimiento':    'Busca maquinaria activa sin cambio de estado en más de X días.',
+};
+const COND_LABELS_DIAS = {
+  'herramienta_dias_entregada': 'Días sin devolver (mínimo)',
+  'reparacion_retrasada':       'Días en reparación (mínimo)',
+  'mantenimiento_proximo_itv':  'Días antes de la ITV',
+  'maquinaria_sin_movimiento':  'Días sin movimiento (mínimo)',
+};
+
+function mostrarConfigDisparador(val) {
+  document.getElementById('cfg-intervalo').style.display = val === 'intervalo' ? 'block' : 'none';
+  document.getElementById('cfg-diario').style.display    = val === 'diario'    ? 'block' : 'none';
+  document.getElementById('cfg-manual').style.display    = val === 'manual'    ? 'block' : 'none';
+}
+
+function mostrarConfigCondicion(val) {
+  const needsDias = ['herramienta_dias_entregada','reparacion_retrasada','mantenimiento_proximo_itv','maquinaria_sin_movimiento'];
+  const showDias = needsDias.includes(val);
+  document.getElementById('cfg-cond-dias').style.display = showDias ? 'block' : 'none';
+  if (showDias && COND_LABELS_DIAS[val]) {
+    document.getElementById('lbl-cond-dias').textContent = COND_LABELS_DIAS[val];
+  }
+  document.getElementById('cond-desc-txt').textContent = COND_DESCS[val] || '';
+}
+
+function mostrarConfigAccion(val) {
+  document.getElementById('cfg-accion-aviso').style.display = val === 'crear_aviso'    ? 'block' : 'none';
+  document.getElementById('cfg-accion-log').style.display   = val === 'registrar_log'  ? 'block' : 'none';
+  document.getElementById('grp-accion-prioridad').style.display = val === 'crear_aviso' ? 'block' : 'none';
+}
+
+// Plantillas predefinidas
+const PLANTILLAS = {
+  sin_devolver: {
+    nombre: 'Herramientas sin devolver (+30 días)',
+    descripcion: 'Avisa cuando una herramienta lleva más de 30 días entregada sin devolverse.',
+    prioridad: 'alta',
+    disparador: 'diario', hora: '08:00',
+    condicion: 'herramienta_dias_entregada', dias: 30,
+    accion: 'crear_aviso',
+    titulo: 'Herramienta sin devolver: {nombre}',
+    mensaje: 'La herramienta {nombre} ({codigo}) lleva {dias} días entregada sin devolverse. Por favor, contacta al responsable.',
+    accion_prioridad: 'alta',
+  },
+  reparacion: {
+    nombre: 'Reparaciones retrasadas (+7 días)',
+    descripcion: 'Avisa cuando una herramienta lleva más de 7 días en reparación.',
+    prioridad: 'alta',
+    disparador: 'diario', hora: '09:00',
+    condicion: 'reparacion_retrasada', dias: 7,
+    accion: 'crear_aviso',
+    titulo: 'Reparación retrasada: {nombre}',
+    mensaje: 'La herramienta {nombre} ({codigo}) lleva {dias} días en reparación. Revisar estado con el taller.',
+    accion_prioridad: 'alta',
+  },
+  itv: {
+    nombre: 'ITV próxima en 30 días',
+    descripcion: 'Avisa cuando la ITV de maquinaria vence en menos de 30 días.',
+    prioridad: 'media',
+    disparador: 'diario', hora: '08:30',
+    condicion: 'mantenimiento_proximo_itv', dias: 30,
+    accion: 'crear_aviso',
+    titulo: 'ITV próxima: {nombre}',
+    mensaje: 'La maquinaria {nombre} ({codigo}) tiene la ITV el {proxima_itv} (en {dias} días). Gestiona la cita.',
+    accion_prioridad: 'alta',
+  },
+  parada: {
+    nombre: 'Maquinaria parada más de 60 días',
+    descripcion: 'Avisa cuando una máquina lleva más de 60 días sin cambio de estado.',
+    prioridad: 'baja',
+    disparador: 'diario', hora: '10:00',
+    condicion: 'maquinaria_sin_movimiento', dias: 60,
+    accion: 'crear_aviso',
+    titulo: 'Maquinaria sin movimiento: {nombre}',
+    mensaje: 'La maquinaria {nombre} lleva {dias} días sin cambio de estado. Verifica si sigue operativa.',
+    accion_prioridad: 'media',
+  },
+};
+
+function cargarPlantilla(key) {
+  const p = PLANTILLAS[key];
+  if (!p) return;
+  document.querySelector('[name=nombre]').value = p.nombre;
+  document.querySelector('[name=descripcion]').value = p.descripcion;
+  document.querySelector('[name=prioridad]').value = p.prioridad;
+
+  // Disparador
+  document.getElementById('sel-disparador').value = p.disparador;
+  mostrarConfigDisparador(p.disparador);
+  if (p.hora) document.querySelector('[name=hora_diario]').value = p.hora;
+  if (p.intervalo) document.querySelector('[name=intervalo_min]').value = p.intervalo;
+
+  // Condición
+  document.getElementById('sel-condicion').value = p.condicion;
+  mostrarConfigCondicion(p.condicion);
+  if (p.dias) document.querySelector('[name=cond_dias]').value = p.dias;
+
+  // Acción
+  document.getElementById('sel-accion').value = p.accion;
+  mostrarConfigAccion(p.accion);
+  if (p.titulo) document.querySelector('[name=accion_titulo]').value = p.titulo;
+  if (p.mensaje) document.querySelector('[name=accion_mensaje]').value = p.mensaje;
+  if (p.accion_prioridad) document.querySelector('[name=accion_prioridad]').value = p.accion_prioridad;
+}
+
+// Inicializar al cargar
+mostrarConfigDisparador(document.getElementById('sel-disparador').value);
+mostrarConfigCondicion(document.getElementById('sel-condicion').value);
+mostrarConfigAccion(document.getElementById('sel-accion').value);
+</script>
+{% endblock %}

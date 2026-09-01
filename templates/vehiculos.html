@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}Vehículos — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header">
+  <h2 class="mrd-page-title"><i class="bi bi-truck me-2"></i>Vehículos / Furgonetas</h2>
+  <div class="d-flex gap-2">
+    <a href="/vehiculos/movimientos" class="btn btn-outline-secondary mrd-btn">
+      <i class="bi bi-arrow-left-right me-1"></i>Movimientos
+    </a>
+    {% if user.rol in ['admin','almacen','encargado_patio'] %}
+    <button class="btn btn-warning mrd-btn" data-bs-toggle="modal" data-bs-target="#nuevoVehiculoModal">
+      <i class="bi bi-plus-lg me-1"></i>Nuevo vehículo
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+{% if request.query_params.get('ok') == 'editado' %}
+<div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+  <i class="bi bi-check-circle me-2"></i>Vehículo actualizado correctamente.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="row g-3">
+  {% for v in vehiculos %}
+  <div class="col-sm-6 col-lg-4">
+    <div class="mrd-card p-4 {% if not v.activo %}opacity-50{% endif %}">
+      <div class="d-flex align-items-center mb-3">
+        <div class="mrd-kpi-icon mrd-kpi-furgoneta me-3" style="width:48px;height:48px;font-size:1.4rem">
+          <i class="bi bi-truck"></i>
+        </div>
+        <div>
+          <h5 class="mb-0"><code style="text-transform:uppercase">{{ v.matricula }}</code></h5>
+          <small class="text-muted">{{ v.marca or '' }} {{ v.modelo or '' }}</small>
+        </div>
+      </div>
+      {% if v.descripcion %}
+      <p class="text-muted small mb-2">{{ v.descripcion }}</p>
+      {% endif %}
+      {% set cnt = v.herramientas | length %}
+      <p class="mb-2">
+        <span class="badge bg-warning text-dark">{{ cnt }}</span>
+        <span class="text-muted ms-1">herramienta{% if cnt != 1 %}s{% endif %} cargada{% if cnt != 1 %}s{% endif %}</span>
+      </p>
+      {% if v.kilometros %}
+      <p class="text-muted small mb-2"><i class="bi bi-speedometer2 me-1"></i>{{ v.kilometros }} km</p>
+      {% endif %}
+      {% if v.itv_hasta %}
+      <p class="small mb-1">
+        <i class="bi bi-card-checklist me-1 text-info"></i>
+        <span class="text-muted">ITV:</span>
+        <strong>{{ v.itv_hasta | fmt_fecha }}</strong>
+      </p>
+      {% endif %}
+      {% if v.seguro_hasta %}
+      <p class="small mb-1">
+        <i class="bi bi-shield-check me-1 text-success"></i>
+        <span class="text-muted">Seguro:</span>
+        <strong>{{ v.seguro_hasta | fmt_fecha }}</strong>
+      </p>
+      {% endif %}
+      {% if user.rol in ['admin','almacen','encargado_patio'] %}
+      <a href="/vehiculos/{{ v.id }}/qr" target="_blank"
+         class="btn btn-sm btn-outline-info w-100 mt-1 mb-1">
+        <i class="bi bi-qr-code me-1"></i>Ver QR / Ficha
+      </a>
+      <button class="btn btn-sm btn-outline-warning w-100"
+              data-vid="{{ v.id }}"
+              data-matricula="{{ v.matricula }}"
+              data-marca="{{ v.marca or '' }}"
+              data-modelo="{{ v.modelo or '' }}"
+              data-tipo="{{ v.tipo or 'furgoneta' }}"
+              data-km="{{ v.kilometros or '' }}"
+              data-descripcion="{{ v.descripcion or '' }}"
+              data-estado="{{ v.estado or 'activo' }}"
+              data-anio="{{ v.anio or '' }}"
+              data-obs="{{ (v.observaciones or '')|replace('"','') }}"
+              data-itv="{{ v.itv_hasta or '' }}"
+              data-seg="{{ v.seguro_hasta or '' }}"
+              data-rev="{{ v.proxima_revision or '' }}"
+              data-compania="{{ (v.compania_seguro or '')|replace('"','') }}"
+              data-poliza="{{ (v.num_poliza or '')|replace('"','') }}"
+              onclick="editarVehiculo(this)">
+        <i class="bi bi-pencil me-1"></i>Editar
+      </button>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="col-12 text-center text-muted py-5">
+    <i class="bi bi-truck fs-1 d-block mb-2"></i>No hay vehículos registrados
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Modal Nuevo vehículo -->
+<div class="modal fade" id="nuevoVehiculoModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content mrd-modal-dark">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="bi bi-truck me-2"></i>Nuevo vehículo</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="/vehiculos/nuevo">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Matrícula <span class="text-danger">*</span></label>
+            <input type="text" name="matricula" class="form-control mrd-input" placeholder="Ej: 1234-ABC" required style="text-transform:uppercase">
+          </div>
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label class="form-label">Marca</label>
+              <input type="text" name="marca" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Modelo</label>
+              <input type="text" name="modelo" class="form-control mrd-input">
+            </div>
+          </div>
+          <div class="row g-3 mt-1">
+            <div class="col-sm-6">
+              <label class="form-label">Tipo <span class="text-danger">*</span></label>
+              <select name="tipo" class="form-select mrd-input" required>
+                <option value="furgoneta" selected>Furgoneta (surtidor nave)</option>
+                <option value="camion">Camión (surtidor nave)</option>
+                <option value="turismo">Turismo / Coche empresa (gasolinera)</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">KM actuales</label>
+              <input type="number" name="kilometros" class="form-control mrd-input" min="0">
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label">Descripción</label>
+            <input type="text" name="descripcion" class="form-control mrd-input">
+          </div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-warning">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Editar vehículo -->
+<div class="modal fade" id="editarVehiculoModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content mrd-modal-dark">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Editar vehículo</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" id="form-editar-vehiculo" action="">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Matrícula <span class="text-danger">*</span></label>
+            <input type="text" id="ev-matricula" name="matricula" class="form-control mrd-input" required style="text-transform:uppercase">
+          </div>
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label class="form-label">Marca</label>
+              <input type="text" id="ev-marca" name="marca" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Modelo</label>
+              <input type="text" id="ev-modelo" name="modelo" class="form-control mrd-input">
+            </div>
+          </div>
+          <div class="row g-3 mt-1">
+            <div class="col-sm-4">
+              <label class="form-label">Tipo</label>
+              <select id="ev-tipo" name="tipo" class="form-select mrd-input">
+                <option value="furgoneta">Furgoneta (surtidor nave)</option>
+                <option value="camion">Camión (surtidor nave)</option>
+                <option value="turismo">Turismo / Coche empresa (gasolinera)</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label">Año fabricación</label>
+              <input type="number" id="ev-anio" name="anio" class="form-control mrd-input" min="1980" max="2099" placeholder="2020">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label">KM actuales</label>
+              <input type="number" id="ev-km" name="kilometros" class="form-control mrd-input" min="0">
+            </div>
+          </div>
+          <div class="row g-3 mt-1">
+            <div class="col-sm-6">
+              <label class="form-label">Estado</label>
+              <select id="ev-estado" name="estado" class="form-select mrd-input">
+                <option value="activo">Activo</option>
+                <option value="baja">De baja</option>
+                <option value="taller">En taller</option>
+              </select>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Descripción</label>
+              <input type="text" id="ev-descripcion" name="descripcion" class="form-control mrd-input">
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label">Observaciones</label>
+            <textarea id="ev-observaciones" name="observaciones" class="form-control mrd-input" rows="2"></textarea>
+          </div>
+          <hr class="my-3">
+          <p class="text-muted small mb-2"><i class="bi bi-calendar-check me-1"></i>Fechas para la ficha QR</p>
+          <div class="row g-3">
+            <div class="col-sm-4">
+              <label class="form-label">ITV hasta</label>
+              <input type="date" id="ev-itv" name="itv_hasta" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label">Seguro hasta</label>
+              <input type="date" id="ev-seguro" name="seguro_hasta" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label">Próxima revisión</label>
+              <input type="date" id="ev-revision" name="proxima_revision" class="form-control mrd-input">
+            </div>
+          </div>
+          <div class="row g-2">
+            <div class="col-sm-6">
+              <label class="form-label">Compañía de seguro</label>
+              <input type="text" id="ev-compania" name="compania_seguro" class="form-control mrd-input" placeholder="Ej. Mapfre, Axa…">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Nº Póliza</label>
+              <input type="text" id="ev-poliza" name="num_poliza" class="form-control mrd-input" placeholder="Número de póliza">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-warning"><i class="bi bi-floppy me-1"></i>Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function editarVehiculo(btn) {
+  const d = btn.dataset;
+  document.getElementById('form-editar-vehiculo').action = `/vehiculos/${d.vid}/editar`;
+  document.getElementById('ev-matricula').value = d.matricula;
+  document.getElementById('ev-marca').value = d.marca;
+  document.getElementById('ev-modelo').value = d.modelo;
+  document.getElementById('ev-km').value = d.km;
+  document.getElementById('ev-anio').value = d.anio || '';
+  document.getElementById('ev-descripcion').value = d.descripcion;
+  document.getElementById('ev-observaciones').value = d.obs;
+  for (let o of document.getElementById('ev-tipo').options) o.selected = (o.value === d.tipo);
+  for (let o of document.getElementById('ev-estado').options) o.selected = (o.value === d.estado);
+  document.getElementById('ev-itv').value = d.itv || '';
+  document.getElementById('ev-seguro').value = d.seg || '';
+  document.getElementById('ev-revision').value = d.rev || '';
+  document.getElementById('ev-compania').value = d.compania || '';
+  document.getElementById('ev-poliza').value = d.poliza || '';
+  new bootstrap.Modal(document.getElementById('editarVehiculoModal')).show();
+}
+</script>
+{% endblock %}

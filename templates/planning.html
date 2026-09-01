@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Planning de Obras{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <h4 class="mb-0"><i class="bi bi-bar-chart-steps text-warning me-2"></i>Planning Visual de Obras</h4>
+  <button class="btn btn-warning btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#modalNuevo">
+    <i class="bi bi-plus-lg"></i> Añadir asignación
+  </button>
+</div>
+
+{% if ok %}
+<div class="alert alert-success alert-dismissible fade show py-2">
+  {% if ok == "creado" %}Asignación añadida.{% elif ok == "eliminado" %}Asignación eliminada.{% endif %}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<!-- Navegación de mes -->
+<form method="get" class="row g-2 mb-4 align-items-end">
+  <div class="col-auto">
+    <label class="form-label small">Mes</label>
+    <input type="month" name="mes" class="form-control" value="{{ mes_sel }}">
+  </div>
+  <div class="col-auto">
+    <label class="form-label small">Obra</label>
+    <select name="obra_id" class="form-select">
+      <option value="">Todas</option>
+      {% for o in obras %}<option value="{{ o.id }}" {% if obra_id_sel == o.id|string %}selected{% endif %}>{{ o.nombre }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-auto"><button type="submit" class="btn btn-outline-secondary">Ver</button></div>
+</form>
+
+<!-- Gantt simplificado — las fechas se calculan en JS para evitar lógica compleja en Jinja2 -->
+{% if plannings %}
+<div class="card shadow-sm">
+  <div class="card-body p-0" style="overflow-x:auto;">
+    <div id="gantt-container"></div>
+  </div>
+</div>
+<div class="mt-2">
+  <span class="badge" style="background:#198754;"> </span> <small>Días asignados</small>
+</div>
+<script>
+(function(){
+  var primer = new Date("{{ primer_dia.isoformat() }}");
+  var ultimo = new Date("{{ ultimo_dia.isoformat() }}");
+  var dias = [];
+  for(var d = new Date(primer); d <= ultimo; d.setDate(d.getDate()+1)){
+    dias.push(new Date(d));
+  }
+  var plannings = [
+    {% for p in plannings %}
+    {nombre:"{{ p.trabajador.nombre_completo|e if p.trabajador else '—' }}",
+     obra:"{{ p.obra.nombre|e if p.obra else '—' }}",
+     inicio:"{{ p.fecha_inicio.isoformat() }}",
+     fin:"{{ p.fecha_fin.isoformat() if p.fecha_fin else '' }}",
+     id:{{ p.id }} },
+    {% endfor %}
+  ];
+  var html='<table class="table table-bordered table-sm mb-0" style="min-width:800px;"><thead class="table-dark"><tr>';
+  html+='<th style="min-width:180px;">Trabajador</th><th style="min-width:100px;">Obra</th>';
+  dias.forEach(function(d){
+    var wd=['D','L','M','X','J','V','S'][d.getDay()];
+    html+='<th class="text-center px-1" style="min-width:26px;font-size:10px;">'+d.getDate()+'<br><span style="font-size:9px;opacity:.7">'+wd+'</span></th>';
+  });
+  html+='<th></th></tr></thead><tbody>';
+  plannings.forEach(function(p){
+    var ini=new Date(p.inicio), fin=p.fin?new Date(p.fin):null;
+    html+='<tr><td class="fw-semibold" style="font-size:.85rem;">'+p.nombre+'</td><td><small>'+p.obra+'</small></td>';
+    dias.forEach(function(d){
+      var activo = d>=ini && (!fin||d<=fin);
+      html+='<td class="p-0" style="background:'+(activo?'#198754':'transparent')+';">&nbsp;</td>';
+    });
+    html+='<td><form method="post" action="/planning/'+p.id+'/eliminar" onsubmit="return confirm(\'¿Eliminar?\')"><button class="btn btn-xs btn-outline-danger" style="font-size:11px;padding:1px 5px;">✕</button></form></td></tr>';
+  });
+  html+='</tbody></table>';
+  document.getElementById('gantt-container').innerHTML=html;
+})();
+</script>
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="bi bi-bar-chart-steps display-4 d-block mb-2 opacity-25"></i>
+  Sin asignaciones para este mes.
+</div>
+{% endif %}
+
+<!-- Tabla lista -->
+{% if plannings %}
+<div class="table-responsive mt-4">
+  <h6 class="text-muted">Lista de asignaciones</h6>
+  <table class="table table-sm table-hover">
+    <thead><tr><th>Trabajador</th><th>Obra</th><th>Inicio</th><th>Fin</th><th>Rol</th><th></th></tr></thead>
+    <tbody>
+      {% for p in plannings %}
+      <tr>
+        <td>{{ p.trabajador.nombre_completo if p.trabajador else "—" }}</td>
+        <td>{{ p.obra.nombre if p.obra else "—" }}</td>
+        <td>{{ p.fecha_inicio.strftime("%d/%m/%Y") }}</td>
+        <td>{{ p.fecha_fin.strftime("%d/%m/%Y") if p.fecha_fin else "—" }}</td>
+        <td>{{ p.rol or "—" }}</td>
+        <td>
+          <form method="post" action="/planning/{{ p.id }}/eliminar"
+                onsubmit="return confirm('¿Eliminar?')">
+            <button class="btn btn-xs btn-outline-danger"><i class="bi bi-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- Modal nueva asignación -->
+<div class="modal fade" id="modalNuevo" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="/planning" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-calendar-plus me-2"></i>Nueva Asignación</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Obra <span class="text-danger">*</span></label>
+          <select name="obra_id" class="form-select" required>
+            <option value="">— Seleccionar —</option>
+            {% for o in obras %}<option value="{{ o.id }}">{{ o.nombre }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Trabajador</label>
+          <select name="trabajador_id" class="form-select">
+            <option value="">— Sin trabajador —</option>
+            {% for t in trabajadores %}<option value="{{ t.id }}">{{ t.nombre_completo }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold">Fecha inicio <span class="text-danger">*</span></label>
+            <input type="date" name="fecha_inicio" class="form-control" value="{{ primer_dia.isoformat() }}" required>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Fecha fin</label>
+            <input type="date" name="fecha_fin" class="form-control">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Rol / Función</label>
+          <input type="text" name="rol" class="form-control" placeholder="Ej: Oficial 1ª, Gruista …">
+        </div>
+        <div class="mb-1">
+          <label class="form-label">Notas</label>
+          <textarea name="notas" class="form-control" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-warning"><i class="bi bi-check-lg me-1"></i>Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

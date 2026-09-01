@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Albaran {{ alb.numero }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <img src="/static/img/mrd_sello_blanco.png" alt="Sello MRD" style="width:112px;height:auto;background:#fff;border-radius:6px">
+  <a href="/albaranes-salida" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Volver</a>
+  <div>
+    <h4 class="mb-0"><i class="bi bi-file-earmark-{{ 'arrow-down text-success' if alb.tipo_documento == 'entrada' else 'arrow-up text-danger' }} me-2"></i>{{ alb.numero }} · {{ 'Entrada' if alb.tipo_documento == 'entrada' else 'Suministro / salida' }}</h4>
+    <small class="text-muted">{{ alb.fecha_salida.strftime("%d/%m/%Y %H:%M") if alb.fecha_salida else "" }}</small>
+  </div>
+  <div class="ms-auto d-flex gap-2">
+    <a href="/albaranes-salida/{{ alb.id }}/firmar" class="btn btn-primary btn-sm">
+      <i class="bi bi-pen me-1"></i>{{ 'Volver a firmar' if alb.firma_datos else 'Firmar en tablet' }}
+    </a>
+    <a href="/albaranes-salida/{{ alb.id }}/pdf" class="btn btn-outline-danger btn-sm">
+      <i class="bi bi-file-pdf me-1"></i>PDF
+    </a>
+  </div>
+</div>
+
+{% if request.query_params.get('ok') == 'retorno' %}
+<div class="alert alert-success alert-dismissible fade show py-2">Item marcado como retornado.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if request.query_params.get('ok') == 'firma' %}
+<div class="alert alert-success alert-dismissible fade show py-2"><i class="bi bi-pen me-2"></i>Firma guardada correctamente.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+  {% if alb.tipo_documento != 'entrada' %}<div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        {% if alb.estado == 'abierto' %}<span class="badge bg-danger fs-6">Abierto</span>
+        {% elif alb.estado == 'parcial' %}<span class="badge bg-warning text-dark fs-6">Parcial</span>
+        {% else %}<span class="badge bg-success fs-6">Cerrado</span>{% endif %}
+        <div class="small text-muted mt-1">Estado</div>
+      </div>
+    </div>
+  </div>{% endif %}
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="h4 fw-bold {% if alb.dias_fuera > 7 %}text-warning{% endif %}">{{ alb.dias_fuera }}d</div>
+        <div class="small text-muted">Dias fuera</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="h4 fw-bold">{{ alb.origen_destino if alb.tipo_documento == 'entrada' and alb.origen_destino else (alb.responsable.nombre_completo if alb.responsable else "---") }}</div>
+        <div class="small text-muted">{{ 'Procedencia' if alb.tipo_documento == 'entrada' else 'Responsable' }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="h4 fw-bold">{{ (alb.almacen.nombre if alb.almacen else 'Almacén principal') if alb.tipo_documento == 'entrada' else (alb.obra.nombre if alb.obra else "---") }}</div>
+        <div class="small text-muted">{{ 'Almacén' if alb.tipo_documento == 'entrada' else 'Obra' }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h6 class="text-muted mb-3">Items ({{ alb.items|length }})</h6>
+{% if alb.items %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-dark">
+      <tr><th>#</th><th>Tipo</th><th>Descripción</th><th>Cantidad</th><th>Estado</th>{% if alb.tipo_documento != 'entrada' %}<th>Retorno</th><th></th>{% endif %}</tr>
+    </thead>
+    <tbody>
+      {% for item in alb.items %}
+      <tr class="{% if item.retornado %}text-muted{% endif %}">
+        <td>{{ loop.index }}</td>
+        <td><span class="badge bg-secondary">{{ item.tipo.capitalize() }}</span></td>
+        <td {% if item.retornado %}style="text-decoration:line-through"{% endif %}>{{ item.descripcion }}</td>
+        <td>{{ item.cantidad }}</td>
+        <td>
+          {% if alb.tipo_documento == 'entrada' %}<span class="badge bg-success"><i class="bi bi-check2 me-1"></i>Recibido</span>
+          {% elif item.retornado %}<span class="badge bg-success"><i class="bi bi-check2 me-1"></i>Retornado</span>
+          {% else %}<span class="badge bg-danger">Fuera</span>{% endif %}
+        </td>
+        {% if alb.tipo_documento != 'entrada' %}<td><small>{{ item.fecha_retorno.strftime("%d/%m/%Y") if item.fecha_retorno else "---" }}</small></td>
+        <td>
+          {% if not item.retornado %}
+          <form method="post" action="/albaranes-salida/{{ alb.id }}/retorno-item/{{ item.id }}"
+                onsubmit="return confirm('Marcar como retornado?')">
+            <button class="btn btn-sm btn-success">
+              <i class="bi bi-box-arrow-in-left me-1"></i>Retornado
+            </button>
+          </form>
+          {% endif %}
+        </td>{% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if alb.notas %}
+<div class="alert alert-light mt-3"><i class="bi bi-chat-left-text me-2"></i>{{ alb.notas }}</div>
+{% endif %}
+
+<!-- ── Firma digital del albarán ──────────────────────────────────────── -->
+<div class="card mt-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-pen"></i>
+    <strong>Firma del receptor</strong>
+    {% if alb.firma_datos %}
+      <span class="badge bg-success ms-auto"><i class="bi bi-check2 me-1"></i>Firmado</span>
+    {% else %}
+      <span class="badge bg-secondary ms-auto">Sin firmar</span>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    {% if alb.firma_datos %}
+      <!-- Firma existente -->
+      <div class="mb-3">
+        <img src="{{ alb.firma_datos }}" alt="Firma"
+             style="max-width:320px;border:1px solid #dee2e6;border-radius:6px;background:#fff;padding:4px">
+        {% if alb.firma_nombre %}
+          <div class="text-muted small mt-1"><i class="bi bi-person me-1"></i>{{ alb.firma_nombre }}</div>
+        {% endif %}
+        {% if alb.firma_fecha %}
+          <div class="text-muted small"><i class="bi bi-clock me-1"></i>{{ alb.firma_fecha.strftime('%d/%m/%Y %H:%M') }}</div>
+        {% endif %}
+      </div>
+      <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('firmaFormAlb').style.display='block';this.style.display='none'">
+        <i class="bi bi-arrow-repeat me-1"></i>Actualizar firma
+      </button>
+      <div id="firmaFormAlb" style="display:none;margin-top:16px">
+    {% else %}
+      <div id="firmaFormAlb">
+    {% endif %}
+
+    <form method="post" action="/albaranes-salida/{{ alb.id }}/firma" id="formFirmaAlb">
+      <input type="hidden" name="firma_datos" id="firmaDataAlb">
+      <div style="border:2px dashed #ced4da;border-radius:8px;padding:8px;background:#fafafa;touch-action:none">
+        <canvas id="firmaCanvasAlb" width="700" height="150"
+          style="width:100%;height:150px;cursor:crosshair;display:block;background:#fff;border-radius:4px"></canvas>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="limpiarAlb()">
+          <i class="bi bi-trash"></i> Limpiar
+        </button>
+        <input name="firma_nombre" type="text" class="form-control form-control-sm"
+               placeholder="Nombre del receptor" style="max-width:220px"
+               value="{{ alb.firma_nombre or '' }}">
+        <span id="firmaEstadoAlb" style="font-size:12px;color:#888"></span>
+        <button type="submit" class="btn btn-primary btn-sm ms-auto" onclick="return capturarAlb()">
+          <i class="bi bi-floppy me-1"></i>Guardar firma
+        </button>
+      </div>
+    </form>
+
+    </div>{# cierre firmaFormAlb #}
+  </div>
+</div>
+<!-- ─────────────────────────────────────────────────────────────────── -->
+
+<script>
+(function(){
+  const canvas = document.getElementById('firmaCanvasAlb');
+  const ctx = canvas.getContext('2d');
+  const input = document.getElementById('firmaDataAlb');
+  const estado = document.getElementById('firmaEstadoAlb');
+  let dibujando = false, hasFirma = false;
+
+  function pos(e) {
+    const r = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / r.width;
+    const scaleY = canvas.height / r.height;
+    const src = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - r.left) * scaleX, y: (src.clientY - r.top) * scaleY };
+  }
+
+  function start(e) { e.preventDefault(); dibujando=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }
+  function draw(e)  { if(!dibujando) return; e.preventDefault(); const p=pos(e); ctx.lineTo(p.x,p.y); ctx.strokeStyle='#1a237e'; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.stroke(); hasFirma=true; estado.textContent='✓ Firma capturada'; }
+  function stop()   { dibujando=false; if(hasFirma) input.value=canvas.toDataURL('image/png'); }
+
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', draw);
+  canvas.addEventListener('mouseup', stop);
+  canvas.addEventListener('touchstart', start, {passive:false});
+  canvas.addEventListener('touchmove', draw,  {passive:false});
+  canvas.addEventListener('touchend', stop);
+
+  window.limpiarAlb = function() { ctx.clearRect(0,0,canvas.width,canvas.height); input.value=''; hasFirma=false; estado.textContent=''; };
+  window.capturarAlb = function() {
+    if (hasFirma) input.value = canvas.toDataURL('image/png');
+    if (!input.value) { alert('Dibuja la firma antes de guardar'); return false; }
+    return true;
+  };
+})();
+</script>
+
+{% endblock %}

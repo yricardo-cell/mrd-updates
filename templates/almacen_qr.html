@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>QR Almacén — {{ almacen.nombre }}</title>
+  <style>
+    @page { size: 80mm 100mm; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Arial', sans-serif;
+      background: #fff;
+      color: #111;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .label {
+      width: 78mm;
+      padding: 4mm 5mm;
+      border: 2px solid #222;
+      border-radius: 4mm;
+      text-align: center;
+    }
+    .company-name {
+      font-size: 7.5pt;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #555;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 2mm;
+      margin-bottom: 3mm;
+    }
+    .warehouse-name {
+      font-size: 13pt;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 2mm;
+    }
+    .warehouse-sub {
+      font-size: 7.5pt;
+      color: #555;
+      margin-bottom: 3mm;
+    }
+    .qr-img {
+      width: 52mm;
+      height: 52mm;
+      border: 1px solid #ddd;
+      border-radius: 2mm;
+      padding: 2mm;
+      margin: 0 auto 3mm;
+      display: block;
+    }
+    .codigo {
+      font-family: 'Courier New', monospace;
+      font-size: 8.5pt;
+      font-weight: 700;
+      background: #f3f3f3;
+      border: 1px solid #ddd;
+      border-radius: 2mm;
+      padding: 1mm 3mm;
+      display: inline-block;
+      letter-spacing: .05em;
+      margin-bottom: 2mm;
+    }
+    .ubicaciones-block {
+      border-top: 1px solid #ddd;
+      padding-top: 2mm;
+      margin-top: 2mm;
+      text-align: left;
+    }
+    .ubi-title {
+      font-size: 6.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #888;
+      letter-spacing: .05em;
+      margin-bottom: 1mm;
+    }
+    .ubi-list {
+      font-size: 7pt;
+      color: #333;
+      list-style: none;
+      columns: 2;
+      column-gap: 4mm;
+    }
+    .ubi-list li {
+      padding: .5mm 0;
+    }
+    .ubi-list li::before { content: "▸ "; color: #aaa; }
+    .footer {
+      border-top: 1px solid #ddd;
+      margin-top: 2mm;
+      padding-top: 2mm;
+      font-size: 6pt;
+      color: #aaa;
+    }
+    .btn-print {
+      position: fixed; bottom: 16px; right: 16px;
+      background: #f5a623; color: #000;
+      border: none; border-radius: 8px;
+      padding: 10px 20px; font-weight: 700;
+      cursor: pointer; font-size: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    }
+    @media print { .btn-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="label">
+    <div class="company-name">MRD Estructuras</div>
+
+    <div class="warehouse-name">{{ almacen.nombre }}</div>
+
+    {% if almacen.descripcion %}
+    <div class="warehouse-sub">{{ almacen.descripcion }}</div>
+    {% endif %}
+
+    {% if almacen.direccion %}
+    <div class="warehouse-sub" style="font-size:6.5pt">📍 {{ almacen.direccion }}</div>
+    {% endif %}
+
+    <img src="data:image/png;base64,{{ qr_b64 }}" class="qr-img" alt="QR Almacén">
+
+    {% if almacen.codigo %}
+    <div><span class="codigo">{{ almacen.codigo }}</span></div>
+    {% endif %}
+
+    <div style="font-size:6.5pt;color:#777;margin-bottom:2mm">
+      🔧 {{ herramientas_count }} herramienta{% if herramientas_count != 1 %}s{% endif %} &nbsp;·&nbsp;
+      📦 {{ materiales_count }} material{% if materiales_count != 1 %}es{% endif %}
+      {% if ubicaciones_count %}&nbsp;·&nbsp;🗂 {{ ubicaciones_count }} ubicacion{% if ubicaciones_count != 1 %}es{% endif %}{% endif %}
+    </div>
+
+    {% if ubicaciones %}
+    <div class="ubicaciones-block">
+      <div class="ubi-title">Ubicaciones</div>
+      <ul class="ubi-list">
+        {% for u in ubicaciones %}
+        <li>{% if u.codigo %}<strong>{{ u.codigo }}</strong> — {% endif %}{{ u.nombre }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="footer">
+      ID: {{ almacen.id }} &nbsp;|&nbsp; /almacenes/{{ almacen.id }}
+    </div>
+  </div>
+
+  <button class="btn-print" onclick="window.print()">🖨 Imprimir</button>
+</body>
+</html>

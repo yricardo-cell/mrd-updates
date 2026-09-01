@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block title %}Actualizaciones — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center mb-3 gap-2">
+    <i class="bi bi-arrow-up-circle fs-4 text-primary"></i>
+    <h4 class="mb-0 fw-bold">Actualizaciones</h4>
+    <span class="badge ms-2" id="updStateBadge">—</span>
+    <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="updCheck()">
+      <i class="bi bi-search me-1"></i>Buscar actualizaciones
+    </button>
+  </div>
+
+  <!-- Barra de progreso -->
+  <div class="mb-3" id="progressCard">
+    <div class="d-flex justify-content-between small mb-1">
+      <span id="progressLabel" class="text-muted">—</span>
+      <span id="progressPct" class="fw-bold">0%</span>
+    </div>
+    <div class="progress" style="height:10px">
+      <div class="progress-bar progress-bar-striped progress-bar-animated" id="progressBar"
+           role="progressbar" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+
+    <!-- Estado actual -->
+    <div class="col-lg-5">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-info-circle me-2 text-primary"></i>Estado</div>
+        <div class="card-body">
+          <table class="table table-sm mb-3">
+            <tr><th class="text-muted" style="width:50%">Estado</th><td id="iStatus">—</td></tr>
+            <tr><th class="text-muted">Versión actual</th><td id="iCurrent">—</td></tr>
+            <tr><th class="text-muted">Versión destino</th><td id="iTarget">—</td></tr>
+            <tr><th class="text-muted">Iniciado</th><td id="iStarted">—</td></tr>
+            <tr><th class="text-muted">Finalizado</th><td id="iFinished">—</td></tr>
+            <tr><th class="text-muted">Error</th><td id="iError" class="text-danger small">—</td></tr>
+          </table>
+          <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-sm btn-outline-danger d-none" id="btnRollback" onclick="updRollback()">
+              <i class="bi bi-arrow-counterclockwise me-1"></i>Rollback
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="updReset()">
+              <i class="bi bi-x-circle me-1"></i>Reiniciar estado
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actualización disponible -->
+    <div class="col-lg-7">
+      <div class="card h-100 shadow-sm" id="updateCard">
+        <div class="card-header fw-semibold"><i class="bi bi-cloud-download me-2 text-success"></i>Disponible</div>
+        <div class="card-body">
+          <div id="checkResult">
+            <p class="text-muted small">Haz clic en "Buscar actualizaciones" para comprobar.</p>
+          </div>
+          <!-- Instalación manual -->
+          <hr>
+          <div class="fw-semibold small text-muted mb-2">Instalación manual</div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">URL de descarga (https://)</label>
+            <input type="url" id="manualUrl" class="form-control form-control-sm" placeholder="https://releases.miserver.com/update.zip">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">SHA-256 esperado (opcional)</label>
+            <input type="text" id="manualSha" class="form-control form-control-sm font-monospace" placeholder="a1b2c3…">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Versión</label>
+            <input type="text" id="manualVer" class="form-control form-control-sm" placeholder="1.9.8-alpha">
+          </div>
+          <button class="btn btn-warning btn-sm" onclick="updInstall()">
+            <i class="bi bi-download me-1"></i>Instalar
+          </button>
+          <div id="installResult" class="mt-2 small d-none"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log de actualizaciones -->
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-terminal me-2 text-secondary"></i>Log</div>
+        <div class="card-body p-2">
+          <pre id="updLog" class="bg-dark text-light rounded p-2 mb-0 small"
+               style="max-height:200px;overflow:auto;white-space:pre-wrap;">Sin actividad.</pre>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const CSRF_COOKIE = 'mrd_csrf';
+function getCsrf() {
+  const v = document.cookie.split('; ').find(r => r.startsWith(CSRF_COOKIE + '='));
+  return v ? decodeURIComponent(v.split('=')[1]) : '';
+}
+function fmtDate(s) { return s ? new Date(s+'Z').toLocaleString('es-ES') : '—'; }
+
+// Fetch con timeout configurable
+async function safeFetch(url, opts, timeout) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const r = await fetch(url, { ...(opts||{}), signal: ctrl.signal });
+    clearTimeout(id);
+    return r;
+  } catch(e) { clearTimeout(id); throw e; }
+}
+
+const STATE_COLORS = {
+  idle:'secondary', disponible:'success', descargando:'primary', verificando:'info',
+  instalando:'warning', reiniciando:'warning', correcta:'success', fallida:'danger', revertida:'danger'
+};
+const STATE_LABELS = {
+  idle:'Inactivo', disponible:'Disponible', descargando:'Descargando', verificando:'Verificando',
+  instalando:'Instalando', reiniciando:'Reiniciando', correcta:'Completada', fallida:'Fallida', revertida:'Revertida'
+};
+
+let _polling = null;
+
+function startPolling() {
+  if (_polling) return;
+  _polling = setInterval(updStatus, 2000);
+}
+function stopPolling() {
+  if (_polling) { clearInterval(_polling); _polling = null; }
+}
+
+async function updStatus() {
+  try {
+    const d = await fetch('/api/update/status').then(r=>r.json());
+    const st = d.status || 'idle';
+    const col = STATE_COLORS[st] || 'secondary';
+    const lbl = STATE_LABELS[st] || st;
+
+    document.getElementById('updStateBadge').textContent = lbl;
+    document.getElementById('updStateBadge').className   = `badge bg-${col} ms-2`;
+    document.getElementById('iStatus').innerHTML   = `<span class="badge bg-${col}">${lbl}</span>`;
+    document.getElementById('iTarget').textContent  = d.version   || '—';
+    document.getElementById('iStarted').textContent  = fmtDate(d.started_at);
+    document.getElementById('iFinished').textContent = fmtDate(d.finished_at);
+    document.getElementById('iError').textContent    = d.error || '—';
+
+    // Progreso
+    const pct = d.progress || 0;
+    document.getElementById('progressPct').textContent = pct + '%';
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent = d.message || '—';
+    const pb = document.getElementById('progressBar');
+    pb.className = 'progress-bar' + (pct < 100 ? ' progress-bar-striped progress-bar-animated' : '');
+    pb.classList.add('bg-' + col);
+
+    // Rollback
+    const btnRb = document.getElementById('btnRollback');
+    if (d.rollback_available || st === 'fallida' || st === 'revertida') {
+      btnRb.classList.remove('d-none');
+    } else {
+      btnRb.classList.add('d-none');
+    }
+
+    // Log
+    const log = (d.log || []).map(l => `[${l.ts}] ${l.msg}`).join('\n');
+    document.getElementById('updLog').textContent = log || 'Sin actividad.';
+
+    // Versión actual
+    try {
+      const vi = await fetch('/health').then(r=>r.json());
+      document.getElementById('iCurrent').textContent = vi.version || '—';
+    } catch(e) {}
+
+    // Detener polling si no hay proceso activo
+    if (!['descargando','verificando','instalando','reiniciando'].includes(st)) {
+      stopPolling();
+    }
+  } catch(e) { console.error(e); }
+}
+
+async function updCheck() {
+  const div = document.getElementById('checkResult');
+  div.innerHTML = '<span class="text-muted">Consultando servidor...</span>';
+  try {
+    // Timeout de 45s: el check hace una petición real a GitHub que puede tardar
+    const d = await safeFetch('/api/update/check', {}, 45000).then(r=>r.json());
+    if (!d.configured) {
+      div.innerHTML = '<div class="alert alert-warning small mb-0">Servidor no configurado. Añade <code>MRD_UPDATE_SERVER</code> en <code>config/local.env</code>.</div>';
+      return;
+    }
+    if (d.error) {
+      div.innerHTML = `<div class="alert alert-danger small mb-0">Error: ${d.error}</div>`;
+      return;
+    }
+    if (d.available) {
+      div.innerHTML = `
+        <div class="alert alert-success mb-2">
+          <strong>Nueva versión: ${d.latest_version}</strong><br>
+          <span class="small">Actual: ${d.current_version}</span>
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-success btn-sm" onclick="autoInstall('${d.download_url}','${d.sha256||''}','${d.latest_version}')">
+            <i class="bi bi-download me-1"></i>Instalar ${d.latest_version}
+          </button>
+        </div>`;
+    } else {
+      div.innerHTML = `<div class="alert alert-info mb-0 small">
+        <i class="bi bi-check-circle me-1"></i>Ya tienes la versión más reciente: <strong>${d.current_version}</strong></div>`;
+    }
+  } catch(e) {
+    div.innerHTML = `<div class="alert alert-danger small mb-0">No se pudo conectar con el servidor de actualizaciones.</div>`;
+  }
+}
+
+async function autoInstall(url, sha256, version) {
+  if (!confirm(`¿Instalar versión ${version}? Se creará un backup automático antes.`)) return;
+  doInstall(url, sha256, version);
+}
+
+async function updInstall() {
+  const url     = document.getElementById('manualUrl').value.trim();
+  const sha256  = document.getElementById('manualSha').value.trim();
+  const version = document.getElementById('manualVer').value.trim();
+  if (!url || !version) { alert('URL y versión son obligatorios.'); return; }
+  if (!confirm(`¿Instalar versión ${version} desde ${url}?`)) return;
+  doInstall(url, sha256, version);
+}
+
+async function doInstall(url, sha256, version) {
+  const div = document.getElementById('installResult');
+  div.className = 'mt-2 small text-info';
+  div.classList.remove('d-none');
+  div.textContent = 'Iniciando actualización...';
+  const r = await fetch('/api/update/install', {
+    method: 'POST',
+    headers: {'X-CSRF-Token': getCsrf(), 'Content-Type': 'application/json'},
+    body: JSON.stringify({download_url: url, sha256, version}),
+  });
+  const d = await r.json();
+  div.textContent = d.ok ? 'Actualización iniciada. Sigue el progreso arriba.' : `Error: ${d.error}`;
+  div.className   = 'mt-2 small ' + (d.ok ? 'text-success' : 'text-danger');
+  if (d.ok) startPolling();
+}
+
+async function updRollback() {
+  if (!confirm('¿Revertir a la versión anterior?')) return;
+  const r = await fetch('/api/update/rollback', {
+    method: 'POST', headers: {'X-CSRF-Token': getCsrf()}
+  });
+  const d = await r.json();
+  if (d.ok) startPolling();
+  else alert('Error: ' + d.error);
+}
+
+async function updReset() {
+  const r = await fetch('/api/update/reset', {
+    method: 'POST', headers: {'X-CSRF-Token': getCsrf()}
+  });
+  const d = await r.json();
+  if (!d.ok) alert(d.message);
+  updStatus();
+}
+
+updStatus();
+setInterval(updStatus, 10000);
+</script>
+{% endblock %}

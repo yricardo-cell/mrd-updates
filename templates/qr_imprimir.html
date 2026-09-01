@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}QR — {{ nombre }}{% endblock %}
+{% block breadcrumb %}<a href="/">Inicio</a><span class="sep">/</span><span class="current">QR · {{ nombre }}</span>{% endblock %}
+{% block content %}
+<style>
+.qr-wrap{max-width:440px;margin:0 auto;text-align:center}
+.qr-card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:28px 24px;box-shadow:0 8px 28px rgba(15,23,42,.10)}
+.qr-card img{width:200px;height:200px;border-radius:10px;margin:0 auto 16px}
+.qr-tipo{font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px}
+.qr-nombre{font-size:1.1rem;font-weight:700;margin-bottom:4px}
+.qr-codigo{font-family:monospace;font-size:.95rem;color:var(--primary);background:var(--bg);padding:4px 10px;border-radius:8px;display:inline-block;margin-bottom:18px}
+.qr-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.qr-tip{margin-top:16px;font-size:.78rem;color:var(--text-muted)}
+
+/* ── Etiqueta imprimible ── */
+@media print{
+  @page{size:105mm 55mm;margin:0}
+  body *{visibility:hidden}
+  #etiqueta-print,#etiqueta-print *{visibility:visible}
+  #etiqueta-print{position:fixed;inset:0;width:105mm;height:55mm;max-width:none;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+  #etiqueta-print .qr-card{width:105mm;height:55mm;border-radius:0;box-shadow:none;padding:3mm;display:grid;grid-template-columns:1fr 32mm;grid-template-rows:auto auto 1fr;align-items:center}
+  #etiqueta-print .qr-tipo,#etiqueta-print .qr-nombre,#etiqueta-print>div>div:last-of-type{grid-column:1}
+  #etiqueta-print .qr-card img{grid-column:2;grid-row:1/4;width:30mm;height:30mm;margin:0 auto}
+  #etiqueta-print .qr-codigo{font-size:7pt;overflow-wrap:anywhere;margin:0}
+  .qr-actions,.qr-tip,header,nav,.card-header{display:none!important}
+}
+</style>
+
+<div class="qr-wrap" id="etiqueta-print">
+  <div class="qr-card">
+    <div class="qr-tipo">{{ tipo_label }}</div>
+    <div class="qr-nombre">{{ nombre }}</div>
+    <img src="{{ qr_url }}" alt="QR {{ codigo }}" id="qr-img">
+    <div><span class="qr-codigo">{{ codigo }}</span></div>
+    <div class="qr-actions">
+      <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer me-1"></i>Imprimir etiqueta</button>
+      <a class="btn btn-outline" href="{{ qr_url }}" download="qr-{{ codigo }}.png"><i class="bi bi-download me-1"></i>Descargar PNG</a>
+      <button class="btn btn-outline" onclick="copiarCodigo()"><i class="bi bi-clipboard me-1"></i>Copiar código</button>
+    </div>
+    <p class="qr-tip">Pega o escanea este QR con el lector para acceder al artículo en el sistema.</p>
+  </div>
+</div>
+
+<script>
+function copiarCodigo(){
+  navigator.clipboard.writeText("{{ codigo }}").then(()=>{
+    const btn = document.querySelector('[onclick="copiarCodigo()"]');
+    btn.innerHTML='<i class="bi bi-check2 me-1"></i>Copiado';
+    setTimeout(()=>btn.innerHTML='<i class="bi bi-clipboard me-1"></i>Copiar código',2000);
+  });
+}
+</script>
+{% endblock %}

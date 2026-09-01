@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key><string>$(DEVELOPMENT_LANGUAGE)</string>
+    <key>CFBundleDisplayName</key><string>MRD TOOL</string>
+    <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key><string>com.mrdestructuras.mrdapp</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleName</key><string>mrd_app</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>2.1.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>LSRequiresIPhoneOS</key><true/>
+    <key>NSCameraUsageDescription</key><string>MRD TOOL CONTROL necesita la cámara para escanear códigos QR y tomar fotografías de incidencias.</string>
+    <key>NSPhotoLibraryUsageDescription</key><string>Acceso a fotos para adjuntar imágenes a incidencias.</string>
+    <key>NSFaceIDUsageDescription</key><string>Usa Face ID para acceder de forma segura a MRD TOOL CONTROL.</string>
+    <key>NSLocationWhenInUseUsageDescription</key><string>Geolocalización opcional para registrar ubicación en incidencias.</string>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>fetch</string>
+        <string>remote-notification</string>
+    </array>
+    <key>UILaunchStoryboardName</key><string>LaunchScreen</string>
+    <key>UIMainStoryboardFile</key><string>Main</string>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+    <key>CADisableMinimumFrameDurationOnPhone</key><true/>
+    <key>UIApplicationSupportsIndirectInputEvents</key><true/>
+</dict>
+</plist>

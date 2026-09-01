@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block title %}Ficha de salida — {{ maquina.nombre }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.checklist-section { margin-bottom: 8px; }
+.section-header {
+  padding: 8px 16px;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-color);
+  font-weight: 600;
+}
+.section-header.kit-header {
+  background: #052e16;
+  color: #86efac;
+  border-top-color: #166534;
+}
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-color);
+  transition: background .2s;
+}
+.item-row.checked {
+  background: rgba(22,163,74,.08);
+}
+.item-row.kit-row.checked {
+  background: rgba(22,163,74,.15);
+}
+.item-check-icon {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-size: 1rem;
+  transition: all .25s;
+}
+.item-check-icon.unchecked { background: var(--border-color); color: var(--text-muted); }
+.item-check-icon.is-checked { background: #16a34a; color: #fff; }
+.item-info { flex: 1; min-width: 0; }
+.item-name { font-weight: 600; font-size: .9rem; }
+.item-detail { font-size: .78rem; color: var(--text-muted); margin-top: 1px; }
+.item-qr { flex-shrink: 0; cursor: pointer; }
+.item-qr img { width: 56px; height: 56px; border-radius: 4px; border: 1px solid var(--border-color); }
+
+/* Modal QR ampliado */
+#qr-modal-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.75);
+  z-index: 9999;
+  align-items: center; justify-content: center;
+}
+#qr-modal-overlay.show { display: flex; }
+#qr-modal-box {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  max-width: 340px;
+  width: 90%;
+}
+#qr-modal-box img { width: 240px; height: 240px; }
+#qr-modal-box .qr-label { font-size: .85rem; color: #374151; margin-top: 10px; font-weight: 600; }
+#qr-modal-box .qr-url { font-size: .7rem; color: #9ca3af; word-break: break-all; margin-top: 4px; }
+
+/* Progress bar */
+.progress-bar-wrap {
+  height: 6px; background: var(--border-color);
+  border-radius: 3px; overflow: hidden; margin: 8px 0;
+}
+.progress-bar-fill {
+  height: 100%; background: #16a34a;
+  border-radius: 3px;
+  transition: width .4s ease;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  .item-qr img { width: 80px; height: 80px; }
+  .item-row { page-break-inside: avoid; }
+}
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+{% if es_herramienta %}
+<a href="/herramientas">Herramientas</a><span class="sep">/</span>
+<a href="/herramientas/{{ maquina.id }}">{{ maquina.nombre }}</a><span class="sep">/</span>
+{% else %}
+<a href="/maquinaria">Maquinaria</a><span class="sep">/</span>
+<a href="/maquinaria/{{ maquina.id }}/pasaporte">{{ maquina.nombre }}</a><span class="sep">/</span>
+{% endif %}
+<span class="current">Ficha de salida #{{ salida.id }}</span>
+{% endblock %}
+
+{% block content %}
+
+<!-- Header -->
+<div class="page-header-row" style="margin-bottom:16px">
+  <div class="page-header">
+    <div class="page-title">Ficha de salida #{{ salida.id }}</div>
+    <div class="page-subtitle">
+      {{ maquina.nombre }}
+      {% if salida.obra %} · {{ salida.obra }}{% endif %}
+      · {{ salida.fecha_salida.strftime('%d/%m/%Y') }}
+    </div>
+  </div>
+  {% set base_url = '/herramienta/' ~ maquina.id if es_herramienta else '/maquinaria/' ~ maquina.id %}
+  <div class="no-print" style="display:flex;gap:8px">
+    {% if salida.estado == 'en_proceso' %}
+    <form method="post" action="{{ base_url }}/salida/{{ salida.id }}/completar" style="display:inline">
+      <button class="btn btn-success btn-sm" {% if not completo %}title="Completa todos los ítems primero"{% endif %}>
+        <i class="bi bi-check-all"></i> Marcar completada
+      </button>
+    </form>
+    {% else %}
+    <span class="badge bg-success" style="font-size:.85rem;padding:6px 12px">✓ Completada</span>
+    {% endif %}
+    <button class="btn btn-ghost btn-sm" onclick="window.print()"><i class="bi bi-printer"></i></button>
+    <a href="{{ base_url }}/salidas" class="btn btn-ghost btn-sm"><i class="bi bi-clock-history"></i> Historial</a>
+  </div>
+</div>
+
+<!-- Datos de salida -->
+<div class="card no-print" style="margin-bottom:12px">
+  <div class="card-body" style="padding:12px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+    <div><span style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">Obra</span><br><strong>{{ salida.obra or '—' }}</strong></div>
+    <div><span style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">Conductor</span><br>{{ salida.conductor or '—' }}</div>
+    <div><span style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">Resp. patio</span><br>{{ salida.responsable_patio or '—' }}</div>
+    <div><span style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">Jefe obra</span><br>{{ salida.jefe_obra or '—' }}</div>
+    {% if salida.kit_altura %}
+    <div><span style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">Kit / Tramos</span><br>{{ salida.kit_altura }} m · {{ salida.n_tramos or '—' }} tramos</div>
+    {% endif %}
+    {% if salida.cable_diametro %}
+    <div><span style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">Cable</span><br>{{ salida.cable_diametro }} mm²</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Progreso -->
+<div class="no-print" style="margin-bottom:12px">
+  <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--text-muted)">
+    <span>Progreso del checklist</span>
+    <span><strong id="cnt-checked">{{ total_checked }}</strong> / {{ total_items }} ítems</span>
+  </div>
+  <div class="progress-bar-wrap">
+    <div class="progress-bar-fill" id="progress-bar"
+         style="width:{{ (total_checked / total_items * 100)|round if total_items else 0 }}%"></div>
+  </div>
+  <div style="font-size:.75rem;color:var(--text-muted)">
+    Escanea los QR desde el móvil para marcar · La página se actualiza automáticamente
+  </div>
+</div>
+
+<!-- Checklist -->
+<div class="card">
+  {% for section in sections %}
+  <div class="checklist-section">
+    <div class="section-header {% if section.kit %}kit-header{% endif %}">
+      {{ section.section }}
+    </div>
+    {% for item in section['items'] %}
+    <div class="item-row {% if item.checked %}checked{% endif %} {% if section.kit %}kit-row{% endif %}"
+         id="row-{{ item.key }}">
+      <div class="item-check-icon {% if item.checked %}is-checked{% else %}unchecked{% endif %}"
+           id="icon-{{ item.key }}">
+        {% if item.checked %}<i class="bi bi-check-lg"></i>{% else %}<i class="bi bi-circle"></i>{% endif %}
+      </div>
+      <div class="item-info">
+        <div class="item-name">{{ item.name }}</div>
+        {% if item.detail %}
+        <div class="item-detail">{{ item.detail }}</div>
+        {% endif %}
+      </div>
+      <div class="item-qr no-print" onclick="mostrarQR('{{ item.qr_b64 }}','{{ item.name }}','{{ item.qr_url }}')"
+           title="Ver QR ampliado">
+        <img src="data:image/png;base64,{{ item.qr_b64 }}" alt="QR {{ item.name }}">
+      </div>
+      <!-- QR visible en impresión -->
+      <div class="item-qr" style="display:none" id="print-qr-{{ item.key }}">
+        <img src="data:image/png;base64,{{ item.qr_b64 }}" alt="QR {{ item.name }}">
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Modal QR ampliado -->
+<div id="qr-modal-overlay" onclick="cerrarQR()">
+  <div id="qr-modal-box" onclick="event.stopPropagation()">
+    <img id="qr-modal-img" src="" alt="QR">
+    <div class="qr-label" id="qr-modal-label"></div>
+    <div class="qr-url" id="qr-modal-url"></div>
+    <button class="btn btn-ghost btn-sm mt-3 no-print" onclick="cerrarQR()">Cerrar</button>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const MID = {{ maquina.id }};
+const SID = {{ salida.id }};
+const TOTAL = {{ total_items }};
+const ES_HERRAMIENTA = {{ 'true' if es_herramienta else 'false' }};
+const ESTADO_URL = ES_HERRAMIENTA
+  ? `/herramienta/${MID}/salida/${SID}/estado`
+  : `/maquinaria/${MID}/salida/${SID}/estado`;
+
+function mostrarQR(b64, nombre, url) {
+  document.getElementById('qr-modal-img').src = 'data:image/png;base64,' + b64;
+  document.getElementById('qr-modal-label').textContent = nombre;
+  document.getElementById('qr-modal-url').textContent = url;
+  document.getElementById('qr-modal-overlay').classList.add('show');
+}
+function cerrarQR() {
+  document.getElementById('qr-modal-overlay').classList.remove('show');
+}
+
+// Polling cada 3 segundos para actualizar estados
+let yaCompleto = {{ 'true' if completo else 'false' }};
+
+async function pollEstado() {
+  try {
+    const r = await fetch(ESTADO_URL);
+    const data = await r.json();
+    let marcados = 0;
+    for (const [key, checked] of Object.entries(data.items)) {
+      const row  = document.getElementById('row-' + key);
+      const icon = document.getElementById('icon-' + key);
+      if (!row || !icon) continue;
+      if (checked) {
+        marcados++;
+        row.classList.add('checked');
+        icon.classList.remove('unchecked');
+        icon.classList.add('is-checked');
+        icon.innerHTML = '<i class="bi bi-check-lg"></i>';
+      }
+    }
+    document.getElementById('cnt-checked').textContent = marcados;
+    const pct = TOTAL > 0 ? (marcados / TOTAL * 100) : 0;
+    document.getElementById('progress-bar').style.width = pct + '%';
+
+    if (data.estado === 'completada' && !yaCompleto) {
+      yaCompleto = true;
+    }
+  } catch(e) { /* red ocupada */ }
+}
+
+// Arrancar polling solo si salida activa
+{% if salida.estado == 'en_proceso' %}
+setInterval(pollEstado, 3000);
+{% endif %}
+
+// Mostrar QR en impresión
+window.addEventListener('beforeprint', () => {
+  document.querySelectorAll('[id^="print-qr-"]').forEach(el => el.style.display = '');
+  document.querySelectorAll('.item-qr.no-print').forEach(el => el.style.display = 'none');
+});
+window.addEventListener('afterprint', () => {
+  document.querySelectorAll('[id^="print-qr-"]').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('.item-qr.no-print').forEach(el => el.style.display = '');
+});
+</script>
+{% endblock %}

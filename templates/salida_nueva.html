@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Nueva salida — {{ maquina.nombre }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+{% if es_herramienta %}
+<a href="/herramientas">Herramientas</a><span class="sep">/</span>
+<a href="/herramientas/{{ maquina.id }}">{{ maquina.nombre }}</a><span class="sep">/</span>
+{% else %}
+<a href="/maquinaria">Maquinaria</a><span class="sep">/</span>
+<a href="/maquinaria/{{ maquina.id }}/pasaporte">{{ maquina.nombre }}</a><span class="sep">/</span>
+{% endif %}
+<span class="current">Nueva salida</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">Nueva ficha de salida</div>
+    <div class="page-subtitle">{{ maquina.nombre }} · {{ maquina.tipo or '' }}</div>
+  </div>
+</div>
+
+<div class="card" style="max-width:640px">
+  <div class="card-body" style="padding:24px">
+    <form method="post" action="{% if es_herramienta %}/herramienta/{{ maquina.id }}/salida/crear{% else %}/maquinaria/{{ maquina.id }}/salida/crear{% endif %}">
+
+      {% if es_geda %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Modelo</label>
+        <div class="d-flex gap-2">
+          <label class="btn btn-outline-primary" id="btn-120s">
+            <input type="radio" name="subtipo" value="120s" required> GEDA MAXI 120S
+          </label>
+          <label class="btn btn-outline-primary" id="btn-150s">
+            <input type="radio" name="subtipo" value="150s"> GEDA MAXI 150S
+          </label>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label">Obra / Destino</label>
+          <input type="text" name="obra" class="form-control mrd-input" placeholder="Nombre de obra o dirección">
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Conductor / Transportista</label>
+          <input type="text" name="conductor" class="form-control mrd-input">
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Responsable en patio</label>
+          <input type="text" name="responsable_patio" class="form-control mrd-input">
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Jefe de obra</label>
+          <input type="text" name="jefe_obra" class="form-control mrd-input">
+        </div>
+
+        {% if es_alimak %}
+        <div class="col-sm-6">
+          <label class="form-label">Kit de altura</label>
+          <select name="kit_altura" class="form-control mrd-input" id="sel-kit">
+            <option value="">Seleccionar…</option>
+            <option value="18">Kit 18 m</option>
+            <option value="36">Kit 36 m</option>
+            <option value="42">Kit 42 m</option>
+            <option value="sueltos">Tramos sueltos</option>
+          </select>
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label">Nº tramos</label>
+          <input type="number" name="n_tramos" id="n-tramos" class="form-control mrd-input" min="0" placeholder="—">
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label">Cable (mm²)</label>
+          <select name="cable_diametro" class="form-control mrd-input">
+            <option value="">—</option>
+            <option value="4">4 mm²</option>
+            <option value="6">6 mm²</option>
+          </select>
+        </div>
+        {% endif %}
+
+        <div class="col-12">
+          <label class="form-label">Observaciones</label>
+          <textarea name="observaciones" class="form-control mrd-input" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 mt-4">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-clipboard2-check me-1"></i> Crear ficha de salida
+        </button>
+        <a href="{% if es_herramienta %}/herramientas/{{ maquina.id }}{% else %}/maquinaria/{{ maquina.id }}/pasaporte{% endif %}" class="btn btn-ghost">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+{% if es_alimak %}
+const TRAMOS = {'18':9,'36':18,'42':21};
+document.getElementById('sel-kit').addEventListener('change', function(){
+  const t = TRAMOS[this.value];
+  document.getElementById('n-tramos').value = t || '';
+});
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+{% block title %}Nueva herramienta{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/herramientas">Herramientas</a><span class="sep">/</span>
+<span class="current">Nueva herramienta</span>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">Nueva herramienta</div>
+    <div class="page-subtitle">Completa los datos para registrar una nueva herramienta en el sistema</div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/herramientas" class="btn btn-outline btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
+  </div>
+</div>
+
+{% if scan_origen %}
+<div style="background:var(--success-light);border:1px solid var(--success);border-radius:8px;padding:12px 16px;margin-bottom:16px;color:var(--success);font-size:.84rem;display:flex;align-items:center;gap:8px">
+  <i class="bi bi-upc-scan"></i>
+  <span>Código escaneado pre-rellenado. Completa el nombre y demás datos para registrar la herramienta.</span>
+</div>
+{% endif %}
+
+{% if error %}
+<div style="background:var(--danger-light);border:1px solid var(--danger);border-radius:8px;padding:12px 16px;margin-bottom:16px;color:var(--danger);font-size:.84rem;display:flex;align-items:center;gap:8px">
+  <i class="bi bi-exclamation-circle-fill"></i> {{ error }}
+</div>
+{% endif %}
+
+<form method="post" action="/herramientas/nueva" enctype="multipart/form-data" id="form-herramienta">
+
+  <div style="display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start">
+
+    <!-- Formulario principal -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+
+      <!-- Identificación -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-fingerprint"></i> Identificación</div>
+        </div>
+        <div class="card-body">
+          <div class="form-row form-row-2">
+            <div class="form-group">
+              <label class="form-label">Referencia interna</label>
+              <input type="text" class="form-control" value="Automática al guardar" readonly
+                     aria-label="La referencia interna se genera automáticamente">
+              <div class="form-hint">Solo el programa puede crearla, evitando duplicados y solapes.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Número de serie</label>
+              <div style="position:relative">
+                <input type="text" name="num_serie" id="num-serie-input" class="form-control" placeholder="SN123456"
+                       value="{{ prefill_num_serie or '' }}"
+                       oninput="verificarSerie(this.value)">
+                <span id="serie-status" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:.8rem"></span>
+              </div>
+              <div id="serie-aviso" style="font-size:.78rem;color:var(--danger);margin-top:3px;display:none">
+                <i class="bi bi-exclamation-circle"></i> Número de serie ya registrado.
+                <a id="serie-link" href="#" target="_blank" style="color:var(--danger)">Ver herramienta</a>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nombre <span class="required">*</span></label>
+            <input type="text" name="nombre" class="form-control" placeholder="Ej: Taladro percutor Hilti TE-700" required autofocus>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Descripción</label>
+            <textarea name="descripcion" class="form-control" rows="2" placeholder="Descripción técnica opcional..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Clasificación -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-folder"></i> Clasificación</div>
+        </div>
+        <div class="card-body">
+          <div class="form-row form-row-3">
+            <div class="form-group">
+              <label class="form-label">Categoría <span class="required">*</span></label>
+              <select name="categoria" class="form-control" required>
+                <option value="">Seleccionar...</option>
+                {% for cat in categorias %}
+                <option value="{{ cat }}">{{ cat }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Subcategoría</label>
+              <input type="text" name="subcategoria" class="form-control" placeholder="Opcional">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Familia</label>
+              <input type="text" name="familia" class="form-control" placeholder="Opcional">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Datos técnicos -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-cpu"></i> Datos técnicos</div>
+        </div>
+        <div class="card-body">
+          <div class="form-row form-row-3">
+            <div class="form-group">
+              <label class="form-label">Marca</label>
+              <input type="text" name="marca" class="form-control" placeholder="Hilti, Bosch, Makita...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Modelo</label>
+              <input type="text" name="modelo" class="form-control" placeholder="TE-700">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Fabricante</label>
+              <input type="text" name="fabricante" class="form-control">
+            </div>
+          </div>
+          <div class="form-row" style="grid-template-columns:repeat(4,1fr)">
+            <div class="form-group">
+              <label class="form-label">Potencia</label>
+              <input type="text" name="potencia" class="form-control" placeholder="800W">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Voltaje</label>
+              <input type="text" name="voltaje" class="form-control" placeholder="230V">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Peso (kg)</label>
+              <input type="number" name="peso" class="form-control" step="0.1" placeholder="3.5">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Color</label>
+              <input type="text" name="color" class="form-control" placeholder="Rojo">
+            </div>
+          </div>
+          <div class="form-row form-row-3">
+            <div class="form-group">
+              <label class="form-label">Dimensiones</label>
+              <input type="text" name="dimensiones" class="form-control" placeholder="30x15x10 cm">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nº activo fijo</label>
+              <input type="text" name="activo_fijo" class="form-control" placeholder="AF-2024-001">
+              <div class="form-hint">Número de inmovilizado contable</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Vida útil (años)</label>
+              <input type="number" name="vida_util_anos" class="form-control" min="1" max="50" placeholder="10">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Adquisición -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-receipt"></i> Adquisición</div>
+        </div>
+        <div class="card-body">
+          <div class="form-row form-row-3">
+            <div class="form-group">
+              <label class="form-label">Fecha de compra</label>
+              <input type="date" name="fecha_compra" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Precio de compra (€)</label>
+              <input type="number" name="precio_compra" class="form-control" step="0.01" placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Garantía hasta</label>
+              <input type="date" name="garantia_hasta" class="form-control">
+            </div>
+          </div>
+          <div class="form-row form-row-2">
+            <div class="form-group">
+              <label class="form-label">Proveedor</label>
+              <input type="text" name="proveedor_texto" class="form-control" placeholder="Nombre del proveedor"
+                     list="lista-proveedores">
+              <datalist id="lista-proveedores">
+                {% for p in proveedores %}
+                <option value="{{ p.nombre }}">
+                {% endfor %}
+              </datalist>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Número de factura</label>
+              <input type="text" name="numero_factura" class="form-control" placeholder="FAC-2024-001">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ubicación inicial -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-geo-alt"></i> Ubicación inicial</div>
+        </div>
+        <div class="card-body">
+          <div class="form-row form-row-2">
+            <div class="form-group">
+              <label class="form-label">Almacén</label>
+              <select name="almacen_id" class="form-control">
+                <option value="">Almacén principal automático</option>
+                {% for almacen in almacenes %}
+                <option value="{{ almacen.id }}" {% if almacen_principal_id == almacen.id %}selected{% endif %}>{{ almacen.nombre }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Descripción de ubicación</label>
+              <input type="text" name="ubicacion_texto" class="form-control" placeholder="Estantería A-3">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Observaciones -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-chat-text"></i> Observaciones</div>
+        </div>
+        <div class="card-body">
+          <textarea name="observaciones" class="form-control" rows="3"
+                    placeholder="Notas adicionales, estado inicial, defectos conocidos..."></textarea>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-upc-scan"></i> Tipo de seguimiento QR</div>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:10px">
+            <input type="radio" name="tipo_seguimiento" value="individual" checked>
+            <div><strong>Individual</strong><div style="font-size:.78rem;color:var(--text-muted)">Código único por pieza física. Seguimiento nominal.</div></div>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:10px">
+            <input type="radio" name="tipo_seguimiento" value="generico">
+            <div><strong>Genérico (cantidad)</strong><div style="font-size:.78rem;color:var(--text-muted)">Un QR para el tipo. Al escanear se pide cantidad (consumibles, herramienta de uso múltiple).</div></div>
+          </label>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Panel lateral -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+
+      <!-- Foto -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-camera"></i> Fotografía</div>
+        </div>
+        <div class="card-body" style="text-align:center">
+          <div id="foto-preview" style="width:100%;height:180px;background:var(--surface-2);border:2px dashed var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;overflow:hidden;cursor:pointer" onclick="document.getElementById('foto-input').click()">
+            <div style="text-align:center;color:var(--text-muted)">
+              <i class="bi bi-camera" style="font-size:2rem;display:block;margin-bottom:6px"></i>
+              <span style="font-size:.78rem">Haz clic para añadir foto</span>
+            </div>
+          </div>
+          <input type="file" name="foto" id="foto-input" accept="image/*" style="display:none"
+                 onchange="previewFoto(this)">
+          <button type="button" class="btn btn-outline btn-sm w-100" onclick="document.getElementById('foto-input').click()">
+            <i class="bi bi-upload"></i> Seleccionar imagen
+          </button>
+        </div>
+      </div>
+
+      <!-- Resumen y submit -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-check-circle"></i> Guardar</div>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+          <button type="submit" class="btn btn-primary w-100" id="btn-guardar">
+            <i class="bi bi-floppy"></i> Guardar herramienta
+          </button>
+          <button type="submit" name="redirect" value="nueva" class="btn btn-outline w-100">
+            <i class="bi bi-plus-circle"></i> Guardar y añadir otra
+          </button>
+          <a href="/herramientas" class="btn btn-ghost w-100">
+            <i class="bi bi-x"></i> Cancelar
+          </a>
+        </div>
+      </div>
+
+      <!-- Vista previa QR -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-qr-code"></i> Vista previa QR</div>
+        </div>
+        <div class="card-body" style="text-align:center">
+          <div id="qr-preview-container" style="display:flex;align-items:center;justify-content:center;height:120px;background:var(--surface-2);border-radius:8px">
+            <span style="font-size:.78rem;color:var(--text-muted)">El QR se generará al guardar</span>
+          </div>
+          <div id="qr-preview-code" style="font-size:.72rem;color:var(--text-muted);margin-top:6px"></div>
+        </div>
+      </div>
+
+      <!-- Campos obligatorios -->
+      <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:.78rem;color:var(--text-muted)">
+        <i class="bi bi-info-circle"></i>
+        Los campos marcados con <span style="color:var(--danger)">*</span> son obligatorios.
+        El código se genera automáticamente.
+      </div>
+    </div>
+
+  </div>
+
+</form>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function previewFoto(input) {
+  if (!input.files.length) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const preview = document.getElementById('foto-preview');
+    preview.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`;
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+// Validar número de serie duplicado
+let serieTimer;
+async function verificarSerie(val) {
+  clearTimeout(serieTimer);
+  const aviso = document.getElementById('serie-aviso');
+  const status = document.getElementById('serie-status');
+  if (!val || val.length < 3) {
+    aviso.style.display = 'none';
+    status.textContent = '';
+    return;
+  }
+  serieTimer = setTimeout(async () => {
+    try {
+      // Usamos id=0 para nueva herramienta (excluir ninguna)
+      const r = await fetch(`/api/herramientas/0/check_serie?serie=${encodeURIComponent(val)}`);
+      const d = await r.json();
+      if (d.duplicado) {
+        aviso.style.display = 'block';
+        document.getElementById('serie-link').href = `/herramientas/${d.id_existente}`;
+        status.innerHTML = '<i class="bi bi-x-circle-fill" style="color:var(--danger)"></i>';
+      } else {
+        aviso.style.display = 'none';
+        status.innerHTML = '<i class="bi bi-check-circle-fill" style="color:var(--success)"></i>';
+      }
+    } catch { /* silent */ }
+  }, 500);
+}
+
+document.getElementById('form-herramienta').addEventListener('submit', function(e) {
+  const btn = document.getElementById('btn-guardar');
+  setSubmitting(btn, true);
+});
+</script>
+{% endblock %}

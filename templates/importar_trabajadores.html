@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Importar trabajadores — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <h2 class="mrd-page-title"><i class="bi bi-people me-2"></i>Importar trabajadores</h2>
+  <div class="d-flex gap-2">
+    <a href="/trabajadores/importar/plantilla" class="btn btn-outline-success mrd-btn">
+      <i class="bi bi-download me-1"></i>Descargar plantilla
+    </a>
+    <a href="/trabajadores" class="btn btn-outline-secondary mrd-btn">
+      <i class="bi bi-arrow-left me-1"></i>Volver
+    </a>
+  </div>
+</div>
+
+{% if resultado %}
+<!-- ── Resultado de la importación ── -->
+<div class="mrd-card mb-4">
+  <h5 class="mb-3"><i class="bi bi-clipboard-check me-2 text-success"></i>Resultado de la importación</h5>
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="mrd-card text-center p-3" style="border-left:4px solid var(--success)">
+        <div style="font-size:2rem;font-weight:800;color:var(--success)">{{ resultado.creados }}</div>
+        <div class="text-muted small">Nuevos</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="mrd-card text-center p-3" style="border-left:4px solid var(--primary)">
+        <div style="font-size:2rem;font-weight:800;color:var(--primary)">{{ resultado.actualizados }}</div>
+        <div class="text-muted small">Actualizados</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="mrd-card text-center p-3" style="border-left:4px solid var(--danger)">
+        <div style="font-size:2rem;font-weight:800;color:var(--danger)">{{ resultado.errores | length }}</div>
+        <div class="text-muted small">Errores</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="mrd-card text-center p-3" style="border-left:4px solid var(--gray)">
+        <div style="font-size:2rem;font-weight:800;color:var(--gray)">{{ resultado.filas_procesadas }}</div>
+        <div class="text-muted small">Filas procesadas</div>
+      </div>
+    </div>
+  </div>
+
+  {% if resultado.errores %}
+  <div class="alert alert-warning">
+    <strong><i class="bi bi-exclamation-triangle me-1"></i>Errores encontrados:</strong>
+    <ul class="mb-0 mt-2">
+      {% for e in resultado.errores %}
+      <li>{{ e }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if resultado.creados > 0 or resultado.actualizados > 0 %}
+  <div class="alert alert-success">
+    <i class="bi bi-check-circle me-1"></i>
+    Importación completada: <strong>{{ resultado.creados }}</strong> nuevos,
+    <strong>{{ resultado.actualizados }}</strong> actualizados.
+  </div>
+  {% endif %}
+
+  <div class="d-flex gap-2 mt-2">
+    <a href="/trabajadores" class="btn btn-primary mrd-btn">
+      <i class="bi bi-people me-1"></i>Ver trabajadores
+    </a>
+    <a href="/trabajadores/importar" class="btn btn-outline-secondary mrd-btn">
+      <i class="bi bi-upload me-1"></i>Importar otro archivo
+    </a>
+  </div>
+</div>
+
+{% else %}
+<!-- ── Formulario de carga ── -->
+<div class="row g-4">
+  <div class="col-12 col-lg-7">
+    <div class="mrd-card">
+      <h5 class="mb-3"><i class="bi bi-upload me-2 text-primary"></i>Subir archivo Excel</h5>
+      <form method="post" enctype="multipart/form-data" id="formImportar">
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Archivo Excel (.xlsx)</label>
+          <input type="file" name="archivo" accept=".xlsx,.xls" class="form-control mrd-input" required id="inputArchivo">
+          <div class="form-text">El archivo puede contener trabajadores nuevos y/o existentes (por DNI o código).</div>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary mrd-btn" id="btnImportar">
+            <i class="bi bi-upload me-1"></i>Importar
+          </button>
+          <a href="/trabajadores/importar/plantilla" class="btn btn-outline-success mrd-btn">
+            <i class="bi bi-download me-1"></i>Plantilla
+          </a>
+        </div>
+      </form>
+
+      <div id="progreso" class="mt-3" style="display:none">
+        <div class="d-flex align-items-center gap-2 text-muted">
+          <div class="spinner-border spinner-border-sm"></div>
+          <span>Procesando archivo...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="mrd-card">
+      <h6 class="mb-3"><i class="bi bi-info-circle me-2 text-info"></i>Instrucciones</h6>
+      <ul class="list-unstyled small" style="color:var(--text-2)">
+        <li class="mb-2"><i class="bi bi-check2 text-success me-1"></i><strong>nombre</strong> — obligatorio en cada fila</li>
+        <li class="mb-2"><i class="bi bi-check2 text-success me-1"></i><strong>dni</strong> — si ya existe, actualiza ese trabajador</li>
+        <li class="mb-2"><i class="bi bi-check2 text-success me-1"></i><strong>codigo</strong> — alternativa de identificación si no hay DNI</li>
+        <li class="mb-2"><i class="bi bi-check2 text-success me-1"></i>Si no coincide ningún campo, se crea un nuevo trabajador</li>
+        <li class="mb-2"><i class="bi bi-check2 text-success me-1"></i>Los trabajadores existentes <strong>no se eliminan</strong></li>
+        <li class="mb-2"><i class="bi bi-check2 text-success me-1"></i>Columna <strong>activo</strong>: si/no o 1/0</li>
+      </ul>
+      <hr>
+      <p class="small text-muted mb-0">
+        <i class="bi bi-download me-1"></i>
+        <a href="/trabajadores/importar/plantilla" class="text-decoration-none">Descarga la plantilla</a>
+        para ver el formato exacto con un ejemplo.
+      </p>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<script>
+document.getElementById('formImportar')?.addEventListener('submit', function() {
+  document.getElementById('btnImportar').disabled = true;
+  document.getElementById('progreso').style.display = 'block';
+});
+</script>
+{% endblock %}

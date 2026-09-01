@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Documentación — {{ trabajador.nombre_completo }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <a href="/trabajadores/{{ trabajador.id }}/epis" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Volver
+  </a>
+  <div>
+    <h4 class="mb-0"><i class="bi bi-file-earmark-person-fill text-primary me-2"></i>Documentación del Trabajador</h4>
+    <small class="text-muted">{{ trabajador.nombre_completo }}</small>
+  </div>
+  <button class="btn btn-primary btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#modalNuevo">
+    <i class="bi bi-plus-lg"></i> Añadir documento
+  </button>
+</div>
+
+{% if ok %}
+<div class="alert alert-success alert-dismissible fade show py-2">
+  {% if ok == "creado" %}Documento añadido.{% elif ok == "eliminado" %}Documento eliminado.{% endif %}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{% if documentos %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-dark">
+      <tr>
+        <th>Tipo</th>
+        <th>Número</th>
+        <th>Emisión</th>
+        <th>Caducidad</th>
+        <th>Estado</th>
+        <th>Notas</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in documentos %}
+      {% set dias = d.dias_para_caducidad %}
+      <tr class="{% if d.caducado %}table-danger{% elif dias is not none and dias <= 30 %}table-warning{% endif %}">
+        <td class="fw-semibold">{{ d.tipo }}</td>
+        <td>{{ d.numero or "—" }}</td>
+        <td>{{ d.fecha_emision.strftime("%d/%m/%Y") if d.fecha_emision else "—" }}</td>
+        <td>
+          {{ d.fecha_caducidad.strftime("%d/%m/%Y") if d.fecha_caducidad else "—" }}
+          {% if d.caducado %}<span class="badge bg-danger ms-1">VENCIDO</span>
+          {% elif dias is not none and dias <= 30 %}<span class="badge bg-warning text-dark ms-1">{{ dias }}d</span>{% endif %}
+        </td>
+        <td>
+          {% if not d.fecha_caducidad %}<span class="badge bg-secondary">Indefinido</span>
+          {% elif d.caducado %}<span class="badge bg-danger">Caducado</span>
+          {% elif dias <= 30 %}<span class="badge bg-warning text-dark">Por vencer</span>
+          {% else %}<span class="badge bg-success">Vigente</span>{% endif %}
+        </td>
+        <td><small>{{ d.notas or "—" }}</small></td>
+        <td>
+          <form method="post" action="/trabajadores/{{ trabajador.id }}/documentos/{{ d.id }}/eliminar"
+                onsubmit="return confirm('¿Eliminar este documento?')">
+            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="bi bi-file-earmark-person display-4 d-block mb-2 opacity-25"></i>
+  No hay documentos registrados.
+</div>
+{% endif %}
+
+<!-- Modal nuevo documento -->
+<div class="modal fade" id="modalNuevo" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="/trabajadores/{{ trabajador.id }}/documentos" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-file-earmark-plus me-2"></i>Añadir Documento</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Tipo <span class="text-danger">*</span></label>
+          <select name="tipo" class="form-select" required>
+            <option value="">— Seleccionar —</option>
+            {% for tipo in tipos_documento %}<option value="{{ tipo }}">{{ tipo }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Número / Referencia</label>
+          <input type="text" name="numero" class="form-control" placeholder="Ej: 12345678A">
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label">Fecha de emisión</label>
+            <input type="date" name="fecha_emision" class="form-control">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Fecha de caducidad</label>
+            <input type="date" name="fecha_caducidad" class="form-control">
+          </div>
+        </div>
+        <div class="mb-1">
+          <label class="form-label">Notas</label>
+          <textarea name="notas" class="form-control" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

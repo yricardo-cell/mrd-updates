@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Automatizaciones — {{ app_name }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<span class="current">Automatizaciones</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title"><i class="bi bi-lightning-charge" style="color:var(--primary)"></i> Automatizaciones</div>
+    <div class="page-subtitle">Reglas activas que monitorean el sistema y ejecutan acciones</div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <a href="/avisos" class="btn btn-outline btn-sm" style="position:relative">
+      <i class="bi bi-bell"></i> Avisos
+      {% if avisos_sin_leer > 0 %}
+      <span style="position:absolute;top:-6px;right:-6px;background:var(--danger);color:#fff;border-radius:50%;font-size:.65rem;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:700">{{ avisos_sin_leer }}</span>
+      {% endif %}
+    </a>
+    <a href="/automatizaciones/nueva" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg"></i> Nueva regla
+    </a>
+  </div>
+</div>
+
+<!-- KPI por estado -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:20px">
+  {% set estado_colores = {'activa':'success','inactiva':'secondary','pausada':'warning','error':'danger','archivada':'dark'} %}
+  {% set estado_iconos = {'activa':'bi-lightning-charge-fill','inactiva':'bi-pause-circle','pausada':'bi-pause-fill','error':'bi-exclamation-triangle-fill','archivada':'bi-archive-fill'} %}
+  {% for key, label in estados_auto.items() %}
+  {% if key != 'archivada' %}
+  <a href="/automatizaciones?estado={{ key }}" style="text-decoration:none">
+    <div class="card" style="padding:14px;text-align:center;{% if filtro_estado == key %}border:2px solid var(--primary){% endif %}">
+      <div style="font-size:1.6rem;font-weight:800;color:var(--primary)">{{ total_por_estado[key] }}</div>
+      <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">{{ label }}</div>
+    </div>
+  </a>
+  {% endif %}
+  {% endfor %}
+</div>
+
+<!-- Filtro -->
+<div class="card" style="margin-bottom:16px">
+  <div class="card-body" style="padding:12px">
+    <form method="get" action="/automatizaciones" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input type="text" name="q" class="form-control" placeholder="Buscar por nombre..." value="{{ filtro_q }}" style="max-width:280px">
+      <select name="estado" class="form-control" style="max-width:180px">
+        <option value="">Todos los estados</option>
+        {% for key, label in estados_auto.items() %}
+        <option value="{{ key }}" {% if filtro_estado == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+      {% if filtro_estado or filtro_q %}
+      <a href="/automatizaciones" class="btn btn-ghost btn-sm">Limpiar</a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- Tabla -->
+<div class="card">
+  <div class="card-body" style="padding:0">
+    {% if items %}
+    <table class="table" style="margin:0">
+      <thead>
+        <tr>
+          <th>Nombre / Descripción</th>
+          <th>Disparador</th>
+          <th>Estado</th>
+          <th>Última ejecución</th>
+          <th>Acciones</th>
+          <th style="width:80px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for auto in items %}
+        {% set bc = estado_colores.get(auto.estado, 'secondary') %}
+        <tr onclick="location.href='/automatizaciones/{{ auto.id }}'" style="cursor:pointer">
+          <td>
+            <div style="font-weight:600;display:flex;align-items:center;gap:6px">
+              <i class="bi {{ estado_iconos.get(auto.estado, 'bi-circle') }}" style="color:var(--{% if bc == 'success' %}success{% elif bc == 'danger' %}danger{% elif bc == 'warning' %}warning{% else %}text-muted{% endif %})"></i>
+              {{ auto.nombre }}
+            </div>
+            {% if auto.descripcion %}
+            <div style="font-size:.78rem;color:var(--text-muted)">{{ auto.descripcion | truncate(60) }}</div>
+            {% endif %}
+          </td>
+          <td style="font-size:.82rem">
+            <span class="badge bg-secondary">{{ tipos_disparador.get(auto.tipo_disparador, auto.tipo_disparador) }}</span>
+          </td>
+          <td>
+            <span class="badge bg-{{ bc }}">{{ estados_auto.get(auto.estado, auto.estado) }}</span>
+          </td>
+          <td style="font-size:.8rem;color:var(--text-muted)">
+            {% if auto.ultima_ejecucion %}
+            {{ auto.ultima_ejecucion.strftime('%d/%m/%Y %H:%M') }}
+            {% if auto.ultimo_resultado %}
+            <br><span class="badge bg-{% if auto.ultimo_resultado == 'ok' %}success{% elif auto.ultimo_resultado == 'error' %}danger{% else %}secondary{% endif %} mt-1" style="font-size:.68rem">{{ auto.ultimo_resultado }}</span>
+            {% endif %}
+            {% else %}
+            <span class="text-muted">Nunca</span>
+            {% endif %}
+          </td>
+          <td style="font-size:.82rem">
+            <div>Ejecuciones: <strong>{{ auto.total_ejecuciones or 0 }}</strong></div>
+            <div style="font-size:.75rem;color:var(--text-muted)">Acciones: {{ auto.total_acciones or 0 }}</div>
+          </td>
+          <td>
+            <a href="/automatizaciones/{{ auto.id }}" class="btn btn-ghost btn-sm" onclick="event.stopPropagation()">
+              <i class="bi bi-arrow-right"></i>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="text-align:center;padding:56px;color:var(--text-muted)">
+      <i class="bi bi-lightning-charge" style="font-size:2.5rem;display:block;margin-bottom:12px;opacity:.4"></i>
+      <div style="font-size:1rem;font-weight:600;margin-bottom:6px">No hay automatizaciones{% if filtro_q or filtro_estado %} con ese filtro{% endif %}</div>
+      <div style="font-size:.84rem;margin-bottom:18px">Crea tu primera regla para automatizar alertas y avisos del sistema.</div>
+      <a href="/automatizaciones/nueva" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg"></i> Crear primera automatización
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Info Sprint 4.1 -->
+<div style="margin-top:20px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:16px 20px">
+  <div style="font-size:.82rem;color:var(--text-muted);display:flex;align-items:flex-start;gap:10px">
+    <i class="bi bi-info-circle" style="color:var(--primary);font-size:1rem;flex-shrink:0;margin-top:1px"></i>
+    <div>
+      <strong>Sprint 4.1 — Motor de Automatizaciones:</strong>
+      Disparadores disponibles: <em>Cada N minutos</em>, <em>Diario a una hora</em>, <em>Solo manual</em>.
+      Condiciones: herramientas entregadas, reparaciones retrasadas, ITV próxima, maquinaria sin movimiento.
+      Acciones: crear aviso, registrar log. El scheduler se ejecuta cada 60 segundos en segundo plano.
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+{% block title %}Surtidor — MRD Tool{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h1 class="page-title"><i class="bi bi-fuel-pump-fill text-warning"></i> Surtidor</h1>
+    <p class="page-subtitle">Surtidor interno de la nave — furgonetas y maquinaria</p>
+  </div>
+  <div class="page-header-actions">
+    <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#modalRepostaje">
+      <i class="bi bi-plus-lg"></i> Nuevo registro
+    </button>
+  </div>
+</div>
+
+{# ── Stock del depósito ── #}
+{% set stock_pct = [[(stock_actual / 1000 * 100)|round(0)|int, 0]|max, 100]|min %}
+{% set stock_color = 'danger' if stock_actual < 100 else ('warning' if stock_actual < 300 else 'success') %}
+<div class="card mb-4">
+  <div class="card-body py-3">
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      <div class="text-muted small fw-semibold text-uppercase" style="min-width:120px">
+        <i class="bi bi-droplet-fill text-{{ stock_color }} me-1"></i> Stock depósito
+      </div>
+      <div class="flex-grow-1">
+        <div class="progress" style="height:22px; border-radius:8px;">
+          <div class="progress-bar bg-{{ stock_color }} fw-bold"
+               style="width:{{ stock_pct }}%; font-size:.85rem;">
+            {{ stock_actual | round(1) }} L
+          </div>
+        </div>
+        <div class="d-flex justify-content-between mt-1">
+          <small class="text-muted">0 L</small>
+          <small class="text-muted">Depósito nominal: 1.000 L</small>
+        </div>
+      </div>
+      <div class="text-end">
+        <div class="fs-3 fw-bold text-{{ stock_color }}">{{ stock_actual | round(1) }} L</div>
+        <div class="text-muted small">disponibles</div>
+      </div>
+    </div>
+    {% if stock_actual < 100 %}
+    <div class="alert alert-danger py-1 mb-0 mt-2">
+      <i class="bi bi-exclamation-triangle-fill me-1"></i>
+      <strong>Nivel bajo.</strong> Registra una compra para reponer el depósito.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Albarán del último repostaje ── #}
+{% if albaran_id %}
+<div class="alert alert-success alert-dismissible fade show mb-3">
+  <i class="bi bi-check-circle-fill me-2"></i>
+  <strong>Repostaje guardado.</strong>
+  <a href="/surtidor/{{ albaran_id }}/albaran" class="btn btn-sm btn-success ms-3" target="_blank">
+    <i class="bi bi-file-earmark-pdf me-1"></i> Descargar albarán PDF
+  </a>
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% elif request.query_params.get('ok') == 'compra' %}
+<div class="alert alert-info alert-dismissible fade show py-2 mb-3">
+  <i class="bi bi-cart-check me-2"></i>Compra de combustible registrada. El stock del depósito se ha actualizado.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% elif request.query_params.get('ok') == 'eliminado' %}
+<div class="alert alert-warning alert-dismissible fade show py-2 mb-3">
+  <i class="bi bi-trash me-2"></i>Registro eliminado.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{# ── Filtro de mes ── #}
+<form method="get" class="d-flex gap-2 align-items-center mb-4">
+  <select name="mes" class="form-select form-select-sm w-auto">
+    {% for i in range(1,13) %}
+    <option value="{{ i }}" {% if i == mes_sel %}selected{% endif %}>{{ meses_nombres[i-1] }}</option>
+    {% endfor %}
+  </select>
+  <select name="anio" class="form-select form-select-sm w-auto">
+    {% for a in anios_rango %}
+    <option value="{{ a }}" {% if a == anio_sel %}selected{% endif %}>{{ a }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn btn-ghost btn-sm" type="submit"><i class="bi bi-funnel"></i> Filtrar</button>
+</form>
+
+{# ── KPIs del mes ── #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="fs-2 fw-bold text-warning">{{ litros_mes | round(1) }} L</div>
+        <div class="text-muted small">Dispensado — {{ mes_label }} {{ anio_sel }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="fs-2 fw-bold text-info">{{ comprado_mes | round(1) }} L</div>
+        <div class="text-muted small">Comprado al proveedor</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="fs-2 fw-bold text-danger">{{ gasto_mes | round(2) }} €</div>
+        <div class="text-muted small">Gasto total</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="fs-2 fw-bold text-success">{{ precio_med }} €/L</div>
+        <div class="text-muted small">Precio medio</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Tabla historial ── #}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="bi bi-list-ul"></i> Historial completo</div>
+  </div>
+  <div class="card-body p-0">
+    {% if todos %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Tipo</th>
+            <th>Activo / Proveedor</th>
+            <th>Combustible</th>
+            <th class="text-end">Litros</th>
+            <th class="text-end">€/L</th>
+            <th class="text-end">Total</th>
+            <th class="text-end">KM</th>
+            <th>Notas</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in todos %}
+          <tr class="{% if r.tipo_registro == 'compra' %}table-info{% endif %}">
+            <td class="text-nowrap">{{ r.fecha.strftime('%d/%m/%Y %H:%M') if r.fecha else '—' }}</td>
+            <td>
+              {% if r.tipo_registro == 'compra' %}
+              <span class="badge bg-info text-dark"><i class="bi bi-cart me-1"></i>Compra</span>
+              {% else %}
+              <span class="badge bg-secondary"><i class="bi bi-fuel-pump me-1"></i>Repostaje</span>
+              {% endif %}
+            </td>
+            <td class="fw-semibold">{{ r.activo_nombre }}</td>
+            <td>
+              {% if r.tipo_combustible == 'gasolina' %}
+              <span class="badge bg-danger">Gasóleo</span>
+              {% else %}
+              <span class="badge bg-dark">Gasoil</span>
+              {% endif %}
+            </td>
+            <td class="text-end fw-bold">{{ r.litros | round(2) }} L</td>
+            <td class="text-end text-muted">{% if r.precio_litro %}{{ "%.3f"|format(r.precio_litro) }} €{% else %}—{% endif %}</td>
+            <td class="text-end fw-semibold">{% if r.total_euros %}{{ "%.2f"|format(r.total_euros) }} €{% else %}—{% endif %}</td>
+            <td class="text-end text-muted small">{% if r.km_actuales %}{{ r.km_actuales }} km{% else %}—{% endif %}</td>
+            <td class="text-muted small">{{ r.notas or '' }}</td>
+            <td class="text-nowrap">
+              {% if r.tipo_registro == 'repostaje' %}
+              <a href="/surtidor/{{ r.id }}/albaran" class="btn btn-ghost btn-sm text-primary" title="Albarán PDF" target="_blank">
+                <i class="bi bi-file-earmark-pdf"></i>
+              </a>
+              {% endif %}
+              <form method="post" action="/surtidor/{{ r.id }}/eliminar" class="d-inline"
+                    onsubmit="return confirm('¿Eliminar este registro?')">
+                <button class="btn btn-ghost btn-sm text-danger" title="Eliminar">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-fuel-pump display-4 d-block mb-2 opacity-25"></i>
+      <p>Sin registros todavía.</p>
+      <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#modalRepostaje">
+        <i class="bi bi-plus-lg"></i> Añadir primero
+      </button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Modal nuevo registro ── #}
+<div class="modal fade" id="modalRepostaje" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="/surtidor/nuevo" id="formSurtidor">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-fuel-pump-fill text-warning"></i> Nuevo registro</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+
+          {# ── Stock actual en el modal ── #}
+          <div class="alert alert-{{ 'danger' if stock_actual < 100 else ('warning' if stock_actual < 300 else 'secondary') }} py-2 mb-3">
+            <i class="bi bi-droplet-fill me-1"></i>
+            Stock depósito actual: <strong>{{ stock_actual | round(1) }} L</strong>
+          </div>
+
+          {# ── Tipo de registro ── #}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">¿Qué vas a registrar?</label>
+            <div class="d-flex gap-3">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="tipo_registro"
+                       id="tipoRepostaje" value="repostaje" checked onchange="toggleTipoRegistro()">
+                <label class="form-check-label" for="tipoRepostaje">
+                  <i class="bi bi-fuel-pump text-warning"></i> <strong>Repostaje</strong> — un vehículo/toro echa combustible
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="tipo_registro"
+                       id="tipoCompra" value="compra" onchange="toggleTipoRegistro()">
+                <label class="form-check-label" for="tipoCompra">
+                  <i class="bi bi-cart text-info"></i> <strong>Compra</strong> — se compra combustible para el depósito
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {# ── Sección activo (solo en repostaje) ── #}
+          <div id="seccionActivo">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">¿Quién echa?</label>
+              <div class="d-flex gap-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="tipo_activo"
+                         id="tipoVehiculo" value="vehiculo" checked onchange="toggleActivo()">
+                  <label class="form-check-label" for="tipoVehiculo">
+                    <i class="bi bi-truck"></i> Furgoneta / Camión
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="tipo_activo"
+                         id="tipoMaquinaria" value="maquinaria" onchange="toggleActivo()">
+                  <label class="form-check-label" for="tipoMaquinaria">
+                    <i class="bi bi-tools"></i> Toro / Carretilla / Maquinaria
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-3" id="divVehiculo">
+              <label class="form-label">Vehículo</label>
+              <select name="vehiculo_id" id="selectVehiculo" class="form-select">
+                <option value="">— Selecciona —</option>
+                {% for v in vehiculos %}
+                <option value="{{ v.id }}">{{ v.matricula }}{% if v.marca %} — {{ v.marca }}{% endif %}{% if v.modelo %} {{ v.modelo }}{% endif %} ({{ v.tipo or 'furgoneta' }})</option>
+                {% endfor %}
+              </select>
+              {% if not vehiculos %}
+              <div class="form-text text-warning">No hay furgonetas/camiones activos. Asegúrate de que el tipo sea "furgoneta" o "camion" en el módulo de vehículos.</div>
+              {% endif %}
+            </div>
+
+            <div class="mb-3 d-none" id="divMaquinaria">
+              <label class="form-label">Maquinaria</label>
+              <select name="maquinaria_id" id="selectMaquinaria" class="form-select">
+                <option value="">— Selecciona —</option>
+                {% for m in maquinarias %}
+                <option value="{{ m.id }}">{{ m.nombre }}{% if m.tipo %} ({{ m.tipo }}){% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          {# ── Proveedor (solo en compra) ── #}
+          <div class="mb-3 d-none" id="seccionProveedor">
+            <label class="form-label">Proveedor / Empresa</label>
+            <input type="text" name="proveedor" class="form-control" placeholder="Nombre del proveedor o empresa">
+          </div>
+
+          {# ── Tipo de combustible ── #}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Tipo de combustible</label>
+            <div class="d-flex gap-3">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="tipo_combustible"
+                       id="combGasoil" value="gasoil" checked>
+                <label class="form-check-label" for="combGasoil">
+                  <span class="badge bg-dark">Gasoil</span>
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="tipo_combustible"
+                       id="combGasolina" value="gasolina">
+                <label class="form-check-label" for="combGasolina">
+                  <span class="badge bg-danger">Gasóleo</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {# ── Datos numéricos ── #}
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label">Litros <span class="text-danger">*</span></label>
+              <input type="number" name="litros" class="form-control" id="inpLitros"
+                     step="0.01" min="0.01" required placeholder="0.00" oninput="recalc()">
+            </div>
+            <div class="col-6">
+              <label class="form-label">€ / litro</label>
+              <input type="number" name="precio_litro" class="form-control" id="inpPrecio"
+                     step="0.001" min="0" placeholder="0.000" oninput="recalc()">
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label">Total €</label>
+              <input type="number" name="total_euros" class="form-control" id="inpTotal"
+                     step="0.01" placeholder="Auto">
+            </div>
+            <div class="col-6" id="divKm">
+              <label class="form-label">KM actuales</label>
+              <input type="number" name="km_actuales" class="form-control" min="0">
+            </div>
+          </div>
+
+          {# ── Preview descuento stock ── #}
+          <div id="previewStock" class="alert alert-secondary py-2 small d-none">
+            <i class="bi bi-calculator me-1"></i>
+            Stock tras repostaje: <strong id="stockTras">—</strong> L
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Notas</label>
+            <textarea name="notas" class="form-control" rows="2"></textarea>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-warning">
+            <i class="bi bi-check-lg"></i> Guardar y generar albarán
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var STOCK_ACTUAL = {{ stock_actual | round(2) }};
+
+function toggleTipoRegistro() {
+  var esRepostaje = document.getElementById('tipoRepostaje').checked;
+  document.getElementById('seccionActivo').classList.toggle('d-none', !esRepostaje);
+  document.getElementById('seccionProveedor').classList.toggle('d-none', esRepostaje);
+  document.getElementById('divKm').classList.toggle('d-none', !esRepostaje);
+  document.getElementById('previewStock').classList.toggle('d-none', !esRepostaje);
+  if (esRepostaje) {
+    document.getElementById('selectVehiculo').required = true;
+    document.getElementById('selectMaquinaria').required = false;
+  } else {
+    document.getElementById('selectVehiculo').required = false;
+    document.getElementById('selectMaquinaria').required = false;
+  }
+  recalc();
+}
+
+function toggleActivo() {
+  var esVehiculo = document.getElementById('tipoVehiculo').checked;
+  document.getElementById('divVehiculo').classList.toggle('d-none', !esVehiculo);
+  document.getElementById('divMaquinaria').classList.toggle('d-none', esVehiculo);
+  document.getElementById('selectVehiculo').required = esVehiculo;
+  document.getElementById('selectMaquinaria').required = !esVehiculo;
+}
+
+function recalc() {
+  var l = parseFloat(document.getElementById('inpLitros').value);
+  var p = parseFloat(document.getElementById('inpPrecio').value);
+  if (!isNaN(l) && !isNaN(p) && l > 0 && p > 0) {
+    document.getElementById('inpTotal').value = (l * p).toFixed(2);
+  }
+  // Preview stock
+  var esRepostaje = document.getElementById('tipoRepostaje').checked;
+  if (esRepostaje && !isNaN(l) && l > 0) {
+    var tras = (STOCK_ACTUAL - l).toFixed(1);
+    document.getElementById('stockTras').textContent = tras;
+    document.getElementById('previewStock').classList.remove('d-none');
+    document.getElementById('previewStock').className =
+      'alert py-2 small ' + (parseFloat(tras) < 0 ? 'alert-danger' : (parseFloat(tras) < 100 ? 'alert-warning' : 'alert-secondary'));
+  }
+}
+
+// Estado inicial
+document.getElementById('selectVehiculo').required = true;
+</script>
+{% endblock %}

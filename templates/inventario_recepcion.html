@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Centro de recepción — {{ app_name }}{% endblock %}
+{% block content %}
+<section class="inventory-v2-hero">
+  <div><span class="inventory-v2-eyebrow">Entrada controlada de almacén</span><h1><i class="bi bi-box-arrow-in-down"></i> Centro de recepción</h1><p>Escanea materiales, consumibles, ropa o EPIs. La entrada actualiza la existencia mediante una sola operación protegida.</p></div>
+  <a class="btn btn-outline-light mrd-btn" href="/inventario/v2"><i class="bi bi-arrow-left"></i> Inventario</a>
+</section>
+
+<div class="inventory-v2-grid">
+  <section class="mrd-card inventory-v2-main">
+    <div class="mrd-card-header"><span>1. Identifica el suministro</span><span id="receipt-mode" class="badge text-bg-primary">Buscar existente</span></div>
+    <div class="mrd-card-body">
+      <div class="input-group input-group-lg">
+        <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+        <input id="receipt-code" class="form-control" autocomplete="off" placeholder="QR, referencia interna o referencia de proveedor">
+        <button id="receipt-search" class="btn btn-primary" type="button">Buscar</button>
+      </div>
+      <button id="receipt-camera-button" class="btn btn-outline-primary mt-3" type="button" hidden><i class="bi bi-camera"></i> Escanear con cámara</button>
+      <video id="receipt-camera" class="inventory-camera mt-3" playsinline hidden></video>
+      <div id="receipt-found" class="inventory-safety-note mt-3" hidden></div>
+      <button id="receipt-new" class="btn btn-link px-0 mt-2" type="button">No existe: dar de alta una variante nueva</button>
+    </div>
+
+    <form id="receipt-form" class="mrd-card-body border-top">
+      <input type="hidden" name="variante_id">
+      <input type="hidden" name="existencia_tipo">
+      <input type="hidden" name="existencia_id">
+      <div id="receipt-new-fields" class="row g-3" hidden>
+        <div class="col-md-5"><label class="form-label">Artículo</label><select name="catalogo_epi_id" class="form-select"><option value="">Seleccionar…</option>{% for item in catalogos %}<option value="{{ item.id }}">{{ item.nombre }} · {{ item.categoria }}</option>{% endfor %}</select></div>
+        <div class="col-md-3"><label class="form-label">Modelo</label><input name="modelo" class="form-control" maxlength="100"></div>
+        <div class="col-md-2"><label class="form-label">Color</label><input name="color" class="form-control" maxlength="50"></div>
+        <div class="col-md-2"><label class="form-label">Talla / medida</label><input name="talla" class="form-control" maxlength="20"></div>
+        <div class="col-md-6"><label class="form-label">Referencia del proveedor</label><input name="referencia_proveedor" class="form-control" maxlength="100"></div>
+        <div class="col-md-3"><label class="form-label">Stock mínimo</label><input name="stock_minimo" type="number" min="0" step="1" value="0" class="form-control"></div>
+        <div class="col-12"><div class="inventory-safety-note"><i class="bi bi-shield-lock"></i><span>La referencia interna y el QR no se escriben aquí: los reserva el servidor sin solapes.</span></div></div>
+      </div>
+      <h2 class="h5 mt-4">2. Datos de la entrada</h2>
+      <div class="row g-3">
+        <div class="col-md-4"><label class="form-label">Almacén de destino</label><select name="almacen_id" class="form-select" required><option value="">Seleccionar…</option>{% for item in almacenes %}<option value="{{ item.id }}" {% if item.id == almacen_predeterminado_id %}selected{% endif %}>{{ item.nombre }}</option>{% endfor %}</select><div class="form-text">Almacén Madrid por defecto. Administración puede elegir Barcelona; la entrada se registra únicamente en el destino seleccionado.</div></div>
+        <div class="col-md-4"><label class="form-label">Ubicación</label><select name="ubicacion_id" class="form-select"><option value="">Sin ubicación concreta</option>{% for item in ubicaciones %}<option value="{{ item.id }}" data-warehouse="{{ item.almacen_id }}">{{ item.nombre }}</option>{% endfor %}</select></div>
+        <div class="col-md-4"><label class="form-label">Cantidad recibida</label><input name="cantidad" type="number" min="1" step="1" value="1" class="form-control" required></div>
+        <div class="col-md-4"><label class="form-label">Proveedor</label><input name="proveedor" class="form-control" maxlength="150"></div>
+        <div class="col-md-4"><label class="form-label">N.º de albarán</label><input name="albaran" class="form-control" maxlength="100"></div>
+        <div class="col-md-4"><label class="form-label">Precio unitario (€)</label><input name="precio_unitario" type="number" min="0" step="0.01" class="form-control"></div>
+        <div class="col-md-6"><label class="form-label">Lote</label><input name="numero_lote" class="form-control" maxlength="100"></div>
+        <div class="col-md-6"><label class="form-label">Caducidad</label><input name="fecha_caducidad" type="date" class="form-control"></div>
+      </div>
+      <div id="receipt-result" class="inventory-form-result mt-3" role="status"></div>
+      <button class="btn btn-success btn-lg mt-3" type="submit"><i class="bi bi-check2-circle"></i> Registrar entrada</button>
+    </form>
+  </section>
+
+  <aside class="inventory-v2-side"><section class="mrd-card"><div class="mrd-card-header">Últimas recepciones</div><div class="mrd-card-body inventory-mini-list">{% for row in recepciones %}<a href="/inventario/variantes/{{ row.variante_id }}"><span>{{ row.albaran or 'Sin albarán' }} · {{ row.proveedor or 'Proveedor no indicado' }}</span><strong>+{{ row.cantidad }}</strong></a>{% else %}<span class="inventory-help">Todavía no hay recepciones.</span>{% endfor %}</div></section></aside>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(() => {
+  const code = document.getElementById('receipt-code'), form = document.getElementById('receipt-form');
+  const found = document.getElementById('receipt-found'), newFields = document.getElementById('receipt-new-fields');
+  const mode = document.getElementById('receipt-mode'), result = document.getElementById('receipt-result');
+  let searching = false;
+  function clearExisting() { form.variante_id.value=''; form.existencia_tipo.value=''; form.existencia_id.value=''; }
+  function useNew() { clearExisting(); newFields.hidden = false; form.catalogo_epi_id.required = true; found.hidden = true; mode.textContent = 'Alta nueva'; }
+  function showFound(item) {
+    found.hidden=false; found.replaceChildren();
+    const icon=document.createElement('i'); icon.className='bi bi-check-circle';
+    const text=document.createElement('span'),title=document.createElement('strong');
+    title.textContent=item.nombre; text.append(title,document.createTextNode(' · '+item.codigo+' · '+item.tipo));
+    const stock=document.createElement('div'); stock.textContent='Stock actual: '+item.stock+' '+(item.unidad||'ud'); text.append(stock);
+    found.append(icon,text);
+  }
+  async function search() {
+    if (!code.value.trim() || searching) return;
+    searching=true; const button=document.getElementById('receipt-search'); button.disabled=true;
+    result.textContent='Identificando código…'; result.className='inventory-form-result';
+    try {
+      const response = await fetch('/api/inventario/recepcion/resolver?codigo=' + encodeURIComponent(code.value.trim()) + '&almacen_id=' + encodeURIComponent(form.almacen_id.value),{cache:'no-store',headers:{Accept:'application/json'},redirect:'manual'});
+      if(response.status===0||response.type==='opaqueredirect'||response.status===401){location.href='/login';return}
+      const type=response.headers.get('content-type')||'',payload=type.includes('application/json')?await response.json():{};
+      if (!response.ok) { const error=new Error(payload.detail||'Código no reconocido'); error.status=response.status; throw error; }
+      const item=payload.item; clearExisting(); form.existencia_tipo.value=item.tipo; form.existencia_id.value=item.id;
+      if(item.tipo==='variante')form.variante_id.value=payload.variante_id;
+      newFields.hidden=true; form.catalogo_epi_id.required=false; showFound(item);
+      mode.textContent=item.tipo==='variante'?'Variante existente':'Existencia existente'; result.textContent='Código reconocido. Indica la cantidad y registra la entrada.'; form.cantidad.focus();
+    } catch (error) { clearExisting(); if(error.status===404)useNew(); result.className='inventory-form-result is-error'; result.textContent=error.status===404?'No existe. Puedes dar de alta una variante nueva.':error.message; }
+    finally { searching=false; button.disabled=false; }
+  }
+  document.getElementById('receipt-search').addEventListener('click', search);
+  code.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); code.value=window.MRDGlobalScanner.normalize(code.value); search(); } });
+  document.addEventListener('mrd:scanner-code', event => { event.preventDefault(); code.value=window.MRDGlobalScanner.normalize(event.detail.code); search(); });
+  document.getElementById('receipt-new').addEventListener('click', useNew);
+  form.almacen_id.addEventListener('change', () => { [...form.ubicacion_id.options].forEach(o => { if (o.value) o.hidden = o.dataset.warehouse !== form.almacen_id.value; }); form.ubicacion_id.value = ''; });
+  form.almacen_id.dispatchEvent(new Event('change'));
+  form.addEventListener('submit', async event => {
+    event.preventDefault(); const data = Object.fromEntries(new FormData(form)),submit=form.querySelector('button[type=submit]');
+    if(!data.variante_id&&!data.existencia_tipo&&!data.catalogo_epi_id){result.className='inventory-form-result is-error';result.textContent='Escanea o busca primero el artículo.';code.focus();return}
+    data.event_id = 'receipt-' + crypto.randomUUID().replaceAll('-', '');
+    ['variante_id','catalogo_epi_id','almacen_id','ubicacion_id','cantidad','stock_minimo'].forEach(k => data[k] = data[k] ? Number(data[k]) : null);
+    data.precio_unitario = data.precio_unitario ? Number(data.precio_unitario) : null;
+    ['proveedor','albaran','numero_lote','fecha_caducidad','referencia_proveedor'].forEach(k => data[k] = data[k] || null);
+    submit.disabled=true; submit.innerHTML='<span class="spinner-border spinner-border-sm"></span> Registrando…';
+    try {
+      const stockExisting=['material','stock_epi'].includes(data.existencia_tipo);
+      const url=stockExisting?'/inventario/recepciones/existencias':'/inventario/recepciones';
+      const body=stockExisting?{event_id:data.event_id,codigo:code.value.trim(),cantidad:data.cantidad,almacen_id:data.almacen_id,ubicacion_id:data.ubicacion_id,proveedor:data.proveedor,albaran:data.albaran,numero_lote:data.numero_lote,fecha_caducidad:data.fecha_caducidad}:{...data};
+      if(!stockExisting){delete body.existencia_tipo;delete body.existencia_id}
+      const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'},redirect:'manual',body:JSON.stringify(body)});
+      if(response.status===0||response.type==='opaqueredirect'||response.status===401){location.href='/login';return}
+      const type = response.headers.get('content-type') || ''; if (!type.includes('application/json')) throw new Error('La sesión ha caducado. Vuelve a entrar.');
+      const payload = await response.json();
+      if (payload.codigo === 'variante_existente') { form.variante_id.value = payload.variante_id; newFields.hidden = true; throw new Error('La variante ya existía. Ya está seleccionada: pulsa de nuevo Registrar entrada.'); }
+      if (!response.ok) throw new Error(payload.detail || 'No se pudo registrar la entrada.');
+      result.className='inventory-form-result is-success';result.replaceChildren();const message=document.createElement('strong');message.textContent='Entrada registrada. Stock: '+payload.saldo_posterior;result.append(message);if(payload.ficha_url&&String(payload.ficha_url).startsWith('/')){const link=document.createElement('a');link.href=payload.ficha_url;link.textContent=' Abrir ficha';result.append(link)}
+      code.value='';clearExisting();found.hidden=true;mode.textContent='Buscar existente';code.focus();
+    } catch (error) { result.className = 'inventory-form-result is-error'; result.textContent = error.message; }
+    finally {submit.disabled=false;submit.innerHTML='<i class="bi bi-check2-circle"></i> Registrar entrada'}
+  });
+  const cameraButton = document.getElementById('receipt-camera-button'), video = document.getElementById('receipt-camera');
+  const mobile = /Android|iPad|iPhone|Mobile/i.test(navigator.userAgent) && (navigator.maxTouchPoints > 0 || matchMedia('(pointer:coarse)').matches);
+  cameraButton.hidden = !mobile;
+  cameraButton.addEventListener('click', async () => {
+    if (!('BarcodeDetector' in window)) { result.className='inventory-form-result is-error'; result.textContent='La cámara de este dispositivo no lee códigos. Usa el campo manual.'; return; }
+    try { const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); video.srcObject=stream; video.hidden=false; await video.play(); const detector=new BarcodeDetector({formats:['qr_code','code_128']}); const loop=async()=>{ if(video.hidden)return; const values=await detector.detect(video); if(values.length){code.value=values[0].rawValue; stream.getTracks().forEach(t=>t.stop()); video.hidden=true; search(); return;} requestAnimationFrame(loop);}; loop(); } catch(_){ result.className='inventory-form-result is-error'; result.textContent='No se pudo abrir la cámara. Usa la pistola o escribe el código.'; }
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}Panel de Salidas{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-2">
+  <h4 class="mb-0"><i class="bi bi-eye text-warning me-2"></i>Panel de Salidas</h4>
+  <small class="text-muted ms-2">Actualizado: {{ ahora.strftime("%d/%m/%Y %H:%M") }}</small>
+  <a href="/panel-salidas" class="btn btn-sm btn-outline-secondary ms-auto">
+    <i class="bi bi-arrow-clockwise"></i> Actualizar
+  </a>
+</div>
+<p class="text-muted mb-4">Todo lo que esta fuera de la nave en este momento.</p>
+
+<!-- Resumen de tarjetas -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card text-center border-0 bg-body-tertiary">
+      <div class="card-body py-3">
+        <div class="display-6 fw-bold text-danger">{{ herr_fuera|length }}</div>
+        <div class="small text-muted">Herramientas fuera</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center border-0 bg-body-tertiary">
+      <div class="card-body py-3">
+        <div class="display-6 fw-bold text-warning">{{ vehs_ruta|length }}</div>
+        <div class="small text-muted">Vehiculos en ruta</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center border-0 bg-body-tertiary">
+      <div class="card-body py-3">
+        <div class="display-6 fw-bold text-primary">{{ maq_fuera|length }}</div>
+        <div class="small text-muted">Maquinaria en obra</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center border-0 bg-body-tertiary">
+      <div class="card-body py-3">
+        <div class="display-6 fw-bold text-success">{{ epis_fuera|length }}</div>
+        <div class="small text-muted">EPIs asignados</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Vehiculos en ruta -->
+{% if vehs_ruta %}
+<div class="card mb-4 border-warning">
+  <div class="card-header bg-warning bg-opacity-10 d-flex align-items-center gap-2">
+    <i class="bi bi-truck text-warning fs-5"></i>
+    <strong>Vehiculos en ruta ({{ vehs_ruta|length }})</strong>
+    <a href="/vehiculos/movimientos" class="btn btn-sm btn-outline-warning ms-auto">Ver todo</a>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr><th>Vehiculo</th><th>Conductor</th><th>Destino / Obra</th><th>Salida</th></tr>
+      </thead>
+      <tbody>
+        {% for mv in vehs_ruta %}
+        <tr>
+          <td class="fw-semibold">{{ (mv.vehiculo.matricula + (" " + mv.vehiculo.marca if mv.vehiculo.marca else "")) if mv.vehiculo else "---" }}</td>
+          <td>{{ mv.conductor.nombre_completo if mv.conductor else "---" }}</td>
+          <td>{{ mv.obra.nombre if mv.obra else (mv.destino or "---") }}</td>
+          <td><small>{{ mv.fecha_salida.strftime("%d/%m %H:%M") if mv.fecha_salida else "---" }}</small></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Herramientas fuera -->
+{% if herr_fuera %}
+<div class="card mb-4 border-danger">
+  <div class="card-header bg-danger bg-opacity-10 d-flex align-items-center gap-2">
+    <i class="bi bi-tools text-danger fs-5"></i>
+    <strong>Herramientas fuera de nave ({{ herr_fuera|length }})</strong>
+    <a href="/herramientas" class="btn btn-sm btn-outline-danger ms-auto">Ver todas</a>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr><th>Herramienta</th><th>Estado</th><th>Responsable</th><th>Obra</th></tr>
+      </thead>
+      <tbody>
+        {% for h in herr_fuera %}
+        <tr>
+          <td>
+            <a href="/herramientas/{{ h.id }}" class="fw-semibold text-decoration-none">{{ h.nombre }}</a>
+            {% if h.num_serie %}<small class="text-muted"> · {{ h.num_serie }}</small>{% endif %}
+          </td>
+          <td><span class="badge bg-secondary">{{ h.estado }}</span></td>
+          <td>{{ h.responsable_actual.nombre_completo if h.responsable_actual else "---" }}</td>
+          <td>{{ h.obra_actual.nombre if h.obra_actual else "---" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Maquinaria en obra -->
+{% if maq_fuera %}
+<div class="card mb-4 border-primary">
+  <div class="card-header bg-primary bg-opacity-10 d-flex align-items-center gap-2">
+    <i class="bi bi-gear text-primary fs-5"></i>
+    <strong>Maquinaria en obra ({{ maq_fuera|length }})</strong>
+    <a href="/maquinaria" class="btn btn-sm btn-outline-primary ms-auto">Ver todo</a>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr><th>Nombre</th><th>Tipo</th><th>Estado</th></tr>
+      </thead>
+      <tbody>
+        {% for mq in maq_fuera %}
+        <tr>
+          <td class="fw-semibold">{{ mq.nombre }}</td>
+          <td><small>{{ mq.tipo or "---" }}</small></td>
+          <td><span class="badge bg-primary">{{ mq.estado }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- EPIs asignados -->
+{% if epis_fuera %}
+<div class="card mb-4 border-success">
+  <div class="card-header bg-success bg-opacity-10 d-flex align-items-center gap-2">
+    <i class="bi bi-shield-check text-success fs-5"></i>
+    <strong>EPIs asignados a trabajadores ({{ epis_fuera|length }})</strong>
+    <a href="/epis/individuales" class="btn btn-sm btn-outline-success ms-auto">Ver todos</a>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr><th>EPI</th><th>Trabajador</th><th>Desde</th></tr>
+      </thead>
+      <tbody>
+        {% for epi in epis_fuera[:20] %}
+        <tr>
+          <td>{{ epi.tipo }}</td>
+          <td>{{ epi.trabajador.nombre_completo if epi.trabajador else "---" }}</td>
+          <td><small>{{ epi.fecha_asignacion.strftime("%d/%m/%Y") if epi.fecha_asignacion else "---" }}</small></td>
+        </tr>
+        {% endfor %}
+        {% if epis_fuera|length > 20 %}
+        <tr><td colspan="3" class="text-center text-muted small">... y {{ epis_fuera|length - 20 }} mas</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Materiales bajo mínimo -->
+{% if mat_bajos %}
+<div class="card mb-4 border-warning">
+  <div class="card-header bg-warning bg-opacity-10 d-flex align-items-center gap-2">
+    <i class="bi bi-exclamation-triangle text-warning fs-5"></i>
+    <strong>Materiales bajo minimo ({{ mat_bajos|length }})</strong>
+    <a href="/materiales?solo_bajos=1" class="btn btn-sm btn-outline-warning ms-auto">Ver en almacen</a>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr><th>Material</th><th class="text-end">Stock actual</th><th class="text-end">Minimo</th></tr>
+      </thead>
+      <tbody>
+        {% for m in mat_bajos %}
+        <tr>
+          <td><a href="/materiales/{{ m.id }}" class="text-decoration-none">{{ m.nombre }}</a></td>
+          <td class="text-end text-danger fw-bold">{{ "%.2f"|format(m.stock_actual) }} {{ m.unidad }}</td>
+          <td class="text-end text-muted">{{ "%.2f"|format(m.stock_minimo) }} {{ m.unidad }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if not herr_fuera and not vehs_ruta and not maq_fuera and not epis_fuera and not mat_bajos %}
+<div class="text-center text-success py-5">
+  <i class="bi bi-check-circle display-4 d-block mb-3"></i>
+  <h5>Todo en orden</h5>
+  <p class="text-muted">No hay nada fuera de la nave en este momento.</p>
+</div>
+{% endif %}
+
+{% endblock %}

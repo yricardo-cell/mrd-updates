@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Etiqueta — {{ maquina.nombre }}</title>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: Arial, sans-serif;
+    background: #f0f0f0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    gap: 16px;
+  }
+
+  .print-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .print-controls button {
+    padding: 8px 18px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: .9rem;
+    font-weight: 600;
+  }
+
+  .btn-print { background: #2563eb; color: #fff; }
+  .btn-close  { background: #e5e7eb; color: #374151; }
+
+  /* ─── ETIQUETA ─── */
+  .etiqueta {
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    width: 105mm;
+    height: 55mm;
+    padding: 3mm 4mm;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1mm;
+    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+  }
+
+  .empresa {
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: #111;
+    text-align: center;
+    border-bottom: 1px solid #e5e7eb;
+    width: 100%;
+    padding-bottom: 1mm;
+  }
+
+  .nombre {
+    font-size: 11pt;
+    font-weight: 700;
+    text-align: center;
+    color: #111;
+    line-height: 1.2;
+  }
+
+  .matricula {
+    font-size: 14pt;
+    font-weight: 900;
+    color: #1d4ed8;
+    letter-spacing: .06em;
+    text-align: center;
+  }
+
+  .tipo-badge {
+    font-size: 7pt;
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    padding: 1mm 3mm;
+    color: #374151;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+
+  .descripcion {
+    font-size: 7.5pt;
+    color: #555;
+    text-align: center;
+    font-style: italic;
+    max-width: 80mm;
+    line-height: 1.3;
+    border-top: 1px dashed #e5e7eb;
+    padding-top: 2mm;
+    width: 100%;
+  }
+
+  .foto-etiqueta {
+    width: 20mm;
+    height: 20mm;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid #e5e7eb;
+  }
+
+  .barcode-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4mm;
+    width: 100%;
+  }
+
+  #barcode-svg {
+    height: 16mm;
+    max-width: 52mm;
+  }
+
+  .qr-img {
+    width: 18mm;
+    height: 18mm;
+    flex-shrink: 0;
+  }
+
+  .meta {
+    font-size: 6.5pt;
+    color: #777;
+    text-align: center;
+    border-top: 1px solid #e5e7eb;
+    width: 100%;
+    padding-top: 2mm;
+    display: flex;
+    gap: 6mm;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  @media print {
+    body { background: none; padding: 0; }
+    .print-controls { display: none !important; }
+    .etiqueta {
+      border: 1px solid #000;
+      box-shadow: none;
+      width: 105mm;
+      height: 55mm;
+      margin: 0;
+      overflow: hidden;
+    }
+    .foto-etiqueta,.descripcion{display:none!important}
+    @page { size: 105mm 55mm; margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="print-controls">
+  <button class="btn-print" onclick="window.print()">🖨 Imprimir</button>
+  <button class="btn-close" onclick="history.back()">← Volver</button>
+</div>
+
+<div class="etiqueta">
+
+  <div class="empresa">{{ empresa }}</div>
+
+  {% if maquina.foto %}
+  <img class="foto-etiqueta"
+       src="/static/uploads/maquinaria/{{ maquina.foto }}"
+       alt="{{ maquina.nombre }}">
+  {% endif %}
+
+  <div class="nombre">{{ maquina.nombre }}</div>
+
+  {% if maquina.matricula %}
+  <div class="matricula">{{ maquina.matricula }}</div>
+  {% endif %}
+
+  {% if maquina.tipo %}
+  <div class="tipo-badge">{{ maquina.tipo }}</div>
+  {% endif %}
+
+  <div class="barcode-row">
+    <svg id="barcode-svg"></svg>
+    <img class="qr-img"
+         src="data:image/png;base64,{{ qr_b64 }}"
+         alt="QR">
+  </div>
+
+  {% if maquina.notas %}
+  <div class="descripcion">{{ maquina.notas[:120] }}</div>
+  {% endif %}
+
+  <div class="meta">
+    {% if maquina.marca %}<span>{{ maquina.marca }}{% if maquina.modelo %} {{ maquina.modelo }}{% endif %}</span>{% endif %}
+    {% if maquina.num_serie %}<span>S/N: {{ maquina.num_serie }}</span>{% endif %}
+    {% if maquina.km_actuales %}<span>{{ maquina.km_actuales|int }} km</span>{% endif %}
+  </div>
+
+</div>
+
+<script>
+JsBarcode("#barcode-svg", {{ codigo | tojson }}, {
+  format: "CODE128",
+  width: 1.6,
+  height: 40,
+  displayValue: true,
+  fontSize: 10,
+  margin: 3,
+  lineColor: "#000",
+  background: "#fff",
+  textAlign: "center",
+  textPosition: "bottom",
+  font: "Arial"
+});
+</script>
+</body>
+</html>

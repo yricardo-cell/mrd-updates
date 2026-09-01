@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Estado visual del inventario — {{ app_name }}{% endblock %}
+
+{% block content %}
+<section class="inv-state-hero">
+  <div><span class="inventory-v2-eyebrow">Centro de control en tiempo real</span><h1><i class="bi bi-grid-1x2-fill"></i> Estado del inventario</h1><p>Una vista clara de todo lo que hay, lo que está fuera y lo que necesita atención.</p></div>
+  <div class="inv-state-total"><small>Total controlado</small><strong id="inv-total">{{ resumen.total }}</strong><span>unidades y activos</span></div>
+</section>
+
+<nav class="inv-state-filters" aria-label="Filtrar inventario">
+  <button class="is-active" data-category="todo">Todo</button>
+  <button data-category="herramientas"><i class="bi bi-tools"></i> Herramientas</button>
+  <button data-category="ropa"><i class="bi bi-person-standing-dress"></i> Ropa</button>
+  <button data-category="epis"><i class="bi bi-shield-check"></i> EPIs</button>
+  <button data-category="maquinaria"><i class="bi bi-truck-front"></i> Maquinaria</button>
+  <button data-category="consumibles"><i class="bi bi-box-seam"></i> Consumibles</button>
+</nav>
+
+<div class="inv-state-kpis">
+  <article class="inv-kpi is-green"><span><i class="bi bi-check2-circle"></i></span><div><small>Disponible</small><strong data-status="disponible">{{ resumen.totales.disponible }}</strong></div></article>
+  <article class="inv-kpi is-blue"><span><i class="bi bi-arrow-left-right"></i></span><div><small>En uso / entregado</small><strong data-status="en_uso">{{ resumen.totales.en_uso }}</strong></div></article>
+  <article class="inv-kpi is-orange"><span><i class="bi bi-wrench-adjustable-circle"></i></span><div><small>Mantenimiento</small><strong data-status="mantenimiento">{{ resumen.totales.mantenimiento }}</strong></div></article>
+  <article class="inv-kpi is-red"><span><i class="bi bi-x-octagon"></i></span><div><small>Fuera de servicio</small><strong data-status="fuera_servicio">{{ resumen.totales.fuera_servicio }}</strong></div></article>
+</div>
+
+<div class="inv-state-layout">
+  <section class="mrd-card inv-chart-card"><div class="mrd-card-header"><span>Distribución por estado</span><small id="inv-chart-caption">Todo el inventario</small></div><div class="mrd-card-body"><div class="inv-donut-wrap"><canvas id="inv-status-chart"></canvas><div><strong id="inv-chart-total">{{ resumen.total }}</strong><small>controlado</small></div></div></div></section>
+  <section class="mrd-card inv-chart-card"><div class="mrd-card-header"><span>Volumen por familia</span><small>Datos actuales</small></div><div class="mrd-card-body"><canvas id="inv-category-chart"></canvas></div></section>
+</div>
+
+<section class="inv-attention">
+  <a href="/materiales/alertas"><i class="bi bi-graph-down-arrow"></i><span><strong>{{ resumen.stock_bajo }}</strong> referencias con stock bajo</span><i class="bi bi-chevron-right"></i></a>
+  <a href="/almacenes"><i class="bi bi-geo-alt"></i><span><strong>{{ resumen.sin_ubicacion }}</strong> elementos pendientes de ubicar</span><i class="bi bi-chevron-right"></i></a>
+  <a href="/etiquetas"><i class="bi bi-qr-code"></i><span><strong>{{ resumen.sin_etiqueta }}</strong> elementos sin identificación completa</span><i class="bi bi-chevron-right"></i></a>
+</section>
+<p class="inv-state-updated"><i class="bi bi-database-check"></i> Datos reales actualizados {{ resumen.actualizado }} · No se muestran cifras de ejemplo.</p>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/chart.umd.min.js"></script>
+<script>
+(function(){
+  const data={{ resumen.categorias|tojson }};
+  const labels={herramientas:'Herramientas',ropa:'Ropa',epis:'EPIs',maquinaria:'Maquinaria',consumibles:'Consumibles'};
+  const colors=['#2dd4bf','#22d3ee','#7b61ff','#ef4444'];
+  Chart.defaults.color='#94a3b8';
+  const sum=(row)=>row.disponible+row.en_uso+row.mantenimiento+row.fuera_servicio;
+  const total=(key)=>key==='todo'?Object.values(data).reduce((n,row)=>n+sum(row),0):sum(data[key]);
+  const values=(key)=>key==='todo'?['disponible','en_uso','mantenimiento','fuera_servicio'].map(s=>Object.values(data).reduce((n,row)=>n+row[s],0)):['disponible','en_uso','mantenimiento','fuera_servicio'].map(s=>data[key][s]);
+  const donut=new Chart(document.getElementById('inv-status-chart'),{type:'doughnut',data:{labels:['Disponible','En uso','Mantenimiento','Fuera de servicio'],datasets:[{data:values('todo'),backgroundColor:colors,borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'72%',plugins:{legend:{display:false}}}});
+  const bars=new Chart(document.getElementById('inv-category-chart'),{type:'bar',data:{labels:Object.values(labels),datasets:[{data:Object.values(data).map(sum),backgroundColor:['#22d3ee','#7b61ff','#2dd4bf','#c084fc','#64748b'],borderRadius:8}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,grid:{color:'rgba(148,163,184,.12)'}},y:{grid:{display:false}}}}});
+  document.querySelectorAll('.inv-state-filters button').forEach(btn=>btn.addEventListener('click',()=>{const key=btn.dataset.category;document.querySelectorAll('.inv-state-filters button').forEach(b=>b.classList.toggle('is-active',b===btn));const vals=values(key);donut.data.datasets[0].data=vals;donut.update();document.querySelectorAll('[data-status]').forEach((el,i)=>el.textContent=vals[i]);document.getElementById('inv-total').textContent=total(key);document.getElementById('inv-chart-total').textContent=total(key);document.getElementById('inv-chart-caption').textContent=key==='todo'?'Todo el inventario':labels[key];}));
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Maquinaria{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<span class="current">Maquinaria</span>
+{% endblock %}
+
+{% block content %}
+{% if request.query_params.get('ok') == 'eliminado' %}
+<div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+  <i class="bi bi-check-circle me-2"></i>Maquinaria eliminada correctamente.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">Maquinaria</div>
+    <div class="page-subtitle">Vehículos, maquinaria pesada y equipos de gran valor</div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/scan" class="btn btn-outline btn-sm"><i class="bi bi-upc-scan"></i> Escanear</a>
+    <a href="/maquinaria/nueva" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Nueva</a>
+  </div>
+</div>
+
+<!-- KPI por estado -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px">
+  {% for key, label in estados.items() %}
+  <a href="/maquinaria?estado={{ key }}" style="text-decoration:none">
+    <div class="card" style="padding:14px;text-align:center;{% if filtro_estado == key %}border:2px solid var(--primary){% endif %}">
+      <div style="font-size:1.6rem;font-weight:800;color:var(--primary)">{{ total_por_estado[key] }}</div>
+      <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">{{ label }}</div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+<!-- Filtro -->
+<div class="card" style="margin-bottom:16px">
+  <div class="card-body" style="padding:12px">
+    <form method="get" action="/maquinaria" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input type="text" name="q" class="form-control" placeholder="Buscar nombre, matrícula, código..." value="{{ filtro_q }}" style="max-width:300px">
+      <select name="estado" class="form-control" style="max-width:180px">
+        <option value="">Todos los estados</option>
+        {% for key, label in estados.items() %}
+        <option value="{{ key }}" {% if filtro_estado == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+      {% if filtro_estado or filtro_q %}
+      <a href="/maquinaria" class="btn btn-ghost btn-sm">Limpiar</a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- Tabla -->
+<div class="card">
+  <div class="card-body" style="padding:0">
+    {% if items %}
+    <table class="table" style="margin:0">
+      <thead>
+        <tr>
+          <th>Nombre / Tipo</th>
+          <th>Matrícula / Código</th>
+          <th>Marca / Modelo</th>
+          <th>Estado</th>
+          <th>Ubicación</th>
+          <th style="width:130px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in items %}
+        {% set badge = {
+          'disponible':'success','en_uso':'primary','en_obra':'info',
+          'en_taller':'warning','en_transito':'secondary','baja':'dark'
+        } %}
+        <tr onclick="location.href='/maquinaria/{{ m.id }}/pasaporte'" style="cursor:pointer">
+          <td>
+            <div style="font-weight:600">{{ m.nombre }}</div>
+            <div style="font-size:.78rem;color:var(--text-muted)">{{ m.tipo or '—' }}</div>
+          </td>
+          <td>
+            <code style="font-size:.82rem">{{ m.matricula or m.codigo_barras or m.codigo_interno or '—' }}</code>
+          </td>
+          <td style="font-size:.85rem">{{ m.marca or '—' }} {{ m.modelo or '' }}</td>
+          <td>
+            <span class="badge bg-{{ badge.get(m.estado,'secondary') }}">
+              {{ estados.get(m.estado, m.estado) }}
+            </span>
+          </td>
+          <td style="font-size:.82rem;color:var(--text-muted)">{{ m.ubicacion or '—' }}</td>
+          <td>
+            <a href="/maquinaria/{{ m.id }}/pasaporte" class="btn btn-primary btn-sm" onclick="event.stopPropagation()">
+              <i class="bi bi-passport"></i> Pasaporte
+            </a>
+            {% if m.tipo in ['Alimak', 'Maquinillo'] %}
+            <a href="/maquinaria/{{ m.id }}/salida/nueva"
+               class="btn btn-warning btn-sm"
+               onclick="event.stopPropagation()"
+               title="Dar salida a obra">
+              <i class="bi bi-box-arrow-right"></i> Salida
+            </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="text-align:center;padding:48px;color:var(--text-muted)">
+      <i class="bi bi-truck" style="font-size:2.5rem;display:block;margin-bottom:10px"></i>
+      No hay maquinaria registrada{% if filtro_q or filtro_estado %} con ese filtro{% endif %}.
+      <br><br>
+      <a href="/maquinaria/nueva" class="btn btn-primary btn-sm">Registrar primera máquina</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

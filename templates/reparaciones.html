@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% block title %}Reparaciones{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<span class="current">Reparaciones</span>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header-row">
+  <div class="page-header">
+    <div class="page-title">Reparaciones</div>
+    <div class="page-subtitle">{{ total }} reparaciones registradas</div>
+  </div>
+  <a href="/reparaciones/nueva" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg"></i> Nueva reparación
+  </a>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));margin-bottom:16px">
+  <div class="kpi-card" style="padding:14px">
+    <div class="kpi-icon blue" style="width:32px;height:32px;font-size:.9rem"><i class="bi bi-hammer"></i></div>
+    <div class="kpi-value" style="font-size:1.5rem">{{ total }}</div>
+    <div class="kpi-label">Total</div>
+  </div>
+  <div class="kpi-card" style="padding:14px">
+    <div class="kpi-icon orange" style="width:32px;height:32px;font-size:.9rem"><i class="bi bi-tools"></i></div>
+    <div class="kpi-value" style="font-size:1.5rem">{{ en_curso }}</div>
+    <div class="kpi-label">En curso</div>
+  </div>
+  <div class="kpi-card" style="padding:14px">
+    <div class="kpi-icon green" style="width:32px;height:32px;font-size:.9rem"><i class="bi bi-check-circle"></i></div>
+    <div class="kpi-value" style="font-size:1.5rem">{{ finalizadas }}</div>
+    <div class="kpi-label">Finalizadas</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-toolbar">
+    <div class="filter-group">
+      <div style="position:relative">
+        <i class="bi bi-search" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem"></i>
+        <input type="text" id="filtro-busqueda" class="filter-input" placeholder="Buscar reparación..."
+               style="padding-left:30px;width:220px" oninput="filtrarTabla()">
+      </div>
+      <select id="filtro-estado" class="filter-select" onchange="filtrarTabla()">
+        <option value="">Todos los estados</option>
+        <option value="recibida">Recibida</option>
+        <option value="diagnostico">Diagnóstico</option>
+        <option value="esperando_repuestos">Esperando repuestos</option>
+        <option value="en_reparacion">En reparación</option>
+        <option value="finalizada">Finalizada</option>
+        <option value="sin_reparacion">Sin reparación</option>
+      </select>
+    </div>
+  </div>
+
+  <div style="overflow-x:auto">
+    <table class="smart-table" id="tabla-reparaciones">
+      <thead>
+        <tr>
+          <th data-sort="numero">Número ↕</th>
+          <th>Herramienta</th>
+          <th>Diagnóstico</th>
+          <th>Proveedor</th>
+          <th>Coste est.</th>
+          <th>Coste final</th>
+          <th data-sort="estado">Estado ↕</th>
+          <th>Fecha entrada</th>
+          <th class="col-actions">Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-body">
+        {% for rep in reparaciones %}
+        <tr data-numero="{{ rep.numero }}" data-estado="{{ rep.estado }}">
+          <td><span style="font-family:monospace;font-size:.8rem;font-weight:700;color:var(--primary)">{{ rep.numero }}</span></td>
+          <td>
+            {% if rep.herramienta %}
+            <a href="/herramientas/{{ rep.herramienta_id }}" style="font-size:.82rem;color:var(--primary)">
+              {{ rep.herramienta.codigo }}
+            </a>
+            <div style="font-size:.72rem;color:var(--text-muted)">{{ rep.herramienta.nombre }}</div>
+            {% else %}
+            <span style="color:var(--text-muted);font-size:.82rem">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <span style="font-size:.8rem;color:var(--text-2)">
+              {{ (rep.diagnostico or '—')[:50] }}
+            </span>
+          </td>
+          <td>
+            <span style="font-size:.82rem">
+              {{ rep.proveedor.nombre if rep.proveedor else '—' }}
+            </span>
+          </td>
+          <td><span style="font-size:.82rem">{{ rep.coste_estimado | fmt_precio if rep.coste_estimado else '—' }}</span></td>
+          <td>
+            <span style="font-size:.82rem;font-weight:{% if rep.coste_final %}700{% else %}400{% endif %}">
+              {{ rep.coste_final | fmt_precio if rep.coste_final else '—' }}
+            </span>
+          </td>
+          <td>
+            {% if rep.estado == 'finalizada' %}
+              <span class="badge badge-success">Finalizada</span>
+            {% elif rep.estado in ('diagnostico', 'en_reparacion') %}
+              <span class="badge badge-orange">{{ rep.estado | replace('_',' ') | title }}</span>
+            {% elif rep.estado == 'esperando_repuestos' %}
+              <span class="badge badge-warning">Esp. repuestos</span>
+            {% elif rep.estado == 'sin_reparacion' %}
+              <span class="badge badge-danger">Sin reparación</span>
+            {% else %}
+              <span class="badge badge-gray">{{ rep.estado | replace('_',' ') | title }}</span>
+            {% endif %}
+          </td>
+          <td><span style="font-size:.8rem;color:var(--text-2)">{{ rep.fecha_entrada | fmt_datetime }}</span></td>
+          <td class="col-actions">
+            <div class="table-actions">
+              <a class="btn btn-primary btn-sm" href="/reparaciones/{{ rep.id }}" title="Abrir reparación">
+                <i class="bi bi-box-arrow-up-right"></i> Abrir
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9">
+            <div class="empty-state">
+              <i class="bi bi-hammer"></i>
+              <h3>Sin reparaciones</h3>
+              <p>No hay reparaciones registradas</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if false %}<!-- Ventanas antiguas desactivadas: ahora se usa ficha independiente. -->
+<!-- Modal editar reparación -->
+<div class="modal-overlay" id="modal-editar-rep">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-header">
+      <div class="modal-title">Editar reparación</div>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-editar-rep')"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <form method="post" id="form-editar-rep" action="">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Descripción</label>
+          <textarea id="er-desc" name="descripcion" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Diagnóstico</label>
+          <textarea id="er-diag" name="diagnostico" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Estado</label>
+            <select id="er-estado" name="estado" class="form-control">
+              <option value="recibida">Recibida</option>
+              <option value="diagnostico">Diagnóstico</option>
+              <option value="esperando_repuestos">Esperando repuestos</option>
+              <option value="en_reparacion">En reparación</option>
+              <option value="finalizada">Finalizada</option>
+              <option value="sin_reparacion">Sin reparación</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Prioridad</label>
+            <select id="er-prioridad" name="prioridad" class="form-control">
+              <option value="baja">Baja</option>
+              <option value="media">Media</option>
+              <option value="alta">Alta</option>
+              <option value="critica">Crítica</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Coste estimado (€)</label>
+            <input type="number" id="er-ce" name="coste_estimado" class="form-control" step="0.01">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fecha prevista</label>
+            <input type="date" id="er-fp" name="fecha_prevista" class="form-control">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Observaciones</label>
+          <textarea id="er-obs" name="observaciones" class="form-control" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-editar-rep')">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- Modal finalizar reparación -->
+<div class="modal-overlay" id="modal-finalizar">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <div class="modal-title">Finalizar reparación</div>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-finalizar')"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <form method="post" id="form-finalizar" action="">
+      <div class="modal-body">
+        <p id="finalizar-info" style="font-size:.85rem;color:var(--text-2);margin-bottom:12px"></p>
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Coste final (€)</label>
+            <input type="number" name="coste_final" class="form-control" step="0.01">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Devolver a almacén</label>
+            <select name="almacen_id" class="form-control">
+              <option value="">Almacén por defecto</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-finalizar')">Cancelar</button>
+        <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Finalizar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function filtrarTabla() {
+  const q = document.getElementById('filtro-busqueda').value.toLowerCase();
+  const est = document.getElementById('filtro-estado').value;
+  document.querySelectorAll('#tabla-body tr[data-numero]').forEach(row => {
+    const matchQ = !q || row.textContent.toLowerCase().includes(q);
+    const matchEst = !est || row.dataset.estado === est;
+    row.style.display = matchQ && matchEst ? '' : 'none';
+  });
+}
+
+function finalizarReparacion(id, numero) {
+  const form = document.getElementById('form-finalizar');
+  form.action = `/reparaciones/${id}/finalizar`;
+  document.getElementById('finalizar-info').textContent = `Reparación ${numero}`;
+  openModal('modal-finalizar');
+}
+
+document.addEventListener('DOMContentLoaded', () => initSmartTable('tabla-reparaciones'));
+
+function editarReparacion(btn) {
+  const d = btn.dataset;
+  document.getElementById('form-editar-rep').action = `/reparaciones/${d.rid}/editar`;
+  document.getElementById('er-desc').value = d.desc;
+  document.getElementById('er-diag').value = d.diagnostico;
+  document.getElementById('er-ce').value = d.ce;
+  document.getElementById('er-fp').value = d.fp;
+  document.getElementById('er-obs').value = d.obs;
+  for (let o of document.getElementById('er-estado').options) o.selected = (o.value === d.estado);
+  for (let o of document.getElementById('er-prioridad').options) o.selected = (o.value === d.prioridad);
+  openModal('modal-editar-rep');
+}
+</script>
+{% endblock %}

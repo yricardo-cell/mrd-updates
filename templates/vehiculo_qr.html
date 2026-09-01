@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ficha QR — {{ vehiculo.matricula }}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: Arial, sans-serif;
+    background: #f0f0f0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    gap: 16px;
+  }
+  .controls { display:flex; gap:10px; }
+  .controls button {
+    padding: 8px 18px; border-radius:6px; border:none;
+    cursor:pointer; font-size:.9rem; font-weight:600;
+  }
+  .btn-print { background:#2563eb; color:#fff; }
+  .btn-back  { background:#e5e7eb; color:#374151; }
+
+  .ficha {
+    background: #fff;
+    border: 2px solid #111;
+    border-radius: 10px;
+    width: 105mm;
+    padding: 6mm 5mm;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3mm;
+    box-shadow: 0 4px 12px rgba(0,0,0,.15);
+  }
+
+  .empresa {
+    font-size: 7pt; font-weight:700; letter-spacing:.1em;
+    text-transform:uppercase; color:#111; text-align:center;
+    border-bottom:2px solid #111; width:100%; padding-bottom:2mm;
+  }
+
+  .matricula {
+    font-size: 28pt; font-weight:900; letter-spacing:.14em;
+    color: #1d4ed8;
+    border: 3px solid #1d4ed8; border-radius:6px;
+    padding: 1mm 5mm; text-align:center; width:100%;
+    margin: 1mm 0;
+  }
+
+  .vehiculo-nombre { font-size:10pt; font-weight:700; color:#111; text-align:center; }
+  .vehiculo-tipo   { font-size:8pt;  color:#6b7280; text-align:center; }
+
+  .qr-img { width:32mm; height:32mm; margin: 2mm 0; }
+
+  .info-box {
+    background:#f9fafb; border:1px solid #e5e7eb;
+    border-radius:6px; padding:3mm 4mm; width:100%;
+  }
+  .info-row {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:2mm 0; border-bottom:1px solid #f3f4f6; font-size:8pt;
+  }
+  .info-row:last-child { border-bottom:none; }
+  .info-label { color:#6b7280; font-weight:700; font-size:6.5pt; text-transform:uppercase; letter-spacing:.04em; }
+  .info-value { font-weight:700; color:#111; font-size:9pt; text-align:right; }
+  .ok   { color:#065f46; }
+  .warn { color:#92400e; }
+  .venc { color:#991b1b; }
+  .none { color:#9ca3af; font-weight:400; font-style:italic; }
+
+  .footer {
+    font-size:6pt; color:#9ca3af; text-align:center;
+    border-top:1px solid #e5e7eb; width:100%; padding-top:2mm;
+  }
+
+  @media print {
+    body { background:none; padding:0; }
+    .controls { display:none !important; }
+    .ficha { border:2px solid #000; box-shadow:none; width:105mm; margin:0 auto; }
+    @page { size:115mm 160mm; margin:3mm; }
+  }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <button class="btn-print" onclick="window.print()">🖨 Imprimir</button>
+  <button class="btn-back"  onclick="history.back()">← Volver</button>
+</div>
+
+<div class="ficha">
+
+  <div class="empresa">{{ empresa }}</div>
+
+  <div class="matricula">{{ vehiculo.matricula }}</div>
+
+  <div class="vehiculo-nombre">{{ vehiculo.marca or '' }} {{ vehiculo.modelo or '' }}</div>
+  {% if vehiculo.tipo %}
+  <div class="vehiculo-tipo">{{ vehiculo.tipo | title }}</div>
+  {% endif %}
+
+  <img class="qr-img"
+       src="data:image/png;base64,{{ qr_b64 }}"
+       alt="QR {{ vehiculo.matricula }}">
+
+  <div class="info-box">
+
+    <div class="info-row">
+      <span class="info-label">🔧 ITV hasta</span>
+      <span class="info-value {{ itv.css }}">
+        {{ itv.txt }}{% if itv.aviso %}&nbsp;{{ itv.aviso }}{% endif %}
+      </span>
+    </div>
+
+    <div class="info-row">
+      <span class="info-label">🛡 Seguro hasta</span>
+      <span class="info-value {{ seguro.css }}">
+        {{ seguro.txt }}{% if seguro.aviso %}&nbsp;{{ seguro.aviso }}{% endif %}
+      </span>
+    </div>
+
+    {% if compania_seguro %}
+    <div class="info-row">
+      <span class="info-label">🏢 Compañía</span>
+      <span class="info-value" style="font-size:8pt">{{ compania_seguro }}</span>
+    </div>
+    {% endif %}
+
+    {% if num_poliza %}
+    <div class="info-row">
+      <span class="info-label">📋 Póliza</span>
+      <span class="info-value" style="font-size:8pt">{{ num_poliza }}</span>
+    </div>
+    {% endif %}
+
+    <div class="info-row">
+      <span class="info-label">📅 Próxima revisión</span>
+      <span class="info-value {{ revision.css }}">
+        {{ revision.txt }}{% if revision.aviso %}&nbsp;{{ revision.aviso }}{% endif %}
+      </span>
+    </div>
+
+    {% if vehiculo.kilometros %}
+    <div class="info-row">
+      <span class="info-label">🛣 Kilómetros</span>
+      <span class="info-value">{{ vehiculo.kilometros }} km</span>
+    </div>
+    {% endif %}
+
+    {% if vehiculo.descripcion %}
+    <div class="info-row">
+      <span class="info-label">📝 Descripción</span>
+      <span class="info-value" style="font-size:7.5pt;font-weight:400">{{ vehiculo.descripcion }}</span>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <div class="footer">Escanea el QR para ver esta ficha · {{ empresa }}</div>
+
+</div>
+</body>
+</html>

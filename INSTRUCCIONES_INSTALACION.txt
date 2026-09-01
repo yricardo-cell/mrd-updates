@@ -1,0 +1,132 @@
+=====================================================
+  MRD TOOL CONTROL — Guía de instalación en otro PC
+  Version 2.1.0
+=====================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PASO 1 — INSTALAR PYTHON (solo la primera vez)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Ve a: https://www.python.org/downloads/
+2. Descarga la versión 3.11 o 3.12 (la más reciente)
+3. Ejecuta el instalador
+4. MUY IMPORTANTE: marca la casilla
+   ✅ "Add Python to PATH"
+   antes de hacer clic en "Install Now"
+5. Una vez instalado, cierra el instalador
+
+Para comprobar que funciona:
+  - Abre CMD (tecla Windows + R → escribe cmd → Enter)
+  - Escribe: python --version
+  - Debe mostrar: Python 3.11.x o similar
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PASO 2 — COPIAR LA CARPETA DEL PROGRAMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Extrae el ZIP en el nuevo ordenador
+2. Pon la carpeta en: C:\mrd tool\mrd_tool_control
+   (la ruta puede ser otra, pero esta es la recomendada)
+
+La estructura debe quedar así:
+  C:\
+  └── mrd tool\
+      └── mrd_tool_control\
+          ├── main.py
+          ├── models.py
+          ├── requirements.txt
+          ├── templates\
+          ├── static\
+          ├── INSTALAR_DEPENDENCIAS.bat  ← lo usarás ahora
+          └── INICIAR_MRD.bat            ← para arrancar
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PASO 3 — INSTALAR DEPENDENCIAS (solo la primera vez)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Entra en la carpeta mrd_tool_control
+2. Haz doble clic en: INSTALAR_DEPENDENCIAS.bat
+3. Se abrirá una ventana negra y descargará los módulos
+   (necesitas internet, puede tardar 2-5 minutos)
+4. Cuando diga "Listo", cierra la ventana
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PASO 4 — ARRANCAR EL PROGRAMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+OPCIÓN A — Arranque manual (más sencillo):
+  Doble clic en: INICIAR_MRD.bat
+  El programa queda corriendo mientras esa ventana esté abierta.
+  Abre el navegador en: http://localhost:8000
+
+OPCIÓN B — Arranque automático con Windows (recomendado):
+  1. Clic derecho en: INSTALAR_SERVICIO.bat
+  2. Selecciona "Ejecutar como administrador"
+  3. El programa se iniciará solo cada vez que enciendas el PC
+  4. Para detenerlo usa: DETENER_SERVICIO.bat
+
+OPCIÓN C — Arranque invisible (sin ventana CMD):
+  Doble clic en: INICIAR.vbs
+  (Arranca el servidor de fondo sin ventana negra)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ACCEDER DESDE OTROS DISPOSITIVOS (móvil, tablet)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+El servidor ya escucha en red local (0.0.0.0:8000).
+Desde otro dispositivo en la misma WiFi:
+
+1. En el PC que ejecuta el servidor, abre CMD y escribe:
+   ipconfig
+   Anota la dirección IP (ej: 192.168.1.50)
+
+2. Desde el móvil/tablet abre el navegador y ve a:
+   http://192.168.1.50:8000
+
+Si el cortafuegos de Windows bloquea la conexión:
+  Panel de Control → Windows Defender Firewall
+  → Permitir una aplicación → Añadir puerto 8000 TCP
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  LLEVAR LOS DATOS AL NUEVO PC
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+La base de datos con todos los datos está en:
+  mrd_tool_control\mrd_tool.db
+
+Si el ZIP ya incluye ese archivo, los datos van incluidos.
+Si quieres copiar datos de un PC a otro sin copiar todo:
+  - Copia solo mrd_tool.db al nuevo PC (misma ubicación)
+  - Las fotos/archivos subidos están en: uploads\
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  QUÉ NECESITA EL NUEVO PC
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Windows 10 o Windows 11
+✅ Python 3.10 o superior (gratis, python.org)
+✅ Conexión a internet solo para instalar (Paso 3)
+✅ Navegador web (Chrome, Edge, Firefox)
+
+❌ No necesita SQL Server, MySQL ni ninguna otra base de datos
+❌ No necesita instalar nada más
+❌ No necesita licencias de pago
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  RESUMEN RÁPIDO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. Instalar Python 3.11 (con "Add to PATH" marcado)
+  2. Extraer ZIP en C:\mrd tool\mrd_tool_control
+  3. Doble clic en INSTALAR_DEPENDENCIAS.bat
+  4. Doble clic en INICIAR_MRD.bat
+  5. Abrir http://localhost:8000
+
+=====================================================

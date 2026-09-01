@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <title>{% if ok %}✅ Marcado{% else %}❌ Error{% endif %} — MRD</title>
+  <style>
+    :root {
+      --ok: #16a34a;
+      --ok-light: #dcfce7;
+      --err: #dc2626;
+      --err-light: #fee2e2;
+      --warn: #d97706;
+      --warn-light: #fef3c7;
+      --text: #111827;
+      --muted: #6b7280;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, 'Segoe UI', Arial, sans-serif;
+      background: #f8fafc;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.10);
+      padding: 32px 24px;
+      max-width: 380px;
+      width: 100%;
+      text-align: center;
+    }
+    .icon-wrap {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 2.2rem;
+    }
+    .icon-ok   { background: var(--ok-light);   color: var(--ok);  }
+    .icon-warn { background: var(--warn-light);  color: var(--warn);}
+    .icon-err  { background: var(--err-light);   color: var(--err); }
+
+    h1 { font-size: 1.4rem; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+    .item-name { font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .item-detail { font-size: .85rem; color: var(--muted); margin-bottom: 20px; }
+
+    .machine-label {
+      display: inline-block;
+      background: #f1f5f9;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+    .obra-label {
+      font-size: .82rem;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+
+    .progress-wrap {
+      background: #e5e7eb;
+      border-radius: 8px;
+      height: 10px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--ok);
+      border-radius: 8px;
+      transition: width .4s;
+    }
+    .progress-text {
+      font-size: .78rem;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    .err-msg {
+      background: var(--err-light);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: .85rem;
+      color: var(--err);
+      margin-bottom: 20px;
+    }
+    .warn-msg {
+      background: var(--warn-light);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: .85rem;
+      color: var(--warn);
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      display: inline-block;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 24px;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      width: 100%;
+    }
+    .btn-ok  { background: var(--ok);  color: #fff; }
+    .btn-close-page { background: #f1f5f9; color: var(--text); border: 1px solid #d1d5db; margin-top: 8px; }
+  </style>
+</head>
+<body>
+<div class="card">
+
+  {% if ok %}
+    {% if ya_marcado %}
+    <!-- Ya estaba marcado -->
+    <div class="icon-wrap icon-warn">⚠️</div>
+    <h1>Ya estaba marcado</h1>
+    <div class="machine-label">{{ maquina.nombre }}</div>
+    <div class="item-name">{{ item_name }}</div>
+    <div class="item-detail">{{ item_detail }}</div>
+    <div class="obra-label">Obra: {{ obra }}</div>
+    <div class="warn-msg">Este ítem ya fue marcado anteriormente.</div>
+
+    {% else %}
+    <!-- Marcado con éxito -->
+    <div class="icon-wrap icon-ok">✅</div>
+    <h1>¡Marcado!</h1>
+    <div class="machine-label">{{ maquina.nombre }}</div>
+    <div class="item-name">{{ item_name }}</div>
+    <div class="item-detail">{{ item_detail }}</div>
+    <div class="obra-label">Obra: {{ obra }}</div>
+
+    <div class="progress-wrap">
+      <div class="progress-fill" style="width:{{ (marcados / total * 100)|round if total else 0 }}%"></div>
+    </div>
+    <div class="progress-text">
+      {{ marcados }} de {{ total }} ítems completados
+      {% if marcados == total %} · <strong style="color:var(--ok)">¡Checklist completo!</strong>{% endif %}
+    </div>
+    {% endif %}
+
+    <button class="btn btn-ok" onclick="window.close(); history.back()">Cerrar</button>
+
+  {% else %}
+  <!-- Error -->
+  <div class="icon-wrap icon-err">❌</div>
+  <h1>No se pudo marcar</h1>
+  {% if maquina %}
+  <div class="machine-label">{{ maquina.nombre }}</div>
+  {% endif %}
+  <div class="err-msg">{{ error }}</div>
+  <p style="font-size:.82rem;color:var(--muted);margin-bottom:20px">
+    Asegúrate de que hay una ficha de salida activa para esta máquina en MRD Tool Control.
+  </p>
+  <button class="btn btn-close-page" onclick="history.back()">Volver</button>
+  {% endif %}
+
+</div>
+</body>
+</html>

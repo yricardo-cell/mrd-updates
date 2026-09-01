@@ -1,0 +1,25 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Cloudflare Tunnel — Configuración de ejemplo
+# MRD TOOL CONTROL — IASMRD Deployment
+#
+# INSTRUCCIONES:
+#   1. Copia este archivo como config.yml en la carpeta del túnel:
+#      %USERPROFILE%\.cloudflared\config.yml
+#   2. Rellena tunnel (UUID real) y credentials-file (ruta real)
+#   3. NUNCA subas config.yml al repositorio (contiene UUID y ruta de credenciales)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# UUID del túnel (obtenido con: cloudflared tunnel list)
+tunnel: <TU-UUID-DE-TUNEL-AQUI>
+
+# Ruta al fichero de credenciales generado al crear el túnel
+credentials-file: C:\Users\TuUsuario\.cloudflared\<TU-UUID>.json
+
+# Reglas de enrutamiento (ingress)
+ingress:
+  # Regla principal: app.iasmrd.com → aplicación local
+  - hostname: app.iasmrd.com
+    service: http://127.0.0.1:8000
+
+  # Regla de captura: todo lo demás devuelve 404
+  - service: http_status:404

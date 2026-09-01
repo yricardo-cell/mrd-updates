@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Obras — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header">
+  <h2 class="mrd-page-title"><i class="bi bi-building me-2"></i>Obras</h2>
+  {% if user.rol in ['admin','almacen','encargado_patio'] %}
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalImportarObras">
+      <i class="bi bi-file-earmark-excel me-1"></i>Importar Excel
+    </button>
+    <a href="/obras/nueva" class="btn btn-warning mrd-btn"><i class="bi bi-plus-lg me-1"></i>Nueva obra</a>
+  </div>
+  {% endif %}
+</div>
+
+{% if request.query_params.get('ok') == 'editado' %}
+<div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+  <i class="bi bi-check-circle me-2"></i>Obra actualizada correctamente.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{% if import_ok is defined %}
+<div class="alert alert-success alert-dismissible fade show mb-3">
+  <i class="bi bi-check-circle me-2"></i><strong>{{ import_ok }}</strong> obra(s) importada(s) correctamente.
+  {% if import_omitidas %}
+  <ul class="mb-0 mt-1">{% for msg in import_omitidas %}<li>{{ msg }}</li>{% endfor %}</ul>
+  {% endif %}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="mrd-card">
+  <div class="table-responsive">
+    <table class="mrd-table">
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Nombre</th>
+          <th>Cliente</th>
+          <th>Responsable</th>
+          <th>Estado</th>
+          <th>Herramientas</th>
+          <th>Fecha inicio</th>
+          <th>Fecha fin</th>
+          {% if user.rol in ['admin','almacen','encargado_patio'] %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in obras %}
+        <tr>
+          <td><code class="mrd-code">{{ o.numero }}</code></td>
+          <td class="fw-semibold">{{ o.nombre }}</td>
+          <td class="text-muted">{{ o.cliente or '—' }}</td>
+          <td class="text-muted">{{ o.responsable or '—' }}</td>
+          <td>
+            {% if o.activa %}
+            <span class="badge bg-success">Activa</span>
+            {% else %}
+            <span class="badge bg-secondary">Finalizada</span>
+            {% endif %}
+          </td>
+          <td>
+            {% set cnt = o.herramientas | length %}
+            {% if cnt > 0 %}
+            <span class="badge bg-warning text-dark">{{ cnt }}</span>
+            {% else %}
+            <span class="text-muted">0</span>
+            {% endif %}
+          </td>
+          <td class="text-muted small">{{ o.fecha_inicio | fmt_fecha }}</td>
+          <td class="text-muted small">{{ o.fecha_fin | fmt_fecha }}</td>
+          {% if user.rol in ['admin','almacen','encargado_patio'] %}
+          <td>
+            <button class="btn btn-sm btn-outline-warning"
+                    data-oid="{{ o.id }}"
+                    data-nombre="{{ o.nombre }}"
+                    data-cliente="{{ o.cliente or '' }}"
+                    data-responsable="{{ o.responsable or '' }}"
+                    data-direccion="{{ o.direccion or '' }}"
+                    data-fi="{{ o.fecha_inicio.strftime('%Y-%m-%d') if o.fecha_inicio else '' }}"
+                    data-ff="{{ o.fecha_fin.strftime('%Y-%m-%d') if o.fecha_fin else '' }}"
+                    data-activa="{{ '1' if o.activa else '0' }}"
+                    data-obs="{{ (o.observaciones or '')|replace('"','') }}"
+                    onclick="editarObra(this)">
+              <i class="bi bi-pencil"></i>
+            </button>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="text-center text-muted py-5">
+          <i class="bi bi-building fs-1 d-block mb-2"></i>No hay obras registradas
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal importar obras desde Excel -->
+<div class="modal fade" id="modalImportarObras" tabindex="-1" style="display:none">
+  <div class="modal-dialog">
+    <form method="post" action="/obras/importar" enctype="multipart/form-data" class="modal-content mrd-modal-dark">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="bi bi-file-earmark-excel me-2"></i>Importar obras desde Excel</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          Descarga la plantilla, rellénala y súbela aquí. Las obras que ya existan (mismo nombre) se omiten sin error.
+        </p>
+        <a href="/obras/plantilla-excel" class="btn btn-outline-success btn-sm mb-3">
+          <i class="bi bi-download me-1"></i>Descargar plantilla Excel
+        </a>
+        <div class="mb-2">
+          <label class="form-label fw-semibold">Archivo Excel <span class="text-danger">*</span></label>
+          <input type="file" name="archivo" class="form-control mrd-input" accept=".xlsx,.xls" required>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-success"><i class="bi bi-upload me-1"></i>Importar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal editar obra -->
+<div class="modal fade" id="editarObraModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content mrd-modal-dark">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Editar obra</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" id="form-editar-obra" action="">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Nombre <span class="text-danger">*</span></label>
+            <input type="text" id="eo-nombre" name="nombre" class="form-control mrd-input" required>
+          </div>
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label class="form-label">Cliente</label>
+              <input type="text" id="eo-cliente" name="cliente" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Responsable</label>
+              <input type="text" id="eo-responsable" name="responsable" class="form-control mrd-input">
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label">Dirección</label>
+            <input type="text" id="eo-direccion" name="direccion" class="form-control mrd-input">
+          </div>
+          <div class="row g-3 mt-1">
+            <div class="col-sm-6">
+              <label class="form-label">Fecha inicio</label>
+              <input type="date" id="eo-fi" name="fecha_inicio" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Fecha fin</label>
+              <input type="date" id="eo-ff" name="fecha_fin" class="form-control mrd-input">
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label">Estado</label>
+            <select id="eo-activa" name="activa" class="form-select mrd-input">
+              <option value="1">Activa</option>
+              <option value="0">Finalizada</option>
+            </select>
+          </div>
+          <div class="mt-3">
+            <label class="form-label">Observaciones</label>
+            <textarea id="eo-obs" name="observaciones" class="form-control mrd-input" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-warning"><i class="bi bi-floppy me-1"></i>Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function editarObra(btn) {
+  const d = btn.dataset;
+  document.getElementById('form-editar-obra').action = `/obras/${d.oid}/editar`;
+  document.getElementById('eo-nombre').value = d.nombre;
+  document.getElementById('eo-cliente').value = d.cliente;
+  document.getElementById('eo-responsable').value = d.responsable;
+  document.getElementById('eo-direccion').value = d.direccion;
+  document.getElementById('eo-fi').value = d.fi;
+  document.getElementById('eo-ff').value = d.ff;
+  document.getElementById('eo-obs').value = d.obs;
+  const sel = document.getElementById('eo-activa');
+  for (let o of sel.options) o.selected = (o.value === d.activa);
+  new bootstrap.Modal(document.getElementById('editarObraModal')).show();
+}
+</script>
+{% endblock %}

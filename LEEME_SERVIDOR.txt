@@ -1,0 +1,74 @@
+====================================================================
+  MRD TOOL CONTROL - Guia: este PC = SERVIDOR, el viejo = desarrollo
+====================================================================
+
+Carpeta del programa (donde esta main.py):  C:\mrd tool\mrd_tool_control
+Todos los .bat funcionan desde donde esten (usan su propia carpeta).
+
+--------------------------------------------------------------------
+ A) DEJAR ESTE PC COMO SERVIDOR (una sola vez, en orden)
+--------------------------------------------------------------------
+ 1. INSTALAR_DEPENDENCIAS.bat        (crea el venv e instala modulos)
+ 2. Copia la base de datos buena:
+       mrd_tool.db  ->  C:\mrd tool\mrd_tool_control\data\mrd_tool.db
+    (es la de 41 tablas; la otra, mrd_tool_control.db, NO se usa)
+ 3. CONFIGURAR_SERVIDOR.bat          (crea config\local.env, modo produccion)
+ 4. INSTALAR_SERVICIO.bat            (CLIC DERECHO -> Ejecutar como admin)
+       -> el servidor arranca solo con Windows y se reinicia si se cae
+ 5. Comprueba:  http://localhost:8000
+
+--------------------------------------------------------------------
+ B) CLOUDFLARE (acceso publico) - SOLO EN ESTE PC
+--------------------------------------------------------------------
+ 1. CLOUDFLARE_INSTALAR.bat   (solo la 1a vez, descarga cloudflared.exe)
+ 2. CLOUDFLARE_TUNEL.bat      (levanta el tunel; deja la ventana abierta)
+ 3. La URL publica aparece en la app:  menu  > Acceso Remoto
+    (y tambien en data\cloudflared.log)
+
+ NOTA: este tunel da una URL nueva cada vez que lo reinicias
+ (...trycloudflare.com). Si quieres una URL FIJA hay que montar un
+ "Named Tunnel" con tu dominio desde el panel  /cloudflare  (necesita
+ tu cuenta de Cloudflare; eso lo haces tu dentro de la app).
+
+--------------------------------------------------------------------
+ C) PC VIEJO = DESARROLLO (NO tocar produccion)
+--------------------------------------------------------------------
+ - Ahi NO ejecutes CONFIGURAR_SERVIDOR.bat ni el tunel.
+ - Arranca solo con INICIAR_MRD.bat para probar en local.
+ - Queda en modo "development" por defecto (asi lo dice config.py).
+
+--------------------------------------------------------------------
+ D) ACTUALIZAR DESDE UN BOTON (sin tocar archivos en el servidor)
+--------------------------------------------------------------------
+ Tu app ya trae el sistema (updater.py descarga de una URL).
+
+ EN EL PC VIEJO, cada vez que quieras publicar una version nueva:
+   1. Sube el numero de version en  version.json  (ej. de 1.9.2 a 1.9.3)
+   2. En la app (PC viejo) -> pagina /actualizaciones -> boton EMPAQUETAR
+      (crea releases\mrd_tool_control_v1.9.3.zip)
+   3. Doble clic en  PUBLICAR_ACTUALIZACION.bat
+      - calcula el SHA256, crea releases\version.json y sirve la carpeta
+      - te imprime una linea tipo:  MRD_UPDATE_SERVER=http://192.168.x.x:8100
+      - DEJA ESA VENTANA ABIERTA mientras actualizas
+
+ EN EL SERVIDOR (este PC), la PRIMERA vez:
+   - Pon esa linea en  config\local.env :   MRD_UPDATE_SERVER=http://192.168.x.x:8100
+   - Reinicia el servidor (o el servicio)
+
+ Para actualizar:
+   - En el servidor -> pagina /actualizaciones (como admin) ->
+     COMPROBAR -> INSTALAR.  Descarga, verifica, instala, reinicia y
+     comprueba salud solo. Si algo falla, hace ROLLBACK automatico.
+
+ IMPORTANTE: el PC viejo debe estar encendido y con PUBLICAR_ACTUALIZACION.bat
+ abierto en el momento de actualizar (es quien sirve el archivo).
+
+--------------------------------------------------------------------
+ SI ALGO NO DETECTA LA ACTUALIZACION
+--------------------------------------------------------------------
+ Manda una captura de la pagina /actualizaciones y del texto de la
+ ventana de PUBLICAR_ACTUALIZACION.bat. El unico punto que puede
+ necesitar ajuste son los nombres de campo del version.json segun tu
+ updater.py; el version.json que genero ya incluye varios alias para
+ que funcione, pero si tu updater usa otro nombre, se cambia en 1 minuto.
+====================================================================

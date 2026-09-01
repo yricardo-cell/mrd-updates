@@ -1,0 +1,63 @@
+$ sc.exe qc MRDToolControl
+exit=0
+[SC] QueryServiceConfig CORRECTO
+
+NOMBRE_SERVICIO: MRDToolControl
+        TIPO               : 10  WIN32_OWN_PROCESS 
+        TIPO_INICIO        : 2   AUTO_START
+        CONTROL_ERROR      : 1   NORMAL
+        NOMBRE_RUTA_BINARIO: C:\tools\nssm\win64\nssm.exe
+        GRUPO_ORDEN_CARGA  : 
+        ETIQUETA           : 0
+        NOMBRE_MOSTRAR     : MRDToolControl
+        DEPENDENCIAS       : 
+        NOMBRE_INICIO_SERVICIO: LocalSystem
+
+
+$ sc.exe qc CloudflaredMRD
+exit=0
+[SC] QueryServiceConfig CORRECTO
+
+NOMBRE_SERVICIO: CloudflaredMRD
+        TIPO               : 10  WIN32_OWN_PROCESS 
+        TIPO_INICIO        : 2   AUTO_START
+        CONTROL_ERROR      : 1   NORMAL
+        NOMBRE_RUTA_BINARIO: C:\tools\nssm\win64\nssm.exe
+        GRUPO_ORDEN_CARGA  : 
+        ETIQUETA           : 0
+        NOMBRE_MOSTRAR     : Cloudflare Tunnel - MRD Tool Control
+        DEPENDENCIAS       : 
+        NOMBRE_INICIO_SERVICIO: LocalSystem
+
+
+$ sc.exe qc MRDEmergencyRescue
+exit=0
+[SC] QueryServiceConfig CORRECTO
+
+NOMBRE_SERVICIO: MRDEmergencyRescue
+        TIPO               : 10  WIN32_OWN_PROCESS 
+        TIPO_INICIO        : 2   AUTO_START
+        CONTROL_ERROR      : 1   NORMAL
+        NOMBRE_RUTA_BINARIO: C:\tools\nssm\win64\nssm.exe
+        GRUPO_ORDEN_CARGA  : 
+        ETIQUETA           : 0
+        NOMBRE_MOSTRAR     : MRD Emergency Rescue
+        DEPENDENCIAS       : 
+        NOMBRE_INICIO_SERVICIO: LocalSystem
+
+
+$ sc.exe qc MRDRescueRemote
+exit=0
+[SC] QueryServiceConfig CORRECTO
+
+NOMBRE_SERVICIO: MRDRescueRemote
+        TIPO               : 10  WIN32_OWN_PROCESS 
+        TIPO_INICIO        : 2   AUTO_START
+        CONTROL_ERROR      : 1   NORMAL
+        NOMBRE_RUTA_BINARIO: C:\tools\nssm\win64\nssm.exe
+        GRUPO_ORDEN_CARGA  : 
+        ETIQUETA           : 0
+        NOMBRE_MOSTRAR     : MRD Rescue Remote
+        DEPENDENCIAS       : 
+        NOMBRE_INICIO_SERVICIO: LocalSystem
+

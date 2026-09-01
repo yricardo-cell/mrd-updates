@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Partes de Presencia{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <h4 class="mb-0"><i class="bi bi-calendar-check-fill text-info me-2"></i>Partes de Presencia</h4>
+  <button class="btn btn-info btn-sm ms-auto text-white" data-bs-toggle="modal" data-bs-target="#modalNuevo">
+    <i class="bi bi-plus-lg"></i> Registrar presencia
+  </button>
+</div>
+
+{% if ok %}
+<div class="alert alert-success alert-dismissible fade show py-2">
+  {% if ok == "creado" %}Presencia registrada.{% elif ok == "eliminado" %}Registro eliminado.{% endif %}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<!-- Filtros -->
+<form method="get" class="row g-2 mb-4">
+  <div class="col-auto">
+    <input type="date" name="fecha" class="form-control" value="{{ fecha_sel.isoformat() }}">
+  </div>
+  <div class="col-auto">
+    <select name="obra_id" class="form-select">
+      <option value="">Todas las obras</option>
+      {% for o in obras %}<option value="{{ o.id }}" {% if obra_id_sel == o.id|string %}selected{% endif %}>{{ o.nombre }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-outline-secondary">Filtrar</button>
+  </div>
+</form>
+
+<h6 class="text-muted mb-3">
+  <i class="bi bi-calendar3 me-1"></i>
+  {{ fecha_sel.strftime("%A, %d de %B de %Y").capitalize() }}
+  — {{ partes|length }} trabajador{% if partes|length != 1 %}es{% endif %}
+</h6>
+
+{% if partes %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-dark">
+      <tr>
+        <th>Trabajador</th>
+        <th>Obra</th>
+        <th>Entrada</th>
+        <th>Salida</th>
+        <th>Notas</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in partes %}
+      <tr>
+        <td class="fw-semibold">{{ p.trabajador.nombre_completo if p.trabajador else "—" }}</td>
+        <td>{{ p.obra.nombre if p.obra else "—" }}</td>
+        <td>{{ p.hora_entrada or "—" }}</td>
+        <td>{{ p.hora_salida or "—" }}</td>
+        <td><small>{{ p.notas or "—" }}</small></td>
+        <td>
+          <form method="post" action="/partes-presencia/{{ p.id }}/eliminar"
+                onsubmit="return confirm('¿Eliminar este parte?')">
+            <input type="hidden" name="fecha" value="{{ fecha_sel.isoformat() }}">
+            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="bi bi-calendar-x display-4 d-block mb-2 opacity-25"></i>
+  Sin partes para este día.
+</div>
+{% endif %}
+
+<!-- Modal nuevo parte -->
+<div class="modal fade" id="modalNuevo" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <form method="post" action="/partes-presencia" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-calendar-plus me-2"></i>Registrar Presencia</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3">
+          <div class="col-4">
+            <label class="form-label fw-semibold">Fecha</label>
+            <input type="date" name="fecha" class="form-control" value="{{ fecha_sel.isoformat() }}" required>
+          </div>
+          <div class="col-4">
+            <label class="form-label">Obra</label>
+            <select name="obra_id" class="form-select">
+              <option value="">Sin obra</option>
+              {% for o in obras %}<option value="{{ o.id }}">{{ o.nombre }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-2">
+            <label class="form-label">Entrada</label>
+            <input type="time" name="hora_entrada" class="form-control" value="08:00">
+          </div>
+          <div class="col-2">
+            <label class="form-label">Salida</label>
+            <input type="time" name="hora_salida" class="form-control" value="17:00">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Trabajadores <span class="text-danger">*</span></label>
+          <div style="max-height:300px;overflow-y:auto;border:1px solid #dee2e6;border-radius:6px;padding:8px;">
+            <div class="mb-2">
+              <button type="button" class="btn btn-xs btn-outline-secondary me-1" onclick="toggleAll(true)">Todos</button>
+              <button type="button" class="btn btn-xs btn-outline-secondary" onclick="toggleAll(false)">Ninguno</button>
+            </div>
+            {% for t in trabajadores %}
+            <div class="form-check">
+              <input class="form-check-input trab-chk" type="checkbox" name="trabajador_ids"
+                     value="{{ t.id }}" id="t_{{ t.id }}">
+              <label class="form-check-label" for="t_{{ t.id }}">{{ t.nombre_completo }}
+                {% if t.cargo %}<small class="text-muted">— {{ t.cargo }}</small>{% endif %}
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="mb-1">
+          <label class="form-label">Notas</label>
+          <input type="text" name="notas" class="form-control" placeholder="Opcional">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-info text-white"><i class="bi bi-check-lg me-1"></i>Registrar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function toggleAll(checked) {
+  document.querySelectorAll('.trab-chk').forEach(c => c.checked = checked);
+}
+</script>
+{% endblock %}

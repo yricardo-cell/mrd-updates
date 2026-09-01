@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Importar Materiales{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <a href="/materiales" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Volver</a>
+  <h4 class="mb-0"><i class="bi bi-file-earmark-excel text-success me-2"></i>Importar Materiales desde Excel</h4>
+</div>
+
+{% if creados is defined %}
+<div class="alert alert-success">
+  <strong>{{ creados }}</strong> material(es) importados correctamente.
+  {% if errores %}<br><small>{{ errores|join(' | ') }}</small>{% endif %}
+</div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-semibold">1. Descargar plantilla</div>
+      <div class="card-body">
+        <p class="text-muted small">Rellena el Excel con tus materiales y sube el archivo.</p>
+        <a href="/materiales/plantilla-excel" class="btn btn-outline-success">
+          <i class="bi bi-download me-1"></i>Descargar plantilla .xlsx
+        </a>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-semibold">2. Subir archivo Excel</div>
+      <div class="card-body">
+        <form method="post" action="/materiales/importar" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label class="form-label">Archivo .xlsx</label>
+            <input type="file" name="archivo" accept=".xlsx,.xls" class="form-control" required>
+          </div>
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-upload me-1"></i>Importar
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mt-4">
+  <div class="card-header">Columnas del Excel</div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr><th>Col</th><th>Campo</th><th>Obligatorio</th><th>Ejemplo</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>A</td><td>Codigo</td><td>No (auto)</td><td>MAT-001</td></tr>
+        <tr><td>B</td><td>Nombre</td><td><strong>Si</strong></td><td>Cable H07Z1-K 1.5mm</td></tr>
+        <tr><td>C</td><td>Categoria</td><td>No</td><td>Cables y electricidad</td></tr>
+        <tr><td>D</td><td>Unidad</td><td>No</td><td>m, ud, kg, l...</td></tr>
+        <tr><td>E</td><td>Stock inicial</td><td>No</td><td>100</td></tr>
+        <tr><td>F</td><td>Stock minimo</td><td>No</td><td>20</td></tr>
+        <tr><td>G</td><td>Ubicacion nave</td><td>No</td><td>Estanteria A1</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

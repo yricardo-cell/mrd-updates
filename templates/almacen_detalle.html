@@ -1,0 +1,627 @@
+{% extends "base.html" %}
+{% block title %}{{ almacen.nombre }} — Almacén{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/almacenes">Almacenes</a><span class="sep">/</span>
+<span class="current">{{ almacen.nombre }}</span>
+{% endblock %}
+
+{% block content %}
+
+{# ── Cabecera ── #}
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">
+      <i class="bi bi-house-gear me-2"></i>{{ almacen.nombre }}
+    </div>
+    <div class="page-subtitle">
+      {% if almacen.descripcion %}{{ almacen.descripcion }}{% endif %}
+      {% if almacen.responsable %} · <i class="bi bi-person"></i> {{ almacen.responsable }}{% endif %}
+      {% if almacen.direccion %} · <i class="bi bi-geo-alt"></i> {{ almacen.direccion }}{% endif %}
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/almacenes/{{ almacen.id }}/mapa" class="btn btn-primary btn-sm">
+      <i class="bi bi-map"></i> Mapa de la nave
+    </a>
+    {% if user.rol in ['admin','almacen','encargado_patio'] %}
+    <button class="btn btn-warning btn-sm" onclick="openWarehouseModal('modal-editar-alm')">
+      <i class="bi bi-pencil"></i> Editar
+    </button>
+    {% endif %}
+    <a href="/almacenes/{{ almacen.id }}/qr" target="_blank" class="btn btn-outline btn-sm">
+      <i class="bi bi-qr-code"></i> QR
+    </a>
+    <a href="/almacenes/{{ almacen.id }}/exportar" class="btn btn-outline btn-sm">
+      <i class="bi bi-file-earmark-excel"></i> Excel
+    </a>
+    <a href="/almacenes" class="btn btn-ghost btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
+  </div>
+</div>
+
+{# Alertas ok #}
+{% if request.query_params.get('ok') == 'ubicacion' %}
+<div class="alert alert-success alert-dismissible fade show mb-3">
+  <i class="bi bi-check-circle me-2"></i>Ubicación guardada.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% elif request.query_params.get('ok') == 'transferido' %}
+<div class="alert alert-success alert-dismissible fade show mb-3">
+  <i class="bi bi-check-circle me-2"></i>Transferencia realizada.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% elif request.query_params.get('ok') == 'foto' %}
+<div class="alert alert-success alert-dismissible fade show mb-3">
+  <i class="bi bi-check-circle me-2"></i>Foto actualizada.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% elif request.query_params.get('ok') == 'inventario' %}
+<div class="alert alert-success alert-dismissible fade show mb-3">
+  <i class="bi bi-clipboard-check me-2"></i>Inventario actualizado correctamente.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start">
+
+  {# ── Panel izquierdo — Tabs principales ── #}
+  <div>
+    <ul class="nav nav-tabs mb-3" id="tabsAlmacen">
+      <li class="nav-item">
+        <a class="nav-link active" data-bs-toggle="tab" href="#tabHerr">
+          <i class="bi bi-tools me-1"></i>Herramientas
+          <span class="badge bg-warning text-dark ms-1">{{ herramientas|length }}</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tabMat">
+          <i class="bi bi-box-seam me-1"></i>Materiales
+          <span class="badge bg-info text-dark ms-1">{{ materiales|length }}</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tabUbi">
+          <i class="bi bi-diagram-3 me-1"></i>Ubicaciones
+          <span class="badge bg-secondary ms-1">{{ ubicaciones|length }}</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tabTransferir">
+          <i class="bi bi-arrow-left-right me-1"></i>Transferir
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.query_params.get('tab') == 'mat' %}active{% endif %}"
+           data-bs-toggle="tab" href="#tabInventario" id="tab-inventario-link">
+          <i class="bi bi-clipboard-check me-1"></i>Inventario
+        </a>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+
+      {# ── TAB HERRAMIENTAS ── #}
+      <div class="tab-pane fade show active" id="tabHerr">
+        {% if herramientas %}
+        <div class="table-responsive">
+          <table class="table table-hover table-sm align-middle">
+            <thead class="table-dark">
+              <tr>
+                <th>Código</th><th>Nombre</th><th>Estado</th><th>Ubicación</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for h in herramientas %}
+              <tr>
+                <td><code>{{ h.codigo }}</code></td>
+                <td>{{ h.nombre }}</td>
+                <td>
+                  {% set colores = {'disponible':'success','en_almacen':'secondary','en_obra':'warning','en_furgoneta':'info','en_reparacion':'danger'} %}
+                  <span class="badge bg-{{ colores.get(h.estado,'secondary') }}">{{ h.estado | replace('_',' ') | title }}</span>
+                </td>
+                <td class="text-muted small">
+                  {% if h.ubicacion %}{{ h.ubicacion.nombre }}{% else %}—{% endif %}
+                </td>
+                <td>
+                  <a href="/herramientas/{{ h.id }}" class="btn btn-ghost btn-sm">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-tools display-4 d-block mb-2 opacity-25"></i>
+          Sin herramientas en este almacén.
+        </div>
+        {% endif %}
+      </div>
+
+      {# ── TAB MATERIALES ── #}
+      <div class="tab-pane fade" id="tabMat">
+        {% if materiales %}
+        <div class="table-responsive">
+          <table class="table table-hover table-sm align-middle">
+            <thead class="table-dark">
+              <tr>
+                <th>Código</th><th>Nombre</th><th>Stock</th><th>Ubicación</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in materiales %}
+              <tr {% if m.bajo_minimo %}class="table-warning"{% endif %}>
+                <td><code>{{ m.codigo }}</code></td>
+                <td>
+                  {{ m.nombre }}
+                  {% if m.bajo_minimo %}<i class="bi bi-exclamation-triangle-fill text-danger ms-1" title="Bajo mínimo"></i>{% endif %}
+                </td>
+                <td class="fw-bold">{{ m.stock_actual }} {{ m.unidad or 'ud' }}</td>
+                <td class="text-muted small">
+                  {% if m.ubicacion %}{{ m.ubicacion.nombre }}
+                  {% elif m.ubicacion_texto %}{{ m.ubicacion_texto }}
+                  {% else %}—{% endif %}
+                </td>
+                <td>
+                  <a href="/materiales/{{ m.id }}" class="btn btn-ghost btn-sm">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-box-seam display-4 d-block mb-2 opacity-25"></i>
+          Sin materiales en este almacén.
+        </div>
+        {% endif %}
+      </div>
+
+      {# ── TAB UBICACIONES ── #}
+      <div class="tab-pane fade" id="tabUbi">
+        {% if user.rol in ['admin','almacen','encargado_patio'] %}
+        <button class="btn btn-warning btn-sm mb-3" onclick="openWarehouseModal('modal-nueva-ubi')">
+          <i class="bi bi-plus-lg me-1"></i>Nueva ubicación
+        </button>
+        {% endif %}
+
+        {% if ubicaciones %}
+        <div class="row g-2">
+          {% for ub in ubicaciones %}
+          <div class="col-sm-6">
+            <div class="card">
+              <div class="card-body py-2 px-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="fw-semibold">{{ ub.nombre }}</div>
+                    {% if ub.codigo %}<code class="small">{{ ub.codigo }}</code>{% endif %}
+                    {% if ub.descripcion %}<div class="text-muted small mt-1">{{ ub.descripcion }}</div>{% endif %}
+                    <div class="small text-primary mt-1"><i class="bi bi-geo-alt me-1"></i>{{ ub.ruta_completa }}</div>
+                    <div class="mt-1">
+                      <span class="badge bg-warning text-dark">{{ ub.herramientas|length }} herr.</span>
+                      <span class="badge bg-info text-dark">{{ ub.materiales|length }} mat.</span>
+                    </div>
+                  </div>
+                  {% if user.rol in ['admin','almacen','encargado_patio'] %}
+                  <div class="d-flex gap-1">
+                    <a href="/almacenes/{{ almacen.id }}/ubicaciones/{{ ub.id }}/qr"
+                       target="_blank" class="btn btn-ghost btn-sm" title="QR ubicación">
+                      <i class="bi bi-qr-code"></i>
+                    </a>
+                    <button class="btn btn-ghost btn-sm"
+                            data-uid="{{ ub.id }}"
+                            data-nombre="{{ ub.nombre }}"
+                            data-codigo="{{ ub.codigo or '' }}"
+                            data-descripcion="{{ ub.descripcion or '' }}"
+                            data-zona="{{ ub.zona or '' }}" data-pasillo="{{ ub.pasillo or '' }}"
+                            data-estanteria="{{ ub.estanteria or '' }}" data-balda="{{ ub.balda or '' }}"
+                            data-posicion="{{ ub.posicion or '' }}"
+                            onclick="editarUbi(this)" title="Editar">
+                      <i class="bi bi-pencil"></i>
+                    </button>
+                    <form method="post" action="/almacenes/{{ almacen.id }}/ubicaciones/{{ ub.id }}/eliminar"
+                          onsubmit="return confirm('¿Eliminar ubicación {{ ub.nombre }}?')">
+                      <button type="submit" class="btn btn-ghost btn-sm text-danger" title="Eliminar">
+                        <i class="bi bi-trash3"></i>
+                      </button>
+                    </form>
+                  </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4">
+          <i class="bi bi-diagram-3 display-4 d-block mb-2 opacity-25"></i>
+          Sin ubicaciones. Crea una para organizar el contenido.
+        </div>
+        {% endif %}
+      </div>
+
+      {# ── TAB TRANSFERIR ── #}
+      <div class="tab-pane fade" id="tabTransferir">
+        <div class="text-center py-4">
+          <i class="bi bi-truck display-4 text-primary d-block mb-3"></i>
+          <h4>Traspaso seguro con albarán</h4>
+          <p class="text-muted mx-auto" style="max-width:560px">Escanea herramientas, maquinaria, ropa, EPIs o consumibles. La salida queda en tránsito y el stock no cambia de sede definitivamente hasta que el destino confirme y firme la recepción.</p>
+          <a href="/multi-almacen?origen={{ almacen.id }}" class="btn btn-primary btn-lg"><i class="bi bi-arrow-left-right me-2"></i>Preparar traspaso desde {{ almacen.nombre }}</a>
+        </div>
+      </div>
+
+      {# ── TAB INVENTARIO EXPRESS ── #}
+      <div class="tab-pane fade" id="tabInventario">
+        {% if materiales %}
+        <div class="alert alert-info d-flex align-items-center mb-3" style="font-size:.84rem">
+          <i class="bi bi-info-circle-fill me-2"></i>
+          Introduce el stock real de cada material. Solo se guardan los que cambien.
+        </div>
+        <form method="post" action="/almacenes/{{ almacen.id }}/inventario" id="form-inventario">
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead class="table-dark">
+                <tr>
+                  <th>Código</th><th>Nombre</th><th>Ubicación</th>
+                  <th style="width:90px">Mínimo</th>
+                  <th style="width:120px">Stock real</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for m in materiales %}
+                <tr {% if m.bajo_minimo %}class="table-warning"{% endif %}>
+                  <td><code>{{ m.codigo }}</code></td>
+                  <td>
+                    {{ m.nombre }}
+                    {% if m.bajo_minimo %}<i class="bi bi-exclamation-triangle-fill text-danger ms-1"></i>{% endif %}
+                  </td>
+                  <td class="text-muted small">
+                    {% if m.ubicacion %}{{ m.ubicacion.nombre }}{% elif m.ubicacion_texto %}{{ m.ubicacion_texto }}{% else %}—{% endif %}
+                  </td>
+                  <td class="text-muted small">{{ m.stock_minimo }} {{ m.unidad or 'ud' }}</td>
+                  <td>
+                    <div class="input-group input-group-sm">
+                      <input type="number" name="stock_{{ m.id }}" step="0.01" min="0"
+                             class="form-control {% if m.bajo_minimo %}border-warning{% endif %}"
+                             value="{{ m.stock_actual }}"
+                             placeholder="{{ m.stock_actual }}">
+                      <span class="input-group-text" style="font-size:.72rem">{{ m.unidad or 'ud' }}</span>
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="d-flex gap-2 mt-2">
+            <button type="submit" class="btn btn-warning">
+              <i class="bi bi-floppy me-1"></i>Guardar inventario
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="resetInventario()">
+              <i class="bi bi-arrow-counterclockwise"></i> Restaurar valores
+            </button>
+          </div>
+        </form>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-clipboard display-4 d-block mb-2 opacity-25"></i>
+          Sin materiales — añade materiales a este almacén primero.
+        </div>
+        {% endif %}
+      </div>
+
+    </div>{# /tab-content #}
+  </div>
+
+  {# ── Panel derecho — Foto + info ── #}
+  <div style="display:flex;flex-direction:column;gap:14px">
+
+    {# Foto #}
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-image"></i> Foto</div></div>
+      <div class="card-body" style="text-align:center">
+        {% if almacen.foto %}
+        <img src="/static/uploads/almacenes/{{ almacen.foto }}"
+             style="width:100%;max-height:160px;object-fit:cover;border-radius:6px;margin-bottom:8px"
+             alt="{{ almacen.nombre }}">
+        {% if user.rol in ['admin','almacen','encargado_patio'] %}
+        <form method="post" action="/almacenes/{{ almacen.id }}/foto/eliminar"
+              onsubmit="return confirm('¿Eliminar foto?')" style="margin-bottom:8px">
+          <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--danger);font-size:.78rem">
+            <i class="bi bi-trash"></i> Eliminar foto
+          </button>
+        </form>
+        {% endif %}
+        {% else %}
+        <div style="color:var(--text-muted);font-size:.82rem;margin-bottom:8px">Sin foto</div>
+        {% endif %}
+        {% if user.rol in ['admin','almacen','encargado_patio'] %}
+        <form method="post" action="/almacenes/{{ almacen.id }}/foto"
+              enctype="multipart/form-data" id="form-foto-alm">
+          <input type="file" name="foto" accept="image/*" class="form-control"
+                 style="font-size:.78rem" onchange="subirFotoAlm(this)">
+        </form>
+        <script>
+        function subirFotoAlm(inp){
+          var f=inp.closest('form');
+          if(!f.querySelector('[name=_csrf_token]')){
+            var m=document.cookie.match(/(?:^|; )mrd_csrf=([^;]*)/);
+            var hi=document.createElement('input');
+            hi.type='hidden';hi.name='_csrf_token';hi.value=m?decodeURIComponent(m[1]):'';
+            f.appendChild(hi);
+          }
+          f.submit();
+        }
+        </script>
+        {% endif %}
+      </div>
+    </div>
+
+    {# KPIs rápidos — en vivo #}
+    <div class="card" id="panel-metricas-vivo" data-almacen-id="{{ almacen.id }}">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="card-title"><i class="bi bi-bar-chart"></i> Resumen</div>
+        <span class="small text-muted" id="metricas-vivo-estado">
+          <span class="badge-dot" style="background:var(--success);width:7px;height:7px;border-radius:50%;display:inline-block"></span>
+          en vivo
+        </span>
+      </div>
+      <div class="card-body">
+        {% set herr_alm = herramientas | selectattr('estado','equalto','en_almacen') | list %}
+        {% set herr_fuera = herramientas | rejectattr('estado','equalto','en_almacen') | list %}
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted small">Herramientas en almacén</span>
+          <strong data-metric="herramientas_en_almacen">{{ herr_alm|length }}</strong>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted small">Herramientas fuera</span>
+          <strong class="{% if herr_fuera %}text-warning{% endif %}" data-metric="herramientas_fuera">{{ herr_fuera|length }}</strong>
+        </div>
+        {% set mat_bajo = materiales | selectattr('bajo_minimo') | list %}
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted small">Materiales</span>
+          <strong data-metric="materiales_total">{{ materiales|length }}</strong>
+        </div>
+        <div class="d-flex justify-content-between mb-2" data-metric-row="materiales_bajo_minimo" {% if not mat_bajo %}style="display:none"{% endif %}>
+          <span class="text-muted small text-danger">Bajo mínimo</span>
+          <strong class="text-danger" data-metric="materiales_bajo_minimo">{{ mat_bajo|length }}</strong>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted small">Movimientos hoy</span>
+          <strong data-metric="movimientos_hoy">—</strong>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted small">Albaranes abiertos</span>
+          <strong data-metric="albaranes_abiertos">—</strong>
+        </div>
+        <div class="d-flex justify-content-between mt-2">
+          <span class="text-muted small">Ubicaciones</span>
+          <strong>{{ ubicaciones|length }}</strong>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(() => {
+  const panel = document.getElementById('panel-metricas-vivo');
+  if (!panel) return;
+  const aid = panel.dataset.almacenId;
+  const estado = document.getElementById('metricas-vivo-estado');
+  async function refrescar() {
+    try {
+      const r = await fetch(`/api/almacenes/${aid}/metricas`, { headers: { Accept: 'application/json' } });
+      if (!r.ok) throw new Error('http ' + r.status);
+      const data = await r.json();
+      panel.querySelectorAll('[data-metric]').forEach(el => {
+        const v = data[el.dataset.metric];
+        if (v !== undefined) el.textContent = v;
+      });
+      const filaBajo = panel.querySelector('[data-metric-row="materiales_bajo_minimo"]');
+      if (filaBajo) filaBajo.style.display = data.materiales_bajo_minimo > 0 ? '' : 'none';
+      if (estado) estado.title = 'Actualizado: ' + new Date(data.actualizado + 'Z').toLocaleTimeString();
+    } catch (e) {
+      if (estado) estado.title = 'No se pudo actualizar';
+    }
+  }
+  refrescar();
+  setInterval(refrescar, 20000);
+})();
+</script>
+
+{# ── Modal editar almacén ── #}
+<div class="modal-overlay" id="modal-editar-alm" aria-hidden="true" style="display:none">
+  <div class="modal modal-md">
+    <div class="modal-header">
+      <span class="modal-title"><i class="bi bi-pencil-square me-2"></i>Editar almacén</span>
+      <button class="modal-close" onclick="closeWarehouseModal('modal-editar-alm')">✕</button>
+    </div>
+    <form method="post" action="/almacenes/{{ almacen.id }}/editar">
+      <div class="modal-body">
+        <div class="mb-2">
+          <label class="form-label">Nombre <span class="text-danger">*</span></label>
+          <input type="text" name="nombre" class="form-control" value="{{ almacen.nombre }}" required>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Descripción</label>
+          <input type="text" name="descripcion" class="form-control" value="{{ almacen.descripcion or '' }}">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Dirección</label>
+          <input type="text" name="direccion" class="form-control" value="{{ almacen.direccion or '' }}">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Responsable</label>
+          <select name="responsable" class="form-select">
+            <option value="">— Sin asignar —</option>
+            {% for t in trabajadores %}
+            <option value="{{ t.nombre_completo }}"
+              {% if almacen.responsable == t.nombre_completo %}selected{% endif %}>
+              {{ t.nombre_completo }}
+            </option>
+            {% endfor %}
+            <option value="{{ almacen.responsable or '' }}"
+              {% if almacen.responsable %}selected{% endif %}>
+              {{ almacen.responsable or '(otro)' }}
+            </option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeWarehouseModal('modal-editar-alm')">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-floppy me-1"></i>Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ── Modal nueva ubicación ── #}
+<div class="modal-overlay" id="modal-nueva-ubi" aria-hidden="true" style="display:none">
+  <div class="modal modal-md">
+    <div class="modal-header">
+      <span class="modal-title"><i class="bi bi-diagram-3 me-2"></i>Nueva ubicación</span>
+      <button class="modal-close" onclick="closeWarehouseModal('modal-nueva-ubi')">✕</button>
+    </div>
+    <form method="post" action="/almacenes/{{ almacen.id }}/ubicaciones/nuevo">
+      <div class="modal-body">
+        <div class="mb-2">
+          <label class="form-label">Nombre <span class="text-danger">*</span></label>
+          <input type="text" name="nombre" class="form-control" placeholder="Ej: Estantería A, Cajón 3, Zona carga" required>
+        </div>
+        <div class="mb-2 small text-muted"><i class="bi bi-qr-code me-1"></i>La referencia y el QR se generan automáticamente, sin solapes.</div>
+        <div class="row g-2 mb-2"><div class="col-6"><label class="form-label">Zona</label><input name="zona" class="form-control" placeholder="Ropa, patio…"></div><div class="col-6"><label class="form-label">Pasillo</label><input name="pasillo" class="form-control" placeholder="P1"></div><div class="col-4"><label class="form-label">Estantería</label><input name="estanteria" class="form-control" placeholder="E-A"></div><div class="col-4"><label class="form-label">Balda</label><input name="balda" class="form-control" placeholder="B3"></div><div class="col-4"><label class="form-label">Posición</label><input name="posicion" class="form-control" placeholder="04"></div></div>
+        <div class="mb-2">
+          <label class="form-label">Descripción</label>
+          <input type="text" name="descripcion" class="form-control" placeholder="Descripción opcional">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeWarehouseModal('modal-nueva-ubi')">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Crear</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ── Modal editar ubicación ── #}
+<div class="modal-overlay" id="modal-editar-ubi" aria-hidden="true" style="display:none">
+  <div class="modal modal-md">
+    <div class="modal-header">
+      <span class="modal-title"><i class="bi bi-pencil me-2"></i>Editar ubicación</span>
+      <button class="modal-close" onclick="closeWarehouseModal('modal-editar-ubi')">✕</button>
+    </div>
+    <form method="post" id="form-editar-ubi" action="">
+      <div class="modal-body">
+        <div class="mb-2">
+          <label class="form-label">Nombre <span class="text-danger">*</span></label>
+          <input type="text" id="eu-nombre" name="nombre" class="form-control" required>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Código</label>
+          <input type="text" id="eu-codigo" name="codigo" class="form-control" readonly>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Descripción</label>
+          <input type="text" id="eu-descripcion" name="descripcion" class="form-control">
+        </div>
+        <div class="row g-2"><div class="col-6"><label class="form-label">Zona</label><input id="eu-zona" name="zona" class="form-control"></div><div class="col-6"><label class="form-label">Pasillo</label><input id="eu-pasillo" name="pasillo" class="form-control"></div><div class="col-4"><label class="form-label">Estantería</label><input id="eu-estanteria" name="estanteria" class="form-control"></div><div class="col-4"><label class="form-label">Balda</label><input id="eu-balda" name="balda" class="form-control"></div><div class="col-4"><label class="form-label">Posición</label><input id="eu-posicion" name="posicion" class="form-control"></div></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeWarehouseModal('modal-editar-ubi')">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-floppy me-1"></i>Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Al entrar o volver desde el historial, nunca conservar un modal de una
+// visita anterior: algunos navegadores/PWA restauran la clase `open` del BFCache.
+function resetWarehouseUI() {
+  ['modal-editar-alm', 'modal-nueva-ubi', 'modal-editar-ubi'].forEach(function(id) {
+    var modal = document.getElementById(id);
+    if (!modal) return;
+    modal.classList.remove('open');
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+  });
+  document.querySelectorAll('.modal-backdrop').forEach(function(backdrop) { backdrop.remove(); });
+  document.body.classList.remove('modal-open');
+  document.body.style.overflow = '';
+  document.body.style.paddingRight = '';
+}
+
+function openWarehouseModal(id) {
+  resetWarehouseUI();
+  var modal = document.getElementById(id);
+  if (!modal) return;
+  modal.style.display = 'flex';
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeWarehouseModal(id) {
+  var modal = document.getElementById(id);
+  if (!modal) return;
+  modal.classList.remove('open');
+  modal.style.display = 'none';
+  modal.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+}
+
+// Auto-activar tab si viene ?tab=mat o ?ok=inventario
+document.addEventListener('DOMContentLoaded', function() {
+  resetWarehouseUI();
+  // Fallback local: las pestañas siguen funcionando aunque falle Bootstrap.
+  document.querySelectorAll('#tabsAlmacen [href^="#tab"]').forEach(function(link) {
+    link.addEventListener('click', function(ev) {
+      ev.preventDefault();
+      document.querySelectorAll('#tabsAlmacen .nav-link').forEach(a => a.classList.remove('active'));
+      document.querySelectorAll('.tab-content > .tab-pane').forEach(p => p.classList.remove('show', 'active'));
+      link.classList.add('active');
+      var panel = document.querySelector(link.getAttribute('href'));
+      if (panel) panel.classList.add('show', 'active');
+    });
+  });
+  var params = new URLSearchParams(location.search);
+  if (params.get('tab') === 'mat' || params.get('ok') === 'inventario') {
+    var el = document.getElementById('tab-inventario-link');
+    if (el) el.click();
+  }
+});
+window.addEventListener('pageshow', resetWarehouseUI);
+
+function resetInventario() {
+  document.querySelectorAll('#form-inventario input[type=number]').forEach(function(inp) {
+    inp.value = inp.placeholder;
+  });
+}
+
+function editarUbi(btn) {
+  const d = btn.dataset;
+  document.getElementById('form-editar-ubi').action = `/almacenes/{{ almacen.id }}/ubicaciones/${d.uid}/editar`;
+  document.getElementById('eu-nombre').value = d.nombre;
+  document.getElementById('eu-codigo').value = d.codigo;
+  document.getElementById('eu-descripcion').value = d.descripcion;
+  document.getElementById('eu-zona').value = d.zona;
+  document.getElementById('eu-pasillo').value = d.pasillo;
+  document.getElementById('eu-estanteria').value = d.estanteria;
+  document.getElementById('eu-balda').value = d.balda;
+  document.getElementById('eu-posicion').value = d.posicion;
+  openWarehouseModal('modal-editar-ubi');
+}
+</script>
+{% endblock %}

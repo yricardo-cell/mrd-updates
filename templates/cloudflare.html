@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+{% block title %}Cloudflare — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <h2 class="mrd-page-title"><i class="bi bi-cloud-check me-2"></i>Cloudflare Named Tunnel</h2>
+  <div class="d-flex gap-2 flex-wrap">
+    <button class="btn btn-sm btn-outline-info" onclick="cfTest()">
+      <i class="bi bi-activity me-1"></i>Diagnóstico
+    </button>
+    <button class="btn btn-sm btn-outline-warning" onclick="cfRestart()">
+      <i class="bi bi-arrow-clockwise me-1"></i>Reiniciar servicio
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="cfRefresh()">
+      <i class="bi bi-arrow-clockwise me-1" id="icon-cf-refresh"></i>Actualizar
+    </button>
+  </div>
+</div>
+
+<div id="cf-alert" class="alert py-2 mb-3 d-none" role="alert"></div>
+
+<!-- ═══ FILA SUPERIOR: Estado + Info ════════════════════════════════════════ -->
+<div class="row g-3 mb-3">
+
+  <!-- Estado del túnel -->
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="mrd-card h-100">
+      <div class="mrd-card-header">
+        <i class="bi bi-circle-fill me-2" id="cf-dot" style="color:#6c757d"></i>Estado del túnel
+      </div>
+      <div class="p-3">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <span class="badge fs-6 px-3 py-2" id="cf-badge" style="background:#6c757d">Comprobando…</span>
+          <div>
+            <div class="fw-semibold" id="cf-tunnel-name">—</div>
+            <div class="text-muted small">Cloudflare Named Tunnel</div>
+          </div>
+        </div>
+        <table class="table table-sm table-borderless mb-0" style="font-size:.82rem">
+          <tbody>
+            <tr><td class="text-muted">Servicio</td><td id="cf-svc-state">—</td></tr>
+            <tr><td class="text-muted">Inicio</td><td id="cf-svc-start">—</td></tr>
+            <tr><td class="text-muted">Versión</td><td id="cf-version">—</td></tr>
+            <tr><td class="text-muted">Tunnel ID</td><td id="cf-tunnel-id" style="font-size:.75rem;word-break:break-all">—</td></tr>
+            <tr><td class="text-muted">Conexiones</td><td id="cf-connections">—</td></tr>
+            <tr><td class="text-muted">Métricas</td><td id="cf-metrics">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- URLs -->
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="mrd-card h-100">
+      <div class="mrd-card-header"><i class="bi bi-link-45deg me-2"></i>URLs y dominio</div>
+      <div class="p-3">
+        <table class="table table-sm table-borderless mb-0" style="font-size:.82rem">
+          <tbody>
+            <tr>
+              <td class="text-muted">URL pública</td>
+              <td><a id="cf-public-url" href="#" target="_blank" class="text-break">—</a></td>
+            </tr>
+            <tr><td class="text-muted">Hostname</td><td id="cf-hostname">—</td></tr>
+            <tr><td class="text-muted">Dominio</td><td id="cf-domain">—</td></tr>
+            <tr><td class="text-muted">Subdominio</td><td id="cf-subdomain">—</td></tr>
+            <tr><td class="text-muted">HTTPS</td><td id="cf-https">—</td></tr>
+            <tr><td class="text-muted">Puerto interno</td><td id="cf-port">—</td></tr>
+            <tr>
+              <td class="text-muted">URL scan/QR</td>
+              <td><a id="cf-scan-url" href="#" target="_blank" class="text-break">—</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Diagnóstico rápido -->
+  <div class="col-12 col-xl-4">
+    <div class="mrd-card h-100">
+      <div class="mrd-card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-heart-pulse me-2"></i>Diagnóstico</span>
+        <span id="cf-diag-badge" class="badge bg-secondary">—</span>
+      </div>
+      <div class="p-2" id="cf-diag-list">
+        <div class="text-center text-muted py-3 small">
+          <span class="spinner-border spinner-border-sm me-2"></span>Ejecutando…
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CONFIGURACIÓN ════════════════════════════════════════════════════════ -->
+<div class="mrd-card mb-3">
+  <div class="mrd-card-header"><i class="bi bi-sliders me-2"></i>Configuración del túnel</div>
+  <div class="p-3">
+    <form id="cf-config-form" onsubmit="cfSaveConfig(event)">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <div class="row g-3">
+
+        <div class="col-12 col-md-6">
+          <label class="form-label small fw-semibold">Nombre del túnel <span class="text-muted">(cf_tunnel_name)</span></label>
+          <input type="text" class="form-control form-control-sm" name="cf_tunnel_name"
+                 value="{{ config.get('cf_tunnel_name','') }}"
+                 placeholder="mrd-tool" pattern="[a-zA-Z0-9\-_]{1,64}">
+          <div class="form-text">Nombre del Named Tunnel creado con cloudflared tunnel create</div>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label small fw-semibold">Hostname completo <span class="text-muted">(cf_hostname)</span></label>
+          <input type="text" class="form-control form-control-sm" name="cf_hostname"
+                 value="{{ config.get('cf_hostname','') }}"
+                 placeholder="herramientas.midominio.com">
+          <div class="form-text">Dominio completo configurado en Cloudflare DNS</div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label small fw-semibold">Dominio raíz <span class="text-muted">(cf_domain)</span></label>
+          <input type="text" class="form-control form-control-sm" name="cf_domain"
+                 value="{{ config.get('cf_domain','') }}"
+                 placeholder="midominio.com">
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label small fw-semibold">Subdominio <span class="text-muted">(cf_subdomain)</span></label>
+          <input type="text" class="form-control form-control-sm" name="cf_subdomain"
+                 value="{{ config.get('cf_subdomain','') }}"
+                 placeholder="herramientas">
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label small fw-semibold">Puerto interno <span class="text-muted">(cf_internal_port)</span></label>
+          <input type="number" class="form-control form-control-sm" name="cf_internal_port"
+                 value="{{ config.get('cf_internal_port', 8000) }}"
+                 min="1" max="65535">
+        </div>
+
+        <div class="col-12 col-md-8">
+          <label class="form-label small fw-semibold">PUBLIC_URL <span class="text-muted">(cf_public_url)</span></label>
+          <input type="url" class="form-control form-control-sm" name="cf_public_url"
+                 value="{{ config.get('cf_public_url','') }}"
+                 placeholder="https://herramientas.midominio.com">
+          <div class="form-text">URL pública completa. Se usa para el QR, los diagnósticos y la detección de HTTPS.</div>
+        </div>
+
+        <div class="col-12 col-md-4 d-flex align-items-end">
+          <div class="form-check ms-1 mb-2">
+            <input class="form-check-input" type="checkbox" name="cf_force_https" id="chk-https"
+                   {% if config.get('cf_force_https', True) %}checked{% endif %}>
+            <label class="form-check-label small fw-semibold" for="chk-https">Forzar HTTPS</label>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label small fw-semibold">Nombre servicio Windows</label>
+          <input type="text" class="form-control form-control-sm" name="cloudflared_service"
+                 value="{{ config.get('cloudflared_service','cloudflared') }}"
+                 placeholder="cloudflared" pattern="[a-zA-Z0-9_\-]{1,64}">
+          <div class="form-text">Nombre registrado en el SCM de Windows</div>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label small fw-semibold">Ruta de cloudflared.exe</label>
+          <input type="text" class="form-control form-control-sm" name="cloudflared_exe"
+                 value="{{ config.get('cloudflared_exe','cloudflared.exe') }}"
+                 placeholder="cloudflared.exe">
+          <div class="form-text">Ruta completa o nombre si está en PATH</div>
+        </div>
+
+        <div class="col-12">
+          <label class="form-label small fw-semibold">Ruta config.yml de cloudflared</label>
+          <input type="text" class="form-control form-control-sm" name="cf_config_file"
+                 value="{{ config.get('cf_config_file','') }}"
+                 placeholder="C:\Users\..\.cloudflared\config.yml">
+          <div class="form-text">Archivo de configuración del túnel (no se muestra su contenido)</div>
+        </div>
+
+        <div class="col-12 d-flex gap-2">
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-floppy me-1"></i>Guardar configuración
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="cfRefresh()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══ MANUAL DE INSTALACIÓN ════════════════════════════════════════════════ -->
+<div class="mrd-card">
+  <div class="mrd-card-header"><i class="bi bi-terminal me-2"></i>Instalación rápida</div>
+  <div class="p-3">
+    <p class="text-muted small mb-2">Ejecuta en PowerShell como Administrador desde la carpeta del proyecto:</p>
+    <pre class="bg-dark text-light p-3 rounded" style="font-size:.78rem;overflow-x:auto"><code># Instalar cloudflared como servicio con Named Tunnel
+.\install_cloudflared.ps1 -TunnelName "mrd-tool" -Hostname "herramientas.midominio.com"
+
+# Solo actualizar DNS (túnel ya creado)
+.\install_cloudflared.ps1 -TunnelName "mrd-tool" -Hostname "herramientas.midominio.com" -ConfigOnly
+
+# Desinstalar
+.\install_cloudflared.ps1 -UninstallOnly</code></pre>
+    <p class="small text-muted mt-2 mb-0">
+      <i class="bi bi-info-circle me-1"></i>
+      El script descarga cloudflared, hace login en Cloudflare, crea el túnel, configura DNS y lo instala como servicio Windows con inicio automático.
+    </p>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ─── Estado global ─────────────────────────────────────────────────────────
+function _showAlert(msg, type) {
+  const a = document.getElementById('cf-alert');
+  a.className = `alert alert-${type} py-2 mb-3`;
+  a.textContent = msg;
+  a.classList.remove('d-none');
+  setTimeout(() => a.classList.add('d-none'), 8000);
+}
+
+// ─── Cargar estado ─────────────────────────────────────────────────────────
+async function cfRefresh() {
+  const icon = document.getElementById('icon-cf-refresh');
+  icon.classList.add('spin-anim');
+  try {
+    await Promise.all([loadCfStatus(), loadCfInfo(), cfTest()]);
+  } finally {
+    icon.classList.remove('spin-anim');
+  }
+}
+
+async function loadCfStatus() {
+  try {
+    const r = await fetch('/api/cloudflare/status');
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+
+    const badge = document.getElementById('cf-badge');
+    const dot   = document.getElementById('cf-dot');
+    if (d.connected) {
+      badge.textContent = 'CONECTADO';
+      badge.style.background = '#198754';
+      dot.style.color = '#198754';
+    } else if (d.service_running) {
+      badge.textContent = 'SERVICIO ACTIVO';
+      badge.style.background = '#0d6efd';
+      dot.style.color = '#0d6efd';
+    } else {
+      badge.textContent = 'DESCONECTADO';
+      badge.style.background = '#dc3545';
+      dot.style.color = '#dc3545';
+    }
+
+    document.getElementById('cf-tunnel-name').textContent  = d.tunnel_name || '—';
+    document.getElementById('cf-svc-state').textContent    = d.service_state || '—';
+    document.getElementById('cf-svc-start').textContent    = d.service_start_type || '—';
+    document.getElementById('cf-version').textContent      = d.cloudflared_version ? `v${d.cloudflared_version}` : '—';
+    document.getElementById('cf-tunnel-id').textContent    = d.tunnel_id || '—';
+    document.getElementById('cf-connections').textContent  = d.active_connections ?? '—';
+    document.getElementById('cf-metrics').textContent      = d.metrics_available ? 'Disponible' : 'No disponible';
+    document.getElementById('cf-hostname').textContent     = d.hostname || '—';
+    document.getElementById('cf-domain').textContent       = d.domain || '—';
+    document.getElementById('cf-subdomain').textContent    = d.subdomain || '—';
+    document.getElementById('cf-port').textContent         = d.public_url_active ? '8000 → 443' : '—';
+
+    const pub = d.public_url_active || d.public_url || '';
+    const pubEl = document.getElementById('cf-public-url');
+    if (pub) {
+      pubEl.textContent = pub;
+      pubEl.href = pub;
+    } else {
+      pubEl.textContent = '—';
+      pubEl.removeAttribute('href');
+    }
+
+    const httpsEl = document.getElementById('cf-https');
+    httpsEl.innerHTML = d.https
+      ? '<i class="bi bi-lock-fill text-success me-1"></i>Activo'
+      : '<i class="bi bi-unlock text-danger me-1"></i>No activo';
+
+    const scanUrl = pub ? pub.replace(/\/$/, '') + '/scan' : '';
+    const scanEl  = document.getElementById('cf-scan-url');
+    if (scanUrl) {
+      scanEl.textContent = scanUrl;
+      scanEl.href = scanUrl;
+    } else {
+      scanEl.textContent = '—';
+      scanEl.removeAttribute('href');
+    }
+  } catch(e) {
+    console.warn('Error cargando estado CF:', e);
+  }
+}
+
+async function loadCfInfo() {
+  try {
+    const r = await fetch('/api/cloudflare/info');
+    if (!r.ok) return;
+    const d = await r.json();
+    // Actualizar versión si está disponible
+    if (d.cloudflared_version) {
+      document.getElementById('cf-version').textContent = `v${d.cloudflared_version}`;
+    }
+    if (d.tunnel_id) {
+      document.getElementById('cf-tunnel-id').textContent = d.tunnel_id;
+    }
+  } catch(e) {}
+}
+
+// ─── Diagnóstico ────────────────────────────────────────────────────────────
+async function cfTest() {
+  const list  = document.getElementById('cf-diag-list');
+  const badge = document.getElementById('cf-diag-badge');
+  list.innerHTML = '<div class="text-center text-muted py-2 small"><span class="spinner-border spinner-border-sm me-2"></span>Ejecutando…</div>';
+  try {
+    const r = await fetch('/api/cloudflare/test', { method: 'POST', headers: {'Content-Type':'application/json'} });
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+
+    badge.textContent = d.healthy ? 'OK' : 'PROBLEMAS';
+    badge.className = 'badge ' + (d.healthy ? 'bg-success' : 'bg-danger');
+
+    list.innerHTML = (d.checks || []).map(c => `
+      <div class="d-flex align-items-start gap-2 px-2 py-1 border-bottom" style="font-size:.78rem">
+        <i class="bi ${c.ok ? 'bi-check-circle-fill text-success' : 'bi-x-circle-fill text-danger'} mt-1 flex-shrink-0"></i>
+        <div>
+          <span class="fw-semibold">${c.label}</span>
+          ${c.ms != null ? `<span class="text-muted ms-1">(${c.ms}ms)</span>` : ''}
+          <div class="text-muted" style="font-size:.72rem">${c.detail}</div>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    list.innerHTML = '<div class="text-danger small p-2">Error al ejecutar diagnóstico</div>';
+    badge.textContent = 'ERROR';
+    badge.className = 'badge bg-danger';
+  }
+}
+
+// ─── Reiniciar servicio ─────────────────────────────────────────────────────
+async function cfRestart() {
+  _showAlert('Reiniciando servicio cloudflared…', 'info');
+  try {
+    const r = await fetch('/api/cloudflare/restart', { method: 'POST' });
+    const d = await r.json();
+    _showAlert(d.message || (d.ok ? 'Servicio reiniciado.' : 'Error al reiniciar.'), d.ok ? 'success' : 'danger');
+    if (d.ok) setTimeout(cfRefresh, 4000);
+  } catch(e) {
+    _showAlert('Error de red: ' + e.message, 'danger');
+  }
+}
+
+// ─── Guardar configuración ──────────────────────────────────────────────────
+async function cfSaveConfig(e) {
+  e.preventDefault();
+  const form = document.getElementById('cf-config-form');
+  const data = {};
+  new FormData(form).forEach((v, k) => {
+    if (k === '_csrf_token') return;
+    if (k === 'cf_force_https') { data[k] = true; return; }
+    if (k === 'cf_internal_port') { data[k] = parseInt(v) || 8000; return; }
+    data[k] = v.trim();
+  });
+  // cf_force_https es checkbox: si no está en FormData, es false
+  if (!('cf_force_https' in data)) data['cf_force_https'] = false;
+
+  try {
+    const r = await fetch('/api/cloudflare/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken() },
+      body: JSON.stringify(data),
+    });
+    const d = await r.json();
+    _showAlert(r.ok ? (d.message || 'Guardado.') : (d.detail || 'Error al guardar.'), r.ok ? 'success' : 'danger');
+    if (r.ok) setTimeout(cfRefresh, 1000);
+  } catch(e) {
+    _showAlert('Error de red: ' + e.message, 'danger');
+  }
+}
+
+function getCsrfToken() {
+  const cookies = document.cookie.split(';');
+  for (const c of cookies) {
+    const [k, v] = c.trim().split('=');
+    if (k === 'mrd_csrf') return decodeURIComponent(v);
+  }
+  return '';
+}
+
+// ─── Animación ──────────────────────────────────────────────────────────────
+const _style = document.createElement('style');
+_style.textContent = '.spin-anim{animation:spin .7s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}';
+document.head.appendChild(_style);
+
+document.addEventListener('DOMContentLoaded', () => {
+  cfRefresh();
+  setInterval(cfRefresh, 60000);
+});
+</script>
+{% endblock %}

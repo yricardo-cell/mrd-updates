@@ -1,0 +1,26 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+sqlalchemy>=2.0.30
+python-jose[cryptography]>=3.4.0
+bcrypt>=4.0.0
+python-multipart>=0.0.9
+jinja2>=3.1.6
+qrcode[pil]==7.4.2
+pyotp==2.9.0
+python-barcode==0.15.1
+openpyxl>=3.1.4
+reportlab>=4.2.0
+Pillow>=11.0.0
+aiofiles>=23.2.1
+python-dateutil>=2.9.0
+psutil>=5.9.0
+python-dotenv>=1.0.0
+# Sprint 5.3 — Servicios de producción
+pyyaml>=6.0.2
+# pywin32>=306  # Solo Windows — instalar con: pip install pywin32
+#               # Post-instalación: python venv\Scripts\pywin32_postinstall.py -install
+# Sprint 5.5 — Base de datos de producción
+alembic>=1.13.0
+psycopg2-binary>=2.9.9   # PostgreSQL driver (opcional, solo si se usa PostgreSQL)
+# Sprint 6.0 — Notificaciones push (Web Push / VAPID)
+pywebpush>=2.0.0

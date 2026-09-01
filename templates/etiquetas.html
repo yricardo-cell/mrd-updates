@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Etiquetas — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header">
+  <h2 class="mrd-page-title"><i class="bi bi-qr-code me-2"></i>Etiquetas</h2>
+  <div class="mrd-page-actions">
+    <button class="btn btn-success mrd-btn" id="btnPdfSeleccion" onclick="imprimirSeleccion()" disabled>
+      <i class="bi bi-file-earmark-pdf me-1"></i>PDF seleccionadas (<span id="countSeleccion">0</span>)
+    </button>
+    <button class="btn btn-outline-secondary mrd-btn" onclick="seleccionarTodas()">Seleccionar todo</button>
+  </div>
+</div>
+
+<!-- Filtro rápido -->
+<div class="mb-3">
+  <input type="text" id="filtroEtiquetas" class="form-control mrd-input" placeholder="Filtrar por nombre o código..." oninput="filtrarTabla()">
+</div>
+
+<div class="mrd-card">
+  <div class="table-responsive">
+    <table class="mrd-table" id="tablaEtiquetas">
+      <thead>
+        <tr>
+          <th style="width:40px"><input type="checkbox" id="checkTodo" onchange="toggleTodo(this)"></th>
+          <th>Código</th>
+          <th>Nombre</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in herramientas %}
+        <tr data-nombre="{{ h.nombre | lower }}" data-codigo="{{ h.codigo | lower }}">
+          <td><input type="checkbox" class="check-herramienta" value="{{ h.id }}" onchange="actualizarContador()"></td>
+          <td><code class="mrd-code">{{ h.codigo }}</code></td>
+          <td class="fw-semibold">{{ h.nombre }}</td>
+          <td><span class="badge bg-{{ h.estado | estado_color }}">{{ h.estado | estado_label }}</span></td>
+          <td>
+            <a href="/etiquetas/{{ h.id }}/qr" class="btn btn-sm btn-outline-primary" title="Descargar QR">
+              <i class="bi bi-qr-code"></i>
+            </a>
+            <a href="/etiquetas/{{ h.id }}/zpl" class="btn btn-sm btn-outline-dark" title="ZPL Zebra ZT231">
+              <i class="bi bi-printer"></i>
+            </a>
+            <form method="post" action="/etiquetas/pdf" class="d-inline">
+              <input type="hidden" name="ids" value="{{ h.id }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger" title="PDF esta etiqueta">
+                <i class="bi bi-file-earmark-pdf"></i>
+              </button>
+            </form>
+            <button type="button" class="btn btn-sm btn-outline-warning"
+                    onclick="reimprimirEtiqueta({{ h.id }}, {{ h.nombre|tojson }})"
+                    title="Reimprimir una etiqueta deteriorada">
+              <i class="bi bi-arrow-repeat"></i>
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Form oculto para PDF en lote -->
+<form method="post" action="/etiquetas/pdf" id="formPdfLote">
+  <input type="hidden" name="ids" id="idsLote">
+</form>
+
+<form method="post" id="formReimpresion" hidden>
+  <input type="hidden" name="motivo" id="motivoReimpresion">
+</form>
+
+<script>
+function actualizarContador() {
+  const checks = document.querySelectorAll('.check-herramienta:checked');
+  document.getElementById('countSeleccion').textContent = checks.length;
+  document.getElementById('btnPdfSeleccion').disabled = checks.length === 0;
+}
+function toggleTodo(checkbox) {
+  document.querySelectorAll('.check-herramienta').forEach(c => {
+    if (c.closest('tr').style.display !== 'none') c.checked = checkbox.checked;
+  });
+  actualizarContador();
+}
+function seleccionarTodas() {
+  document.querySelectorAll('.check-herramienta').forEach(c => c.checked = true);
+  document.getElementById('checkTodo').checked = true;
+  actualizarContador();
+}
+function imprimirSeleccion() {
+  const ids = [...document.querySelectorAll('.check-herramienta:checked')].map(c => c.value).join(',');
+  document.getElementById('idsLote').value = ids;
+  document.getElementById('formPdfLote').submit();
+}
+function filtrarTabla() {
+  const q = document.getElementById('filtroEtiquetas').value.toLowerCase();
+  document.querySelectorAll('#tablaEtiquetas tbody tr').forEach(row => {
+    const nombre = row.dataset.nombre || '';
+    const codigo = row.dataset.codigo || '';
+    row.style.display = (nombre.includes(q) || codigo.includes(q)) ? '' : 'none';
+  });
+}
+function reimprimirEtiqueta(id, nombre) {
+  const motivo = window.prompt('Motivo de la reimpresión de «' + nombre + '»:', 'Etiqueta deteriorada');
+  if (!motivo || motivo.trim().length < 4) return;
+  const form = document.getElementById('formReimpresion');
+  form.action = '/etiquetas/' + encodeURIComponent(id) + '/reimprimir';
+  document.getElementById('motivoReimpresion').value = motivo.trim();
+  form.submit();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,509 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block breadcrumb %}
+<span class="current">Dashboard</span>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Centro de operaciones ─────────────────────────────────── -->
+<section class="dash-hero" aria-labelledby="dash-title">
+  <div class="dash-hero-copy">
+    <div class="dash-hero-greeting" id="hero-greeting">Bienvenido</div>
+    <h1 id="dash-title">Centro de operaciones {{ company_name }}</h1>
+    <div class="dash-hero-meta"><span id="hero-time"></span><span class="dash-hero-separator"></span><span>Control diario MRD Tool</span></div>
+  </div>
+  <nav class="dash-primary-actions" aria-label="Operaciones prioritarias">
+    <a href="/movimientos/entregar" class="dash-primary-action dash-primary-action-main"><i class="bi bi-arrow-up-right"></i><span>Entregar</span></a>
+    <a href="/movimientos/devolver" class="dash-primary-action"><i class="bi bi-arrow-down-left"></i><span>Devolver</span></a>
+    <a href="/scan" class="dash-primary-action"><i class="bi bi-upc-scan"></i><span>Escanear</span></a>
+    <a href="/herramientas" class="dash-primary-action"><i class="bi bi-tools"></i><span>Inventario</span></a>
+    <a href="/avisos" class="dash-primary-action"><i class="bi bi-bell"></i><span>Avisos{% if alertas_count > 0 %}<strong class="dash-action-count">{{ alertas_count }}</strong>{% endif %}</span></a>
+  </nav>
+  <span class="dash-last-update" id="last-update"></span>
+</section>
+
+<!-- KPIs -->
+<div class="kpi-grid">
+  <a href="/herramientas" class="kpi-card kpi-link">
+    <div class="kpi-icon blue pulse"><i class="bi bi-tools"></i></div>
+    <div class="kpi-value">{{ total }}</div>
+    <div class="kpi-label">Total herramientas</div>
+  </a>
+  <a href="/herramientas?estado=disponible" class="kpi-card kpi-link">
+    <div class="kpi-icon green"><i class="bi bi-check-circle"></i></div>
+    <div class="kpi-value">{{ disponibles }}</div>
+    <div class="kpi-label">Disponibles</div>
+  </a>
+  <a href="/herramientas?estado=en_obra" class="kpi-card kpi-link">
+    <div class="kpi-icon info"><i class="bi bi-building"></i></div>
+    <div class="kpi-value">{{ en_obra }}</div>
+    <div class="kpi-label">En obra</div>
+  </a>
+  <a href="/reparaciones" class="kpi-card kpi-link">
+    <div class="kpi-icon orange"><i class="bi bi-hammer"></i></div>
+    <div class="kpi-value">{{ en_reparacion }}</div>
+    <div class="kpi-label">En reparación</div>
+  </a>
+  <a href="/herramientas?estado=en_furgoneta" class="kpi-card kpi-link">
+    <div class="kpi-icon yellow"><i class="bi bi-truck"></i></div>
+    <div class="kpi-value">{{ en_furgoneta }}</div>
+    <div class="kpi-label">En vehículos</div>
+  </a>
+  <a href="/herramientas?estado=perdida" class="kpi-card kpi-link">
+    <div class="kpi-icon red"><i class="bi bi-exclamation-triangle"></i></div>
+    <div class="kpi-value">{{ perdidas }}</div>
+    <div class="kpi-label">Extraviadas</div>
+  </a>
+  <a href="/obras" class="kpi-card kpi-link">
+    <div class="kpi-icon green"><i class="bi bi-building-check"></i></div>
+    <div class="kpi-value">{{ obras_activas }}</div>
+    <div class="kpi-label">Obras activas</div>
+  </a>
+  <a href="/trabajadores" class="kpi-card kpi-link">
+    <div class="kpi-icon blue pulse"><i class="bi bi-people"></i></div>
+    <div class="kpi-value">{{ total_trabajadores }}</div>
+    <div class="kpi-label">Trabajadores</div>
+  </a>
+</div>
+
+<div class="dash-layout">
+
+  <div class="dash-main-column">
+
+    <!-- Gráfico movimientos semanales + distribución de herramientas -->
+    <div class="dash-chart-row">
+      <div class="card chart-card dash-chart-row-main">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-bar-chart-line"></i> Movimientos — últimos 7 días</div>
+          <a href="/movimientos" class="btn btn-ghost btn-sm">Ver todos <i class="bi bi-arrow-right"></i></a>
+        </div>
+        <div class="card-body">
+          <div class="chart-wrap">
+            <canvas id="chart-semana"></canvas>
+          </div>
+        </div>
+      </div>
+      {% if total > 0 %}
+      <div class="card chart-card dash-chart-row-side">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-pie-chart"></i> Distribución de herramientas</div>
+        </div>
+        <div class="card-body">
+          <div class="chart-wrap chart-wrap-doughnut">
+            <canvas id="chart-estado"></canvas>
+            <div class="chart-doughnut-center">
+              <strong>{{ total }}</strong>
+              <span>total</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Últimos movimientos -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="bi bi-arrow-left-right"></i> Últimos movimientos</div>
+        <a href="/movimientos" class="btn btn-ghost btn-sm">Ver todos <i class="bi bi-arrow-right"></i></a>
+      </div>
+      <div class="card-body-flush">
+        {% if ultimos_movimientos %}
+        <div class="timeline dash-timeline">
+          {% for mov in ultimos_movimientos %}
+          <div class="timeline-item">
+            <div class="timeline-dot
+              {% if mov.tipo == 'entrega' %}badge-primary
+              {% elif mov.tipo == 'devolucion' %}badge-success
+              {% elif mov.tipo == 'reparacion' %}badge-orange
+              {% elif mov.tipo == 'alta' %}badge-success
+              {% else %}badge-gray{% endif %}">
+              {% if mov.tipo == 'entrega' %}<i class="bi bi-arrow-up-right"></i>
+              {% elif mov.tipo == 'devolucion' %}<i class="bi bi-arrow-down-left"></i>
+              {% elif mov.tipo == 'reparacion' %}<i class="bi bi-hammer"></i>
+              {% elif mov.tipo == 'alta' %}<i class="bi bi-plus"></i>
+              {% else %}<i class="bi bi-arrow-left-right"></i>{% endif %}
+            </div>
+            <div class="timeline-content">
+              <div class="timeline-title">
+                <a href="/herramientas/{{ mov.herramienta_id }}" class="dash-item-link">
+                  {{ mov.herramienta.codigo if mov.herramienta else '—' }} —
+                  {{ mov.herramienta.nombre if mov.herramienta else '' }}
+                </a>
+              </div>
+              <div class="timeline-sub">
+                <strong>{{ mov.tipo | title | replace('_',' ') }}</strong>
+                {% if mov.destino %} → {{ mov.destino }}{% endif %}
+                {% if mov.usuario %} · {{ mov.usuario.nombre }}{% endif %}
+                · {{ mov.fecha | fmt_datetime }}
+              </div>
+            </div>
+            <span class="badge
+              {% if mov.estado_nuevo == 'disponible' %}badge-success
+              {% elif mov.estado_nuevo in ('en_obra','entregada') %}badge-primary
+              {% elif mov.estado_nuevo == 'en_reparacion' %}badge-orange
+              {% else %}badge-gray{% endif %}">
+              {{ mov.estado_nuevo | replace('_',' ') | title }}
+            </span>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+          <i class="bi bi-arrow-left-right"></i>
+          <h3>Sin movimientos</h3>
+          <p>Los movimientos aparecerán aquí</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Columna derecha -->
+  <div class="dash-side-column">
+
+    <!-- Acciones rápidas -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="bi bi-lightning"></i> Acciones rápidas</div>
+      </div>
+      <div class="card-body dash-action-stack">
+        <a href="/herramientas/nueva" class="btn btn-primary w-100"><i class="bi bi-plus-lg"></i> Nueva herramienta</a>
+        <a href="/incidencias/nueva" class="btn btn-outline w-100"><i class="bi bi-exclamation-circle"></i> Nueva incidencia</a>
+        <a href="/etiquetas" class="btn btn-outline w-100"><i class="bi bi-printer"></i> Imprimir etiquetas</a>
+        {% if user.rol == 'admin' %}
+        <button onclick="confirmarReinicio()" class="btn btn-outline w-100 dash-btn-orange">
+          <i class="bi bi-arrow-clockwise"></i> Reiniciar y cargar cambios
+        </button>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Panel Fuera Ahora -->
+    {% if dash_herr_fuera is defined %}
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="bi bi-eye-fill text-warning"></i> Fuera ahora</div>
+        <a href="/panel-salidas" class="btn btn-ghost btn-sm">Ver panel <i class="bi bi-arrow-right"></i></a>
+      </div>
+      <div class="card-body dash-widget-stack">
+        <div class="dash-mini-grid">
+          <a href="/herramientas?estado=en_obra" class="dash-mini-link">
+            <div class="dash-mini-metric">
+              <div class="dash-mini-value is-orange">{{ dash_herr_fuera }}</div>
+              <div class="dash-mini-label">herramientas fuera</div>
+            </div>
+          </a>
+          <a href="/vehiculos" class="dash-mini-link">
+            <div class="dash-mini-metric">
+              <div class="dash-mini-value is-primary">{{ dash_vehs_en_ruta | default(0) }}</div>
+              <div class="dash-mini-label">vehículos en ruta</div>
+            </div>
+          </a>
+        </div>
+        <div class="dash-mini-grid">
+          <a href="/albaranes-salida" class="dash-mini-link">
+            <div class="dash-mini-metric">
+              <div class="dash-mini-value {% if dash_alb_abiertos > 0 %}is-warning{% else %}is-muted{% endif %}">{{ dash_alb_abiertos | default(0) }}</div>
+              <div class="dash-mini-label">albaranes abiertos</div>
+            </div>
+          </a>
+          <a href="/materiales/alertas" class="dash-mini-link">
+            <div class="dash-mini-metric">
+              <div class="dash-mini-value {% if dash_mat_bajo_minimo > 0 %}is-danger{% else %}is-success{% endif %}">{{ dash_mat_bajo_minimo | default(0) }}</div>
+              <div class="dash-mini-label">materiales bajo mín.</div>
+            </div>
+          </a>
+        </div>
+        {% if dash_mat_bajo_minimo > 0 %}
+        <a href="/materiales/alertas" class="btn btn-outline w-100 dash-btn-danger dash-btn-compact">
+          <i class="bi bi-exclamation-triangle me-1"></i>{{ dash_mat_bajo_minimo }} material(es) por debajo del mínimo
+        </a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Panel Vehículos -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="bi bi-truck-front"></i> Vehículos</div>
+        <a href="/vehiculos" class="btn btn-ghost btn-sm">Ver <i class="bi bi-arrow-right"></i></a>
+      </div>
+      <div class="card-body dash-widget-stack">
+        <div class="dash-mini-grid">
+          <a href="/vehiculos" class="dash-mini-link">
+            <div class="dash-mini-metric">
+              <div class="dash-mini-value is-primary">{{ dash_vehs_en_ruta | default(0) }}</div>
+              <div class="dash-mini-label">en ruta ahora</div>
+            </div>
+          </a>
+          <a href="/vehiculos" class="dash-mini-link">
+            {% set itv_count = alertas | selectattr('titulo','search','ITV') | list | length %}
+            <div class="dash-mini-metric">
+              <div class="dash-mini-value {% if itv_count > 0 %}is-warning{% else %}is-success{% endif %}">
+                {{ itv_count }}
+              </div>
+              <div class="dash-mini-label">alertas ITV/seguro</div>
+            </div>
+          </a>
+        </div>
+        {% for alerta in alertas if 'ITV' in alerta.titulo or 'seguro' in alerta.titulo or 'vehículo' in alerta.titulo %}
+        <div class="dash-compact-alert">
+          <i class="bi {{ alerta.icono }} dash-color-{{ alerta.color }}"></i>
+          <span>{{ alerta.titulo }}</span>
+        </div>
+        {% endfor %}
+        <a href="/vehiculos" class="btn btn-ghost btn-sm dash-btn-start">
+          <i class="bi bi-qr-code me-1"></i>Fichas QR vehículos
+        </a>
+      </div>
+    </div>
+
+    <!-- Panel EPIs -->
+    {% if dash_epis_disponibles is defined %}
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="bi bi-shield-check"></i> EPIs y arneses</div>
+        {% if dash_epis_vencidos > 0 %}
+        <span class="badge badge-danger">{{ dash_epis_vencidos }} vencidos</span>
+        {% endif %}
+      </div>
+      <div class="card-body dash-widget-stack dash-widget-stack-roomy">
+        <div class="dash-mini-grid">
+          <a href="/informes/epis-trabajadores" class="dash-mini-link">
+            <div class="dash-mini-metric">
+              <div class="dash-mini-value is-primary">{{ dash_entregas_mes | default(0) }}</div>
+              <div class="dash-mini-label">entregas este mes</div>
+            </div>
+          </a>
+          <a href="/epis/individuales" class="dash-mini-link">
+            <div class="dash-mini-metric">
+              {% set total_disp = namespace(n=0) %}
+              {% for v in dash_epis_disponibles.values() %}{% set total_disp.n = total_disp.n + v %}{% endfor %}
+              <div class="dash-mini-value is-success">{{ total_disp.n }}</div>
+              <div class="dash-mini-label">EPIs disponibles</div>
+            </div>
+          </a>
+        </div>
+        {% if dash_epis_vencidos > 0 %}
+        <a href="/epis/individuales" class="btn btn-outline w-100 dash-btn-danger dash-btn-compact">
+          <i class="bi bi-exclamation-triangle me-1"></i>{{ dash_epis_vencidos }} revisión(es) vencida(s)
+        </a>
+        {% endif %}
+        {% if dash_epis_proximos > 0 %}
+        <a href="/epis/individuales" class="btn btn-outline w-100 dash-btn-warning dash-btn-compact">
+          <i class="bi bi-clock me-1"></i>{{ dash_epis_proximos }} próxima(s) revisión ≤30 días
+        </a>
+        {% endif %}
+        <div class="dash-badge-list">
+          {% for tipo, cant in dash_epis_disponibles.items() %}
+          <span class="badge {% if cant > 0 %}bg-success{% else %}bg-secondary{% endif %}">{{ tipo }}: {{ cant }}</span>
+          {% endfor %}
+        </div>
+        <a href="/informes/epis-trabajadores" class="btn btn-ghost btn-sm dash-btn-start">
+          <i class="bi bi-file-earmark-text me-1"></i>Ver informe completo
+        </a>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Alertas -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="bi bi-bell"></i> Alertas</div>
+        {% if alertas_count > 0 %}
+        <span class="badge badge-danger">{{ alertas_count }}</span>
+        {% endif %}
+      </div>
+      <div class="card-body-flush">
+        {% if alertas %}
+        {% for alerta in alertas %}
+        <div class="dash-alert-row">
+          <i class="bi {{ alerta.icono }} dash-color-{{ alerta.color }}"></i>
+          <div>
+            <div class="dash-alert-title">{{ alerta.titulo }}</div>
+            <div class="dash-alert-copy">{{ alerta.texto }}</div>
+          </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state dash-empty-compact">
+          <i class="bi bi-check-circle text-success"></i>
+          <h3>Todo correcto</h3>
+          <p>No hay alertas activas</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Top obras con más herramientas -->
+    {% if top_obras %}
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="bi bi-building-check"></i> Top obras — en obra ahora</div>
+      </div>
+      <div class="card-body-flush">
+        {% set top_max = top_obras[0][1] if top_obras else 1 %}
+        {% for destino, cnt in top_obras %}
+        <div class="dash-ranking-row dash-ranking-bar-row">
+          <div class="dash-ranking-name">{{ destino }}</div>
+          <div class="dash-ranking-bar-wrap">
+            <div class="dash-ranking-bar" data-pct="{{ ((cnt / top_max) * 100) | round(0, 'floor') }}"></div>
+          </div>
+          <span class="badge badge-primary">{{ cnt }} herr.</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if obras %}
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="bi bi-building"></i> Obras activas</div>
+        <a href="/obras" class="btn btn-ghost btn-sm">Ver <i class="bi bi-arrow-right"></i></a>
+      </div>
+      <div class="card-body-flush">
+        {% for obra in obras %}
+        <a href="/obras/{{ obra.id }}" class="dash-work-row">
+          <div>
+            <div class="dash-work-name">{{ obra.nombre }}</div>
+            <div class="dash-work-number">{{ obra.numero }}</div>
+          </div>
+          <span class="badge badge-success">Activa</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+</div>
+
+<!-- Modal reinicio -->
+<div id="modal-reinicio" class="dash-restart-modal">
+  <div class="dash-restart-dialog">
+    <i class="bi bi-arrow-clockwise dash-restart-icon"></i>
+    <h5>Reiniciar y cargar cambios</h5>
+    <p>Reinicia MRD, renueva la caché de la aplicación y espera hasta que vuelva. No borra ningún dato ni reinicia el ordenador.</p>
+    <div id="reinicio-countdown" class="dash-restart-countdown"></div>
+    <div class="dash-restart-actions">
+      <button onclick="cerrarReinicio()" class="btn btn-outline">Cancelar</button>
+      <button id="btn-confirmar-reinicio" onclick="ejecutarReinicio()" class="btn btn-primary dash-btn-orange-solid">
+        <i class="bi bi-arrow-clockwise me-1"></i>Reiniciar y actualizar
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/chart.umd.min.js" defer></script>
+<script>
+function confirmarReinicio() {
+  document.getElementById('modal-reinicio').classList.add('is-open');
+}
+function cerrarReinicio() {
+  document.getElementById('modal-reinicio').classList.remove('is-open');
+}
+function ejecutarReinicio() {
+  const btn = document.getElementById('btn-confirmar-reinicio');
+  const countdown = document.getElementById('reinicio-countdown');
+  reiniciarYCargarCambios(btn, countdown, true);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Hero greeting
+  const h = new Date().getHours();
+  const greetEl = document.getElementById('hero-greeting');
+  if (greetEl) {
+    greetEl.textContent = h < 12 ? 'Buenos días' : h < 20 ? 'Buenas tardes' : 'Buenas noches';
+  }
+
+  // Reloj
+  function updateTime() {
+    const el = document.getElementById('last-update');
+    const heroTime = document.getElementById('hero-time');
+    const now = new Date();
+    const t = now.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'});
+    const d = now.toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'long'});
+    if (el) el.textContent = 'Actualizado: ' + t;
+    if (heroTime) heroTime.textContent = d.charAt(0).toUpperCase() + d.slice(1);
+  }
+  updateTime();
+  setInterval(updateTime, 30000);
+
+  // Gráfico movimientos semanales
+  const ctxS = document.getElementById('chart-semana');
+  if (ctxS && typeof Chart !== 'undefined') {
+    const gridColor = 'rgba(255,255,255,.08)';
+    const textColor = '#94a3b8';
+    new Chart(ctxS, {
+      type: 'bar',
+      data: {
+        labels: {{ movimientos_semana_labels | tojson }},
+        datasets: [{
+          label: 'Movimientos',
+          data: {{ movimientos_semana | tojson }},
+          backgroundColor: 'rgba(8,145,178,.78)',
+          borderColor: '#0891b2',
+          borderWidth: 0,
+          borderRadius: 6,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y} movimientos` } } },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 11 } } },
+          y: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 11 }, stepSize: 1, precision: 0 }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  // Gráfico distribución de herramientas por estado (dona)
+  const ctxE = document.getElementById('chart-estado');
+  if (ctxE && typeof Chart !== 'undefined') {
+    const textColor = '#94a3b8';
+    const estadoData = [
+      { label: 'Disponibles', value: {{ disponibles }}, color: '#22c55e' },
+      { label: 'En obra', value: {{ en_obra }}, color: '#22d3ee' },
+      { label: 'Entregadas', value: {{ entregadas }}, color: '#7b61ff' },
+      { label: 'En vehículos', value: {{ en_furgoneta }}, color: '#2dd4bf' },
+      { label: 'En reparación', value: {{ en_reparacion }}, color: '#f97316' },
+      { label: 'Extraviadas', value: {{ perdidas }}, color: '#ef4444' },
+    ].filter(d => d.value > 0);
+    new Chart(ctxE, {
+      type: 'doughnut',
+      data: {
+        labels: estadoData.map(d => d.label),
+        datasets: [{
+          data: estadoData.map(d => d.value),
+          backgroundColor: estadoData.map(d => d.color),
+          borderColor: '#0a1428',
+          borderWidth: 2,
+          hoverOffset: 6,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '68%',
+        plugins: {
+          legend: { position: 'bottom', labels: { color: textColor, font: { size: 11 }, boxWidth: 10, padding: 10 } },
+          tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed} (${Math.round(c.parsed / c.dataset.data.reduce((a,b)=>a+b,0) * 100)}%)` } }
+        }
+      }
+    });
+  }
+
+});
+</script>
+{% endblock %}
+

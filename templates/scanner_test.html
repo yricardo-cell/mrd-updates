@@ -1,0 +1,432 @@
+{% extends "base.html" %}
+{% block title %}Diagnóstico Scanner — {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .diag-card { border-left: 4px solid var(--border); margin-bottom: 12px; padding: 12px 16px; background: var(--card-bg); border-radius: 8px; }
+  .diag-ok   { border-left-color: #28a745; }
+  .diag-warn { border-left-color: #ffc107; }
+  .diag-fail { border-left-color: #dc3545; }
+  .diag-info { border-left-color: var(--primary); }
+  .diag-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin-bottom: 2px; }
+  .diag-value { font-family: monospace; font-size: .9rem; word-break: break-all; }
+  .badge-ok   { background: #28a745; color: #fff; }
+  .badge-warn { background: #ffc107; color: #000; }
+  .badge-fail { background: #dc3545; color: #fff; }
+  .badge-info { background: var(--primary); color: #fff; }
+  .diag-badge { padding: 2px 8px; border-radius: 12px; font-size: .75rem; font-weight: 600; display: inline-block; }
+  pre.diag-pre { background: rgba(0,0,0,.25); border-radius: 6px; padding: 10px; font-size: .78rem; max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+  #cam-test-video { width: 100%; max-width: 320px; border-radius: 8px; background: #000; display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header">
+  <h2 class="mrd-page-title"><i class="bi bi-bug me-2"></i>Diagnóstico del escáner</h2>
+  <p class="text-muted small mb-0">Esta página diagnostica todos los componentes del sistema de escaneo QR/código de barras.</p>
+</div>
+
+<div class="row g-3">
+
+  <!-- Columna izquierda: checks automáticos -->
+  <div class="col-12 col-lg-7">
+    <div class="mrd-card mb-3">
+      <h6 class="mb-3"><i class="bi bi-cpu me-2 text-primary"></i>Entorno del navegador</h6>
+      <div id="diag-env"></div>
+    </div>
+
+    <div class="mrd-card mb-3">
+      <h6 class="mb-3"><i class="bi bi-camera-video me-2 text-warning"></i>Cámara</h6>
+      <div id="diag-camera"></div>
+      <button class="btn btn-sm btn-warning mrd-btn mt-2" onclick="testCamera()">
+        <i class="bi bi-play me-1"></i>Probar cámara
+      </button>
+      <div class="mt-2">
+        <video id="cam-test-video" autoplay playsinline muted></video>
+      </div>
+    </div>
+
+    <div class="mrd-card mb-3">
+      <h6 class="mb-3"><i class="bi bi-file-code me-2 text-info"></i>Librería ZXing</h6>
+      <div id="diag-zxing"></div>
+    </div>
+
+    <div class="mrd-card mb-3">
+      <h6 class="mb-3"><i class="bi bi-gear me-2 text-secondary"></i>Service Worker</h6>
+      <div id="diag-sw"></div>
+      <button class="btn btn-sm btn-outline-secondary mrd-btn mt-2" onclick="forzarActualizacionSW()">
+        <i class="bi bi-arrow-repeat me-1"></i>Forzar actualización SW
+      </button>
+    </div>
+
+    <div class="mrd-card mb-3">
+      <h6 class="mb-3"><i class="bi bi-hdd-network me-2 text-success"></i>API del servidor</h6>
+      <div id="diag-api"></div>
+    </div>
+  </div>
+
+  <!-- Columna derecha: errores y log -->
+  <div class="col-12 col-lg-5">
+    <div class="mrd-card mb-3">
+      <h6 class="mb-3"><i class="bi bi-exclamation-triangle me-2 text-danger"></i>Errores de escáner registrados</h6>
+      <div id="diag-errors"></div>
+      <button class="btn btn-sm btn-outline-danger mrd-btn mt-2" onclick="limpiarErrores()">
+        <i class="bi bi-trash me-1"></i>Limpiar errores
+      </button>
+    </div>
+
+    <div class="mrd-card mb-3">
+      <h6 class="mb-3"><i class="bi bi-clipboard-data me-2"></i>Informe completo</h6>
+      <pre class="diag-pre" id="informe-completo" style="max-height:300px">Ejecutando diagnóstico...</pre>
+      <button class="btn btn-sm btn-outline-primary mrd-btn mt-2" onclick="copiarInforme()">
+        <i class="bi bi-clipboard me-1"></i>Copiar informe
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ──────────────────────────────────────────────────────────────
+// Utilidades de render
+// ──────────────────────────────────────────────────────────────
+function badge(txt, tipo) {
+  return '<span class="diag-badge badge-' + tipo + '">' + txt + '</span>';
+}
+function card(label, value, tipo) {
+  return '<div class="diag-card diag-' + (tipo||'info') + '">' +
+    '<div class="diag-label">' + label + '</div>' +
+    '<div class="diag-value">' + value + '</div>' +
+  '</div>';
+}
+
+var _informe = {};
+
+// ──────────────────────────────────────────────────────────────
+// 1. Entorno
+// ──────────────────────────────────────────────────────────────
+function diagEnv() {
+  var container = document.getElementById('diag-env');
+  var esHttps = location.protocol === 'https:';
+  var esLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  var httpsOk = esHttps || esLocal;
+
+  var html = '';
+  html += card('Protocolo', location.protocol + '//' + location.host,
+    httpsOk ? 'ok' : 'fail');
+  html += card('HTTPS / getUserMedia', httpsOk
+    ? badge('OK — cámara disponible', 'ok')
+    : badge('FALLO — se requiere HTTPS', 'fail'),
+    httpsOk ? 'ok' : 'fail');
+  html += card('User-Agent', navigator.userAgent, 'info');
+  html += card('Plataforma', (navigator.userAgentData
+    ? navigator.userAgentData.platform
+    : navigator.platform) || '(desconocido)', 'info');
+  html += card('mediaDevices API', navigator.mediaDevices
+    ? badge('Disponible', 'ok') : badge('No disponible', 'fail'),
+    navigator.mediaDevices ? 'ok' : 'fail');
+  html += card('Service Worker API', ('serviceWorker' in navigator)
+    ? badge('Disponible', 'ok') : badge('No disponible', 'warn'),
+    ('serviceWorker' in navigator) ? 'ok' : 'warn');
+
+  container.innerHTML = html;
+  _informe.env = {
+    protocol: location.protocol, host: location.host,
+    https_ok: httpsOk, ua: navigator.userAgent,
+    platform: navigator.platform,
+    mediaDevices: !!navigator.mediaDevices,
+    serviceWorker: ('serviceWorker' in navigator)
+  };
+}
+
+// ──────────────────────────────────────────────────────────────
+// 2. Cámara — enumerate devices
+// ──────────────────────────────────────────────────────────────
+async function diagCamera() {
+  var container = document.getElementById('diag-camera');
+  _informe.camera = {};
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+    container.innerHTML = card('enumerateDevices', badge('No disponible', 'fail'), 'fail');
+    return;
+  }
+
+  try {
+    var devices = await navigator.mediaDevices.enumerateDevices();
+    var cams = devices.filter(function(d) { return d.kind === 'videoinput'; });
+    _informe.camera.count = cams.length;
+    _informe.camera.devices = cams.map(function(c) { return { id: c.deviceId.substring(0,12)+'...', label: c.label || '(sin label — permiso no concedido)' }; });
+
+    var html = '';
+    html += card('Cámaras detectadas', cams.length > 0
+      ? badge(cams.length + ' cámara(s)', 'ok')
+      : badge('Ninguna', 'fail'), cams.length > 0 ? 'ok' : 'fail');
+
+    if (cams.length > 0) {
+      var labelsVisibles = cams.some(function(c) { return c.label && c.label.length > 0; });
+      html += card('Labels de cámara',
+        labelsVisibles
+          ? badge('Visibles (permiso ya concedido)', 'ok')
+          : badge('Vacíos — permiso no concedido aún (normal)', 'warn'),
+        labelsVisibles ? 'ok' : 'warn');
+
+      html += card('Listado', cams.map(function(c, i) {
+        return (i+1) + '. ' + (c.label || '(sin label)');
+      }).join('<br>'), 'info');
+    }
+
+    // Verificar permiso actual
+    try {
+      var perm = await navigator.permissions.query({ name: 'camera' });
+      _informe.camera.permission = perm.state;
+      var tipoPermiso = perm.state === 'granted' ? 'ok' : (perm.state === 'denied' ? 'fail' : 'warn');
+      html += card('Permiso de cámara', badge(perm.state, tipoPermiso), tipoPermiso);
+    } catch (_) {
+      html += card('Permiso de cámara', badge('No consultable en este navegador', 'warn'), 'warn');
+    }
+
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = card('Error', e.message, 'fail');
+    _informe.camera.error = e.message;
+  }
+}
+
+var _testStream = null;
+async function testCamera() {
+  var video = document.getElementById('cam-test-video');
+  if (_testStream) {
+    _testStream.getTracks().forEach(function(t) { t.stop(); });
+    _testStream = null;
+    video.style.display = 'none';
+    video.srcObject = null;
+    return;
+  }
+  try {
+    _testStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } }
+    });
+    video.srcObject = _testStream;
+    video.style.display = 'block';
+    await video.play();
+    // Actualizar diagnóstico de cámara con labels ahora visibles
+    await diagCamera();
+  } catch (e) {
+    alert('Error al abrir cámara: ' + e.name + ' — ' + e.message);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+// 3. ZXing
+// ──────────────────────────────────────────────────────────────
+async function diagZXing() {
+  var container = document.getElementById('diag-zxing');
+  _informe.zxing = {};
+
+  if (window.ZXing) {
+    var info = 'Ya cargada en memoria';
+    container.innerHTML = card('Estado ZXing', badge('Cargada', 'ok'), 'ok') +
+      card('BrowserMultiFormatReader', typeof ZXing.BrowserMultiFormatReader !== 'undefined'
+        ? badge('Disponible', 'ok') : badge('No encontrada', 'fail'),
+        typeof ZXing.BrowserMultiFormatReader !== 'undefined' ? 'ok' : 'fail') +
+      card('decodeFromStream', typeof ZXing.BrowserMultiFormatReader !== 'undefined' &&
+        typeof new ZXing.BrowserMultiFormatReader().decodeFromStream === 'function'
+        ? badge('Disponible', 'ok') : badge('No disponible', 'fail'), 'info');
+    _informe.zxing.loaded = true;
+    return;
+  }
+
+  container.innerHTML = card('Estado', 'Cargando desde /static/js/zxing.min.js...', 'warn');
+  try {
+    await new Promise(function(res, rej) {
+      var s = document.createElement('script');
+      s.src = '/static/js/zxing.min.js';
+      s.onload = res;
+      s.onerror = function() { rej(new Error('No se pudo cargar el archivo')); };
+      document.head.appendChild(s);
+    });
+    _informe.zxing.loaded = true;
+    var hasDecodeFromStream = typeof new ZXing.BrowserMultiFormatReader().decodeFromStream === 'function';
+    _informe.zxing.decodeFromStream = hasDecodeFromStream;
+    container.innerHTML =
+      card('Estado ZXing', badge('Cargada correctamente', 'ok'), 'ok') +
+      card('BrowserMultiFormatReader', badge('Disponible', 'ok'), 'ok') +
+      card('decodeFromStream', hasDecodeFromStream ? badge('OK', 'ok') : badge('No disponible — version antigua', 'fail'),
+        hasDecodeFromStream ? 'ok' : 'fail');
+  } catch (e) {
+    _informe.zxing.loaded = false;
+    _informe.zxing.error = e.message;
+    container.innerHTML = card('Error cargando ZXing', e.message, 'fail');
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+// 4. Service Worker
+// ──────────────────────────────────────────────────────────────
+async function diagSW() {
+  var container = document.getElementById('diag-sw');
+  _informe.sw = {};
+
+  if (!('serviceWorker' in navigator)) {
+    container.innerHTML = card('Service Worker', badge('No soportado', 'warn'), 'warn');
+    return;
+  }
+
+  try {
+    var reg = await navigator.serviceWorker.getRegistration('/');
+    if (!reg) {
+      container.innerHTML = card('Estado', badge('No registrado', 'warn'), 'warn');
+      _informe.sw.registered = false;
+      return;
+    }
+    _informe.sw.registered = true;
+    _informe.sw.scope = reg.scope;
+    _informe.sw.updateState = reg.waiting ? 'waiting' : (reg.installing ? 'installing' : 'active');
+
+    var html = '';
+    html += card('Estado', badge('Registrado', 'ok'), 'ok');
+    html += card('Scope', reg.scope, 'info');
+    html += card('SW activo', reg.active ? badge('Sí — ' + reg.active.state, 'ok') : badge('No', 'warn'),
+      reg.active ? 'ok' : 'warn');
+    if (reg.waiting) {
+      html += card('SW en espera', badge('Hay una actualización pendiente — haz clic en "Forzar actualización"', 'warn'), 'warn');
+    }
+
+    // Cache keys
+    var keys = await caches.keys();
+    _informe.sw.caches = keys;
+    html += card('Caches activas', keys.length > 0 ? keys.join(', ') : '(ninguna)', 'info');
+
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = card('Error', e.message, 'fail');
+    _informe.sw.error = e.message;
+  }
+}
+
+async function forzarActualizacionSW() {
+  if (!('serviceWorker' in navigator)) { alert('Service Worker no soportado.'); return; }
+  try {
+    var reg = await navigator.serviceWorker.getRegistration('/');
+    if (reg) {
+      await reg.update();
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        setTimeout(function() { location.reload(); }, 500);
+      } else {
+        alert('No hay actualizacion pendiente del SW.');
+      }
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+// 5. API del servidor
+// ──────────────────────────────────────────────────────────────
+async function diagAPI() {
+  var container = document.getElementById('diag-api');
+  _informe.api = {};
+  var html = '';
+
+  // /health
+  try {
+    var t0 = Date.now();
+    var r = await fetch('/health');
+    var ms = Date.now() - t0;
+    var j = await r.json();
+    _informe.api.health = { ok: r.ok, ms: ms, status: j.status };
+    html += card('/health', badge((r.ok ? 'OK ' : 'FALLO ') + ms + 'ms', r.ok ? 'ok' : 'fail'), r.ok ? 'ok' : 'fail');
+  } catch (e) {
+    html += card('/health', badge('Error: ' + e.message, 'fail'), 'fail');
+    _informe.api.health = { ok: false, error: e.message };
+  }
+
+  // /scan/ip
+  try {
+    var t1 = Date.now();
+    var r2 = await fetch('/scan/ip');
+    var ms2 = Date.now() - t1;
+    var j2 = await r2.json();
+    _informe.api.scan_ip = { ok: r2.ok, ms: ms2, data: j2 };
+    html += card('/scan/ip', badge((r2.ok ? 'OK ' : 'FALLO ') + ms2 + 'ms', r2.ok ? 'ok' : 'fail') +
+      '<br><small class="text-muted">local: ' + (j2.url_local||'?') + ' | https: ' + (j2.url_https||'—') + '</small>', r2.ok ? 'ok' : 'fail');
+  } catch (e) {
+    html += card('/scan/ip', badge('Error: ' + e.message, 'fail'), 'fail');
+    _informe.api.scan_ip = { ok: false, error: e.message };
+  }
+
+  // /scan/buscar?codigo=TEST
+  try {
+    var t3 = Date.now();
+    var r3 = await fetch('/scan/buscar?codigo=TEST-DIAGNOSTICO');
+    var ms3 = Date.now() - t3;
+    _informe.api.scan_buscar = { ok: r3.ok, ms: ms3 };
+    html += card('/scan/buscar', badge((r3.ok ? 'OK ' : 'FALLO ') + ms3 + 'ms', r3.ok ? 'ok' : 'fail'), r3.ok ? 'ok' : 'fail');
+  } catch (e) {
+    html += card('/scan/buscar', badge('Error: ' + e.message, 'fail'), 'fail');
+    _informe.api.scan_buscar = { ok: false, error: e.message };
+  }
+
+  container.innerHTML = html;
+}
+
+// ──────────────────────────────────────────────────────────────
+// 6. Errores registrados en sessionStorage
+// ──────────────────────────────────────────────────────────────
+function diagErrors() {
+  var container = document.getElementById('diag-errors');
+  var errors = [];
+  try { errors = JSON.parse(sessionStorage.getItem('mrd_scan_errors') || '[]'); } catch (_) {}
+
+  if (errors.length === 0) {
+    container.innerHTML = '<div class="text-muted small">Sin errores registrados en esta sesión.</div>';
+    return;
+  }
+
+  container.innerHTML = errors.map(function(e) {
+    return '<div class="diag-card diag-fail" style="margin-bottom:8px">' +
+      '<div class="diag-label">' + e.ts + ' — ' + e.type + '</div>' +
+      '<div class="diag-value" style="font-size:.82rem">' + JSON.stringify(e.details) + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function limpiarErrores() {
+  sessionStorage.removeItem('mrd_scan_errors');
+  diagErrors();
+}
+
+// ──────────────────────────────────────────────────────────────
+// 7. Informe completo
+// ──────────────────────────────────────────────────────────────
+function actualizarInforme() {
+  var errors = [];
+  try { errors = JSON.parse(sessionStorage.getItem('mrd_scan_errors') || '[]'); } catch (_) {}
+  _informe.scan_errors = errors;
+  _informe.generated = new Date().toISOString();
+  document.getElementById('informe-completo').textContent = JSON.stringify(_informe, null, 2);
+}
+
+function copiarInforme() {
+  var txt = document.getElementById('informe-completo').textContent;
+  navigator.clipboard.writeText(txt).then(function() {
+    alert('Informe copiado al portapapeles.');
+  });
+}
+
+// ──────────────────────────────────────────────────────────────
+// Arranque
+// ──────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async function() {
+  diagEnv();
+  await diagCamera();
+  await diagZXing();
+  await diagSW();
+  await diagAPI();
+  diagErrors();
+  actualizarInforme();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block title %}Notificaciones{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<span class="current">Canales de Notificación</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title"><i class="bi bi-send" style="color:var(--primary)"></i> Centro de Notificaciones</div>
+    <div class="page-subtitle">Canales de alerta externa — email y webhooks</div>
+  </div>
+  <button class="btn btn-primary btn-sm" onclick="toggleForm()">
+    <i class="bi bi-plus-lg"></i> Nuevo canal
+  </button>
+</div>
+
+{% if request.query_params.get('ok') %}
+<div style="background:var(--success-light,#d1e7dd);border:1px solid var(--success,#198754);border-radius:8px;padding:10px 16px;margin-bottom:14px;color:var(--success,#198754);font-size:.84rem">
+  <i class="bi bi-check-circle-fill"></i> {{ request.query_params.get('ok')|replace('+',' ') }}
+</div>
+{% endif %}
+
+<!-- Formulario nuevo canal -->
+<div id="form-canal" style="display:{% if mostrar_form %}block{% else %}none{% endif %};margin-bottom:18px">
+  <div class="card">
+    <div class="card-header"><div class="card-title"><i class="bi bi-plus-circle"></i> Nuevo canal de notificación</div></div>
+    <div class="card-body">
+      {% if error %}
+      <div style="background:var(--danger-light);border:1px solid var(--danger);border-radius:6px;padding:10px 14px;margin-bottom:12px;color:var(--danger);font-size:.84rem">
+        <i class="bi bi-exclamation-circle-fill"></i> {{ error }}
+      </div>
+      {% endif %}
+      <form method="post" action="/notificaciones/nuevo-canal">
+        <div class="form-row form-row-3">
+          <div class="form-group">
+            <label class="form-label">Nombre <span class="required">*</span></label>
+            <input type="text" name="nombre" class="form-control" required placeholder="Ej: Email Yusniel">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <select name="tipo" class="form-control" id="sel-tipo" onchange="cambiarTipo(this.value)">
+              {% for key, label in tipos_canal.items() %}
+              <option value="{{ key }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Prioridad mínima</label>
+            <select name="prioridad_minima" class="form-control">
+              {% for key, label in prioridades_canal.items() %}
+              <option value="{{ key }}" {% if key == 'media' %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <!-- Email config -->
+        <div id="cfg-email">
+          <div class="form-row form-row-3">
+            <div class="form-group">
+              <label class="form-label">Servidor SMTP</label>
+              <input type="text" name="smtp_host" class="form-control" placeholder="smtp.gmail.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Puerto</label>
+              <input type="number" name="smtp_port" class="form-control" value="587" style="max-width:90px">
+            </div>
+            <div class="form-group">
+              <label class="form-label">TLS</label>
+              <select name="smtp_tls" class="form-control">
+                <option value="1">STARTTLS (recomendado)</option>
+                <option value="0">SSL directo</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row form-row-2">
+            <div class="form-group">
+              <label class="form-label">Usuario SMTP</label>
+              <input type="text" name="smtp_user" class="form-control" placeholder="usuario@dominio.com" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Contraseña SMTP</label>
+              <input type="password" name="smtp_pass" class="form-control" autocomplete="new-password">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Destinatarios (separados por coma)</label>
+            <input type="text" name="destinatarios" class="form-control" placeholder="y.ricardo@mrdestructuras.com, otro@empresa.com">
+          </div>
+        </div>
+
+        <!-- Webhook config -->
+        <div id="cfg-webhook" style="display:none">
+          <div class="form-group">
+            <label class="form-label">URL del Webhook <span class="required">*</span></label>
+            <input type="url" name="webhook_url" class="form-control" placeholder="https://hooks.slack.com/... o https://api.telegram.org/bot.../sendMessage">
+            <div class="form-hint">Recibirá un JSON con: titulo, mensaje, prioridad, timestamp, enlace.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Incluir enlace al activo</label>
+            <select name="webhook_incluir_enlace" class="form-control" style="max-width:200px">
+              <option value="1">Sí</option>
+              <option value="0">No</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Web Push: sin configuración, informativo -->
+        <div id="cfg-webpush" style="display:none">
+          <div class="form-hint">
+            <i class="bi bi-info-circle"></i>
+            No requiere configuración. Se enviará a todos los navegadores que se hayan
+            suscrito desde el icono de campana <i class="bi bi-bell"></i> de la aplicación.
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-floppy"></i> Guardar canal</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="toggleForm()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Lista de canales -->
+<div class="card" style="margin-bottom:18px">
+  <div class="card-header"><div class="card-title"><i class="bi bi-broadcast"></i> Canales configurados</div></div>
+  {% if canales %}
+  <div style="overflow-x:auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Nombre</th><th>Tipo</th><th>Prioridad mín.</th>
+          <th>Enviados</th><th>Errores</th><th>Último envío</th><th>Estado</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in canales %}
+        <tr>
+          <td><strong>{{ c.nombre }}</strong></td>
+          <td>
+            {% if c.tipo == 'email' %}<i class="bi bi-envelope" style="color:var(--primary)"></i>
+            {% elif c.tipo == 'webpush' %}<i class="bi bi-bell" style="color:var(--orange)"></i>
+            {% else %}<i class="bi bi-arrow-up-right-square" style="color:var(--success)"></i>{% endif %}
+            {{ tipos_canal.get(c.tipo, c.tipo) }}
+          </td>
+          <td>{{ prioridades_canal.get(c.prioridad_minima, c.prioridad_minima) }}</td>
+          <td>{{ c.total_enviados or 0 }}</td>
+          <td style="color:{% if c.total_errores %}var(--danger){% else %}inherit{% endif %}">{{ c.total_errores or 0 }}</td>
+          <td style="font-size:.8rem;color:var(--text-muted)">
+            {{ c.ultimo_envio.strftime('%d/%m %H:%M') if c.ultimo_envio else '—' }}
+          </td>
+          <td>
+            {% if c.activo %}
+            <span class="badge" style="background:var(--success-light);color:var(--success)">Activo</span>
+            {% else %}
+            <span class="badge" style="background:var(--surface-2);color:var(--text-muted)">Pausado</span>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-ghost btn-xs" title="Probar canal"
+                    onclick="testCanal({{ c.id }}, '{{ c.nombre }}')">
+              <i class="bi bi-send"></i>
+            </button>
+            <form method="post" action="/notificaciones/canal/{{ c.id }}/activar" style="display:inline">
+              <button type="submit" class="btn btn-ghost btn-xs"
+                      title="{{ 'Pausar' if c.activo else 'Activar' }}">
+                <i class="bi bi-{{ 'pause' if c.activo else 'play' }}"></i>
+              </button>
+            </form>
+            <form method="post" action="/notificaciones/canal/{{ c.id }}/eliminar" style="display:inline"
+                  onsubmit="return confirm('¿Eliminar canal «{{ c.nombre }}» y su historial?')">
+              <button type="submit" class="btn btn-ghost btn-xs" style="color:var(--danger)" title="Eliminar">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body" style="text-align:center;padding:32px;color:var(--text-muted)">
+    <i class="bi bi-broadcast" style="font-size:2rem;display:block;margin-bottom:8px"></i>
+    No hay canales configurados. Crea uno para recibir alertas externas.
+  </div>
+  {% endif %}
+</div>
+
+<!-- Historial de envíos -->
+<div class="card">
+  <div class="card-header"><div class="card-title"><i class="bi bi-clock-history"></i> Historial de envíos</div></div>
+  {% if log %}
+  <div style="overflow-x:auto">
+    <table class="table" style="font-size:.82rem">
+      <thead>
+        <tr><th>Fecha</th><th>Canal</th><th>Aviso</th><th>Resultado</th><th>Reintentos</th><th>Detalle</th></tr>
+      </thead>
+      <tbody>
+        {% for n in log %}
+        {% set canal_obj = canales | selectattr('id', 'equalto', n.canal_id) | first %}
+        <tr>
+          <td style="white-space:nowrap">{{ n.fecha_envio.strftime('%d/%m %H:%M') if n.fecha_envio else '—' }}</td>
+          <td>{{ canal_obj.nombre if canal_obj else '#' + n.canal_id|string }}</td>
+          <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            {{ n.aviso_titulo or '—' }}
+          </td>
+          <td>
+            {% if n.resultado == 'ok' %}
+            <span class="badge" style="background:var(--success-light);color:var(--success)">Enviado</span>
+            {% elif n.resultado == 'reintento' %}
+            <span class="badge" style="background:var(--warning-light,#fff3cd);color:#856404">Reintento</span>
+            {% else %}
+            <span class="badge" style="background:var(--danger-light);color:var(--danger)">Error</span>
+            {% endif %}
+          </td>
+          <td>{{ n.reintentos or 0 }}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)">
+            {{ n.detalle or '—' }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body" style="text-align:center;padding:24px;color:var(--text-muted);font-size:.84rem">
+    Sin envíos registrados aún.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleForm() {
+  const f = document.getElementById('form-canal');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+function cambiarTipo(val) {
+  document.getElementById('cfg-email').style.display = val === 'email' ? 'block' : 'none';
+  document.getElementById('cfg-webhook').style.display = val === 'webhook' ? 'block' : 'none';
+  document.getElementById('cfg-webpush').style.display = val === 'webpush' ? 'block' : 'none';
+}
+async function testCanal(id, nombre) {
+  if (!confirm(`¿Enviar notificación de prueba al canal «${nombre}»?`)) return;
+  try {
+    const r = await fetch(`/api/v1/notificaciones/test/${id}`, {method:'POST'});
+    const data = await r.json();
+    if (r.ok) {
+      if (window.Toast) Toast.success('Prueba enviada correctamente.');
+      else alert('Prueba enviada correctamente.');
+    } else {
+      if (window.Toast) Toast.error('Error: ' + (data.detail || 'desconocido'));
+      else alert('Error: ' + (data.detail || 'desconocido'));
+    }
+  } catch(e) {
+    if (window.Toast) Toast.error('Error de red.');
+    else alert('Error de red.');
+  }
+}
+</script>
+{% endblock %}

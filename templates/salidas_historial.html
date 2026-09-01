@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Historial de salidas — {{ maquina.nombre }}{% endblock %}
+
+{% set base_url = '/herramienta/' ~ maquina.id if es_herramienta else '/maquinaria/' ~ maquina.id %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+{% if es_herramienta %}
+<a href="/herramientas">Herramientas</a><span class="sep">/</span>
+<a href="/herramientas/{{ maquina.id }}">{{ maquina.nombre }}</a><span class="sep">/</span>
+{% else %}
+<a href="/maquinaria">Maquinaria</a><span class="sep">/</span>
+<a href="/maquinaria/{{ maquina.id }}/pasaporte">{{ maquina.nombre }}</a><span class="sep">/</span>
+{% endif %}
+<span class="current">Historial de salidas</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">Historial de salidas</div>
+    <div class="page-subtitle">{{ maquina.nombre }}</div>
+  </div>
+  <a href="{{ base_url }}/salida/nueva" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg"></i> Nueva salida
+  </a>
+</div>
+
+<div class="card">
+  {% if salidas %}
+  <table class="table" style="margin:0">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Fecha</th>
+        <th>Obra</th>
+        <th>Conductor</th>
+        <th>Tipo</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in salidas %}
+      {% set badge = {'en_proceso': 'warning', 'completada': 'success', 'cancelada': 'secondary'} %}
+      {% set label = {'en_proceso': 'En proceso', 'completada': 'Completada', 'cancelada': 'Cancelada'} %}
+      <tr>
+        <td><code>#{{ s.id }}</code></td>
+        <td>{{ s.fecha_salida.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td>{{ s.obra or '—' }}</td>
+        <td>{{ s.conductor or '—' }}</td>
+        <td style="font-size:.8rem;color:var(--text-muted)">{{ s.tipo_checklist }}</td>
+        <td>
+          <span class="badge bg-{{ badge.get(s.estado, 'secondary') }}">
+            {{ label.get(s.estado, s.estado) }}
+          </span>
+        </td>
+        <td>
+          <a href="{{ base_url }}/salida/{{ s.id }}" class="btn btn-ghost btn-sm">
+            <i class="bi bi-eye"></i>
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="text-align:center;padding:48px;color:var(--text-muted)">
+    <i class="bi bi-clipboard2-x" style="font-size:2.5rem;display:block;margin-bottom:10px"></i>
+    Sin fichas de salida registradas
+    <br><br>
+    <a href="{{ base_url }}/salida/nueva" class="btn btn-primary btn-sm">Crear primera salida</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

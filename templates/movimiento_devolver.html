@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% block title %}Devolver herramientas{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/movimientos">Movimientos</a><span class="sep">/</span>
+<span class="current">Devolver</span>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header-row counter-page-header">
+  <div class="page-header">
+    <div class="counter-eyebrow">Mostrador · Entrada</div>
+    <div class="page-title"><i class="bi bi-arrow-down-left counter-color-success"></i> Devolver herramientas</div>
+    <div class="page-subtitle">Registra devoluciones al almacén — individual o en lote</div>
+  </div>
+  <a href="/movimientos" class="btn btn-outline btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
+</div>
+
+{% if herramientas | length == 0 %}
+<div class="card">
+  <div class="card-body no-tools-msg">
+    <i class="bi bi-inbox"></i>
+    <div class="counter-empty-title">Sin herramientas pendientes</div>
+    <div class="counter-empty-copy">No hay herramientas entregadas pendientes de devolución.</div>
+    <a href="/movimientos" class="btn btn-primary btn-sm counter-empty-action">Ir a movimientos</a>
+  </div>
+</div>
+{% else %}
+
+<!-- Datos para JS -->
+<script>
+const herramientasData = {{ herramientas_data | tojson }};
+</script>
+
+<div class="dev-layout">
+  <!-- ── Panel izquierdo: selección ────────────── -->
+  <div class="tool-panel">
+    <div class="tool-panel-head">
+      <div class="counter-section-title">
+        <span class="counter-step">1</span>
+        <div><h5><i class="bi bi-arrow-down-left counter-color-primary"></i> Selecciona herramientas</h5><small>Busca por código, nombre o responsable</small></div>
+      </div>
+      <div class="tool-search-bar">
+        <div class="search-icon-wrap">
+          <i class="bi bi-search"></i>
+          <input type="text" id="toolSearch" placeholder="Buscar por código, nombre, trabajador..." oninput="renderGrid()">
+        </div>
+        <select class="filter-resp" id="filterResp" onchange="renderGrid()">
+          <option value="">Todos los responsables</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Chips de selección -->
+    <div class="selected-chips" id="selectedChips"></div>
+
+    <!-- Grid de herramientas -->
+    <div class="tool-grid" id="toolGrid"></div>
+  </div>
+
+  <!-- ── Panel derecho: formulario ─────────────── -->
+  <div class="form-panel">
+    <div class="form-panel-head">
+      <span class="counter-step">2</span>
+      <div><h5><i class="bi bi-clipboard-check counter-color-success"></i> Completa la devolución</h5><small>Condición, destino y observaciones</small></div>
+    </div>
+    <div class="form-panel-body">
+
+      <!-- Herramientas seleccionadas -->
+      <div>
+        <label class="form-label">Herramientas seleccionadas</label>
+        <div class="counter-count-row"><strong id="selectedCount">0</strong><span>herramientas marcadas para devolver</span></div>
+      </div>
+
+      <!-- Condición de devolución -->
+      <div>
+        <label class="form-label">Condición al devolver <span class="required">*</span></label>
+        <div class="condition-grid" id="condGrid">
+          <div class="cond-btn" onclick="selectCond('buena', this)">
+            <i class="bi bi-check-circle"></i>
+            <span>Buena</span>
+          </div>
+          <div class="cond-btn" onclick="selectCond('requiere_revision', this)">
+            <i class="bi bi-exclamation-triangle"></i>
+            <span>Requiere revisión</span>
+          </div>
+          <div class="cond-btn" onclick="selectCond('danada', this)">
+            <i class="bi bi-x-circle"></i>
+            <span>Dañada</span>
+          </div>
+        </div>
+        <input type="hidden" id="condicionInput" name="condicion" value="buena">
+      </div>
+
+      <!-- Almacén destino -->
+      <div>
+        <label class="form-label">Almacén de destino</label>
+        <select name="almacen_id" id="almacenSelect" class="form-control">
+          <option value="">Almacén por defecto</option>
+          {% for a in almacenes %}
+          <option value="{{ a.id }}">{{ a.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Observaciones -->
+      <div>
+        <label class="form-label">Observaciones</label>
+        <textarea id="obsInput" class="form-control" rows="3"
+                  placeholder="Estado, notas de la devolución..."></textarea>
+      </div>
+
+      <!-- Progress -->
+      <div class="progress-bar-wrap" id="progressWrap">
+        <div class="progress-label" id="progressLabel">Devolviendo...</div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progressFill"></div>
+        </div>
+        <div id="progressDetail" class="counter-progress-detail"></div>
+      </div>
+
+      <!-- Acciones -->
+      <div class="counter-form-actions">
+        <a href="/movimientos" class="btn btn-ghost">Cancelar</a>
+        <button type="button" class="btn btn-success" onclick="submitDevoluciones()" id="btnSubmit" disabled>
+          <i class="bi bi-arrow-down-left"></i>
+          <span id="btnLabel">Registrar devolución</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Datos ──────────────────────────────────────────────
+let selected = new Set();
+let condicion = 'buena';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// Poblar filtro de responsables
+const responsables = [...new Set(herramientasData.map(h => h.responsable || h.trabajador_nombre || '').filter(Boolean))];
+const selResp = document.getElementById('filterResp');
+responsables.forEach(r => {
+  const o = document.createElement('option');
+  o.value = r; o.textContent = r;
+  selResp.appendChild(o);
+});
+
+// Preseleccionar herramienta si viene de URL
+const urlParams = new URLSearchParams(window.location.search);
+const preSel = urlParams.get('herramienta_id');
+if(preSel) selected.add(parseInt(preSel));
+
+// ── Render grid ───────────────────────────────────────
+function renderGrid(){
+  const q = document.getElementById('toolSearch').value.toLowerCase();
+  const resp = document.getElementById('filterResp').value;
+  const grid = document.getElementById('toolGrid');
+  grid.innerHTML = '';
+
+  const filtered = herramientasData.filter(h => {
+    const matchQ = !q || [h.codigo,h.nombre,h.marca||'',h.categoria||'',h.responsable||h.trabajador_nombre||''].join(' ').toLowerCase().includes(q);
+    const matchR = !resp || (h.responsable||h.trabajador_nombre||'') === resp;
+    return matchQ && matchR;
+  });
+
+  if(!filtered.length){
+    grid.innerHTML = '<div class="no-tools-msg"><i class="bi bi-search"></i><div>Sin resultados</div></div>';
+    return;
+  }
+
+  filtered.forEach(h => {
+    const div = document.createElement('div');
+    div.className = 'tool-card' + (selected.has(h.id) ? ' selected' : '');
+    div.dataset.id = h.id;
+    const who = h.responsable || h.trabajador_nombre || '—';
+    div.innerHTML = `
+      <div class="tc-check"><i class="bi bi-check"></i></div>
+      <div class="tc-info">
+        <div class="tc-code">${esc(h.codigo || '')}</div>
+        <div class="tc-name">${esc(h.nombre)}</div>
+        <div class="tc-who"><i class="bi bi-person"></i>${esc(who)}</div>
+      </div>
+      <span class="tc-estado">En obra</span>
+    `;
+    div.onclick = () => toggleTool(h.id, h.nombre, h.codigo);
+    grid.appendChild(div);
+  });
+}
+
+function toggleTool(id, nombre, codigo){
+  if(selected.has(id)) selected.delete(id);
+  else selected.add(id);
+  renderGrid();
+  renderChips();
+  updateSubmit();
+}
+
+// ── Chips ────────────────────────────────────────────
+function renderChips(){
+  const wrap = document.getElementById('selectedChips');
+  const count = document.getElementById('selectedCount');
+  count.textContent = selected.size;
+
+  if(!selected.size){ wrap.style.display='none'; wrap.innerHTML=''; return; }
+  wrap.style.display='flex';
+  wrap.innerHTML = '';
+
+  selected.forEach(id => {
+    const h = herramientasData.find(x => x.id === id);
+    if(!h) return;
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.innerHTML = `<i class="bi bi-tools counter-chip-icon"></i>${h.codigo ? esc(h.codigo)+' — ' : ''}${esc(h.nombre)}<button onclick="removeTool(${id})" title="Quitar"><i class="bi bi-x"></i></button>`;
+    wrap.appendChild(chip);
+  });
+}
+
+function removeTool(id){
+  selected.delete(id);
+  renderGrid();
+  renderChips();
+  updateSubmit();
+}
+
+// ── Condición ────────────────────────────────────────
+function selectCond(val, el){
+  condicion = val;
+  document.getElementById('condicionInput').value = val;
+  document.querySelectorAll('.cond-btn').forEach(b => b.className = 'cond-btn');
+  const cls = val === 'buena' ? 'active-buena' : val === 'requiere_revision' ? 'active-revision' : 'active-danada';
+  el.classList.add(cls);
+}
+// Activar "buena" por defecto
+selectCond('buena', document.querySelector('.cond-btn'));
+
+// ── Submit ───────────────────────────────────────────
+function updateSubmit(){
+  const btn = document.getElementById('btnSubmit');
+  btn.disabled = selected.size === 0;
+  document.getElementById('btnLabel').textContent = selected.size > 1
+    ? `Devolver ${selected.size} herramientas`
+    : 'Registrar devolución';
+}
+
+async function submitDevoluciones(){
+  if(!selected.size) return;
+
+  const ids = [...selected];
+  const almacenId = document.getElementById('almacenSelect').value;
+  const obs = document.getElementById('obsInput').value;
+  const cond = condicion;
+
+  if(ids.length === 1){
+    // POST único con form normal
+    const form = document.createElement('form');
+    form.method = 'post'; form.action = '/movimientos/devolver';
+    const fields = { herramienta_id: ids[0], almacen_id: almacenId, observaciones: obs, condicion: cond };
+    Object.entries(fields).forEach(([k,v]) => {
+      const i = document.createElement('input');
+      i.type='hidden'; i.name=k; i.value=v||'';
+      form.appendChild(i);
+    });
+    document.body.appendChild(form); form.submit(); return;
+  }
+
+  const nombres = ids.map(id => {
+    const h = herramientasData.find(x => x.id === id);
+    return h ? `${h.codigo || ''} ${h.nombre}`.trim() : `Herramienta ${id}`;
+  });
+  const resumen = nombres.slice(0, 8).join('\n- ') + (nombres.length > 8 ? `\n... y ${nombres.length - 8} más` : '');
+  if(!window.confirm(`Vas a devolver ${ids.length} herramientas como "${cond.replace('_', ' ')}":\n- ${resumen}\n\n¿Confirmas la operación?`)) return;
+
+  // Lote: una única petición y transacción
+  const pw = document.getElementById('progressWrap');
+  const pf = document.getElementById('progressFill');
+  const pl = document.getElementById('progressLabel');
+  const pd = document.getElementById('progressDetail');
+  pw.classList.add('show');
+  document.getElementById('btnSubmit').disabled = true;
+
+  pl.textContent = `Devolviendo ${ids.length} herramientas…`;
+  pd.textContent = 'La operación se aplicará completa o no se aplicará.';
+
+  const fd = new FormData();
+  fd.append('herramienta_ids', ids.join(','));
+  if(almacenId) fd.append('almacen_id', almacenId);
+  if(obs) fd.append('observaciones', obs);
+  fd.append('condicion', cond);
+
+  try{
+    const r = await fetch('/movimientos/devolver/lote', { method:'POST', body:fd });
+    const destino = new URL(r.url, window.location.origin).pathname;
+    if(!r.ok || destino === '/login'){
+      throw new Error(destino === '/login' ? 'AUTH' : `HTTP ${r.status}`);
+    }
+    const resultado = await r.json();
+    pf.style.width = '100%';
+    pl.textContent = `✓ ${resultado.count} herramientas devueltas correctamente`;
+    pl.style.color = 'var(--success)';
+    setTimeout(() => window.location.href = '/movimientos', 1400);
+  } catch(e){
+    pl.textContent = e.message === 'AUTH'
+      ? 'Sesión caducada. Inicia sesión y vuelve a intentarlo.'
+      : 'No se realizó ninguna devolución. Revisa los datos y vuelve a intentarlo.';
+    pl.style.color = 'var(--danger)';
+    document.getElementById('btnSubmit').disabled = false;
+  }
+}
+
+// Init
+renderGrid();
+</script>
+
+{% endif %}
+
+{% endblock %}

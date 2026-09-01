@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "baoyu-design": {
+      "source": "JimLiu/baoyu-design",
+      "sourceType": "github",
+      "skillPath": "skills/baoyu-design/SKILL.md",
+      "computedHash": "e7c6e6815fbd359967c5cac0eae78a23b34e720240348739ce86c678c51b780e"
+    },
+    "task-observer": {
+      "source": "rebelytics/one-skill-to-rule-them-all",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "de87e64b2bce31fc3d3376fca1c07904b6d0a51cd36aa8462d898a23a042d966"
+    },
+    "web-animation-design": {
+      "source": "vercel-labs/open-agents",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/web-animation-design/SKILL.md",
+      "computedHash": "8c13982062795ec23e05c7967925fca3d7253789ef499f80334b0abd79a44db5"
+    }
+  }
+}

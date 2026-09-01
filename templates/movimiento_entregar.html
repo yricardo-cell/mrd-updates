@@ -1,0 +1,442 @@
+{% extends "base.html" %}
+{% block title %}Entregar herramienta{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/movimientos">Movimientos</a><span class="sep">/</span>
+<span class="current">Entregar</span>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header-row counter-page-header">
+  <div class="page-header">
+    <div class="counter-eyebrow">Mostrador · Salida</div>
+    <div class="page-title"><i class="bi bi-arrow-up-right counter-color-primary"></i> Entregar herramientas</div>
+    <div class="page-subtitle">Selecciona una o varias herramientas y asígnalas a trabajador u obra</div>
+  </div>
+  <div class="counter-header-actions">
+    <a href="/movimientos" class="btn btn-outline btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
+  </div>
+</div>
+
+<div class="counter-layout">
+
+  <!-- ── Panel izquierdo: selector de herramientas ── -->
+  <div class="counter-main">
+
+    <!-- Buscador -->
+    <div class="card">
+      <div class="card-header counter-section-header">
+        <div>
+          <span class="counter-step">1</span>
+          <div class="card-title"><i class="bi bi-search"></i> Selecciona herramientas</div>
+          <small>Busca por código, nombre, marca o categoría</small>
+        </div>
+        <span id="cnt-disponibles" class="badge badge-success">{{ herramientas|length }} disponibles</span>
+      </div>
+      <div class="counter-search-bar">
+        <div class="counter-search-field">
+          <i class="bi bi-search"></i>
+          <input type="text" id="buscador" class="filter-input"
+                 placeholder="Código, nombre, marca, categoría..." autocomplete="off">
+        </div>
+        <select id="filtro-cat" class="filter-select counter-filter-select">
+          <option value="">Todas las categorías</option>
+          {% set cats = herramientas | map(attribute='categoria') | select | unique | list %}
+          {% for cat in cats | sort %}
+          <option value="{{ cat }}">{{ cat }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Grid de herramientas -->
+      <div id="grid-herramientas" class="counter-tool-grid">
+        {% for h in herramientas %}
+        <div class="herr-card"
+             data-id="{{ h.id }}"
+             data-codigo="{{ h.codigo | lower }}"
+             data-nombre="{{ h.nombre | lower }}"
+             data-marca="{{ (h.marca or '') | lower }}"
+             data-categoria="{{ (h.categoria or '') | lower }}"
+             data-val="{{ h.codigo }} — {{ h.nombre }}"
+             onclick="toggleSeleccion(this)">
+          <div class="counter-tool-row">
+            <div class="counter-tool-thumb">
+              {% if h.foto %}
+              <img src="/uploads/herramientas/{{ h.foto }}" class="counter-tool-image">
+              {% else %}
+              <i class="bi bi-tools counter-tool-placeholder"></i>
+              {% endif %}
+            </div>
+            <div class="counter-tool-info">
+              <div class="counter-tool-code">{{ h.codigo }}</div>
+              <div class="counter-tool-name">{{ h.nombre }}</div>
+              <div class="counter-tool-meta">
+                {% if h.marca %}{{ h.marca }}{% if h.modelo %} · {{ h.modelo }}{% endif %}{% endif %}
+                {% if h.categoria %}<span class="badge badge-gray counter-category-badge">{{ h.categoria }}</span>{% endif %}
+              </div>
+            </div>
+            <div class="herr-check">
+              <i class="bi bi-check2"></i>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="counter-empty">
+          <i class="bi bi-tools"></i>
+          No hay herramientas disponibles
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Barra selección -->
+      <div id="barra-seleccion" class="counter-selection-bar">
+        <i class="bi bi-check-square-fill"></i>
+        <span><span id="cnt-sel">0</span> herramienta(s) seleccionada(s)</span>
+        <button type="button" class="btn btn-ghost btn-sm counter-clear" onclick="limpiarSeleccion()">
+          <i class="bi bi-x"></i> Limpiar
+        </button>
+      </div>
+    </div>
+
+    <!-- Herramientas seleccionadas (chips) -->
+    <div id="panel-seleccionadas" class="counter-selected-panel">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-cart-check"></i> Herramientas a entregar</div>
+        </div>
+        <div id="chips-container" class="counter-chips"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Panel derecho: formulario de entrega ── -->
+  <div class="counter-side">
+    <form method="post" action="/movimientos/entregar" id="formEntrega">
+      <input type="hidden" name="herramienta_id" id="herramienta_id_hidden">
+      <input type="hidden" name="firma_datos" id="firmaDataInput">
+
+      <div class="card counter-form-card">
+        <div class="card-header counter-section-header">
+          <div>
+            <span class="counter-step">2</span>
+            <div class="card-title"><i class="bi bi-person-check"></i> Define el destino</div>
+            <small>Trabajador, obra y notas de salida</small>
+          </div>
+        </div>
+        <div class="card-body counter-form-stack">
+
+          <div class="form-group counter-form-group">
+            <label class="form-label">Trabajador</label>
+            <div class="counter-search-field counter-worker-search">
+              <i class="bi bi-search"></i>
+              <input type="text" id="trab-search" class="form-control" placeholder="Buscar trabajador..." autocomplete="off">
+              <select name="trabajador_id" id="trabajador_id" class="form-control counter-native-select">
+                <option value="">Sin asignar</option>
+                {% for t in trabajadores %}
+                <option value="{{ t.id }}">{{ t.nombre_completo }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <!-- Dropdown trabajadores -->
+            <div id="trab-dropdown" class="counter-worker-dropdown"></div>
+          </div>
+
+          <div class="form-group counter-form-group">
+            <label class="form-label">Obra</label>
+            <select name="obra_id" class="form-control">
+              <option value="">Sin obra</option>
+              {% for o in obras %}
+              <option value="{{ o.id }}">{{ o.numero }} — {{ o.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group counter-form-group">
+            <label class="form-label">Devolución prevista <span class="counter-optional">(opcional)</span></label>
+            <input name="fecha_devolucion_prevista" type="datetime-local" class="form-control">
+            <small class="text-muted">Solo avisará si se supera este plazo. Sin fecha, estar fuera es normal.</small>
+          </div>
+
+          <div class="form-group counter-form-group">
+            <label class="form-label">Observaciones</label>
+            <textarea name="observaciones" class="form-control" rows="2" placeholder="Condiciones de entrega, notas..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Firma -->
+      <div class="card counter-form-card">
+        <div class="card-header">
+          <div class="card-title"><i class="bi bi-pen"></i> Firma del receptor <span class="counter-optional">(opcional)</span></div>
+        </div>
+        <div class="card-body counter-signature-body">
+          <div class="firma-canvas-wrap" id="firmaBox">
+            <canvas id="firmaCanvas" width="600" height="130" class="firma-canvas"></canvas>
+            <div class="firma-canvas-placeholder" id="firmaPlaceholder">
+              <i class="bi bi-pen"></i> Firma aquí
+            </div>
+          </div>
+          <div class="counter-signature-actions">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="limpiarFirma()">
+              <i class="bi bi-trash"></i> Borrar
+            </button>
+            <input name="firma_nombre" type="text" class="form-control counter-signature-name" placeholder="Nombre del receptor">
+            <span id="firmaEstado" class="counter-success-text"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botón enviar -->
+      <button type="button" onclick="enviarEntrega()" class="btn btn-primary w-100 counter-submit" id="btn-entregar" disabled>
+        <i class="bi bi-arrow-up-right"></i> Registrar entrega
+        <span id="btn-label" class="counter-submit-detail"></span>
+      </button>
+      <div id="progreso-entrega" class="counter-progress">
+        <div class="counter-progress-track">
+          <div id="barra-progreso" class="counter-progress-fill"></div>
+        </div>
+        <div id="txt-progreso" class="counter-progress-text"></div>
+      </div>
+    </form>
+  </div>
+
+</div>
+
+<script>
+// ── Estado global ─────────────────────────────────────────────
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const seleccionadas = new Set();
+const trabajadoresData = [
+  {% for t in trabajadores %}
+  { id: {{ t.id }}, nombre: {{ t.nombre_completo | tojson }} },
+  {% endfor %}
+];
+
+// ── Selección de herramientas ──────────────────────────────────
+function toggleSeleccion(el) {
+  const id = el.dataset.id;
+  const check = el.querySelector('.herr-check');
+  const icon  = check.querySelector('i');
+
+  if (seleccionadas.has(id)) {
+    seleccionadas.delete(id);
+    el.style.background = 'var(--surface)';
+    el.style.boxShadow = '';
+    check.style.background = '';
+    check.style.borderColor = 'var(--border)';
+    icon.style.display = 'none';
+  } else {
+    seleccionadas.add(id);
+    el.style.background = 'var(--primary-light)';
+    el.style.boxShadow = 'inset 0 0 0 2px var(--primary)';
+    check.style.background = 'var(--primary)';
+    check.style.borderColor = 'var(--primary)';
+    icon.style.display = '';
+  }
+  actualizarUI();
+}
+
+function actualizarUI() {
+  const cnt = seleccionadas.size;
+  document.getElementById('cnt-sel').textContent = cnt;
+  const barra = document.getElementById('barra-seleccion');
+  barra.style.display = cnt > 0 ? 'flex' : 'none';
+
+  const panel = document.getElementById('panel-seleccionadas');
+  panel.style.display = cnt > 0 ? 'block' : 'none';
+
+  // Chips
+  const chips = document.getElementById('chips-container');
+  chips.innerHTML = '';
+  seleccionadas.forEach(id => {
+    const el = document.querySelector(`.herr-card[data-id="${id}"]`);
+    if (!el) return;
+    const chip = document.createElement('div');
+    chip.className = 'counter-chip';
+    chip.innerHTML = `<i class="bi bi-tools"></i>${esc(el.dataset.val)}<button type="button" class="counter-chip-remove">×</button>`;
+    chip.querySelector('.counter-chip-remove').onclick = () => quitarChip(id);
+    chips.appendChild(chip);
+  });
+
+  const btn = document.getElementById('btn-entregar');
+  btn.disabled = cnt === 0;
+  document.getElementById('btn-label').textContent = cnt > 1 ? `(${cnt} herramientas)` : '';
+}
+
+function quitarChip(id) {
+  const el = document.querySelector(`.herr-card[data-id="${id}"]`);
+  if (el) toggleSeleccion(el);
+}
+
+function limpiarSeleccion() {
+  seleccionadas.forEach(id => {
+    const el = document.querySelector(`.herr-card[data-id="${id}"]`);
+    if (el) {
+      el.style.background = 'var(--surface)';
+      el.style.boxShadow = '';
+      const check = el.querySelector('.herr-check');
+      check.style.background = '';
+      check.style.borderColor = 'var(--border)';
+      check.querySelector('i').style.display = 'none';
+    }
+  });
+  seleccionadas.clear();
+  actualizarUI();
+}
+
+// ── Búsqueda herramientas ──────────────────────────────────────
+document.getElementById('buscador').addEventListener('input', filtrarGrid);
+document.getElementById('filtro-cat').addEventListener('change', filtrarGrid);
+
+function filtrarGrid() {
+  const q   = document.getElementById('buscador').value.toLowerCase();
+  const cat = document.getElementById('filtro-cat').value.toLowerCase();
+  let vis = 0;
+  document.querySelectorAll('.herr-card').forEach(card => {
+    const ok = (!q || card.dataset.codigo.includes(q) || card.dataset.nombre.includes(q) || card.dataset.marca.includes(q) || card.dataset.categoria.includes(q))
+            && (!cat || card.dataset.categoria === cat);
+    card.style.display = ok ? '' : 'none';
+    if (ok) vis++;
+  });
+  document.getElementById('cnt-disponibles').textContent = vis + ' disponibles';
+}
+
+// ── Búsqueda trabajadores ──────────────────────────────────────
+const trabSearch = document.getElementById('trab-search');
+const trabDrop   = document.getElementById('trab-dropdown');
+const trabSel    = document.getElementById('trabajador_id');
+
+trabSearch.addEventListener('input', function() {
+  const q = this.value.toLowerCase().trim();
+  if (!q) { trabDrop.style.display = 'none'; trabSel.value = ''; return; }
+  const matches = trabajadoresData.filter(t => t.nombre.toLowerCase().includes(q));
+  if (!matches.length) { trabDrop.style.display = 'none'; return; }
+  trabDrop.innerHTML = matches.map((t, i) =>
+    `<div data-idx="${i}" class="counter-worker-option">
+      <i class="bi bi-person"></i>${esc(t.nombre)}
+    </div>`
+  ).join('');
+  trabDrop.querySelectorAll('[data-idx]').forEach(node => {
+    const t = matches[Number(node.dataset.idx)];
+    node.onclick = () => selTrab(t.id, t.nombre);
+  });
+  trabDrop.style.display = 'block';
+  // Position dropdown
+  const rect = trabSearch.getBoundingClientRect();
+  trabDrop.style.top = (trabSearch.offsetTop + trabSearch.offsetHeight) + 'px';
+  trabDrop.style.left = trabSearch.offsetLeft + 'px';
+  trabDrop.style.width = trabSearch.offsetWidth + 'px';
+});
+
+function selTrab(id, nombre) {
+  trabSel.value = id;
+  trabSearch.value = nombre;
+  trabDrop.style.display = 'none';
+}
+
+document.addEventListener('click', e => {
+  if (!trabSearch.contains(e.target) && !trabDrop.contains(e.target)) trabDrop.style.display = 'none';
+});
+
+// ── Firma ──────────────────────────────────────────────────────
+(function() {
+  const canvas = document.getElementById('firmaCanvas');
+  const ctx = canvas.getContext('2d');
+  const input = document.getElementById('firmaDataInput');
+  const placeholder = document.getElementById('firmaPlaceholder');
+  const estado = document.getElementById('firmaEstado');
+  let dibujando = false, hasFirma = false;
+
+  function pos(e) {
+    const r = canvas.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    return {
+      x: (src.clientX - r.left) * (canvas.width / r.width),
+      y: (src.clientY - r.top)  * (canvas.height / r.height)
+    };
+  }
+
+  canvas.addEventListener('mousedown', e => { e.preventDefault(); dibujando = true; ctx.beginPath(); ctx.moveTo(...Object.values(pos(e))); placeholder.classList.add('hidden'); });
+  canvas.addEventListener('mousemove', e => { if (!dibujando) return; e.preventDefault(); const p = pos(e); ctx.lineTo(p.x, p.y); ctx.strokeStyle = '#1a237e'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke(); hasFirma = true; });
+  canvas.addEventListener('mouseup',   e => { dibujando = false; if (hasFirma) { input.value = canvas.toDataURL('image/png'); estado.textContent = '✓ Firma capturada'; } });
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); dibujando = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); placeholder.classList.add('hidden'); }, {passive:false});
+  canvas.addEventListener('touchmove',  e => { if (!dibujando) return; e.preventDefault(); const p = pos(e); ctx.lineTo(p.x, p.y); ctx.strokeStyle = '#1a237e'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke(); hasFirma = true; }, {passive:false});
+  canvas.addEventListener('touchend',   () => { dibujando = false; if (hasFirma) { input.value = canvas.toDataURL('image/png'); estado.textContent = '✓ Firma capturada'; } });
+
+  window.limpiarFirma = function() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    input.value = ''; hasFirma = false; estado.textContent = '';
+    placeholder.classList.remove('hidden');
+  };
+})();
+
+// ── Envío entrega (soporta múltiple) ─────────────────────────
+async function enviarEntrega() {
+  if (!seleccionadas.size) { Toast.warning('Selecciona al menos una herramienta'); return; }
+
+  const ids   = [...seleccionadas];
+  const form  = document.getElementById('formEntrega');
+  const trab  = form.querySelector('[name="trabajador_id"]').value;
+  const obra  = form.querySelector('[name="obra_id"]').value;
+  const obs   = form.querySelector('[name="observaciones"]').value;
+  const firma = form.querySelector('[name="firma_datos"]').value;
+  const fNombre = form.querySelector('[name="firma_nombre"]').value;
+
+  if (ids.length === 1) {
+    // Entrega individual — submit normal
+    form.querySelector('[name="herramienta_id"]').value = ids[0];
+    form.submit();
+    return;
+  }
+
+  const nombres = ids.map(id => {
+    const card = document.querySelector(`.herr-card[data-id="${id}"]`);
+    return card ? card.dataset.val : `Herramienta ${id}`;
+  });
+  const resumen = nombres.slice(0, 8).join('\n- ') + (nombres.length > 8 ? `\n... y ${nombres.length - 8} más` : '');
+  if (!window.confirm(`Vas a entregar ${ids.length} herramientas:\n- ${resumen}\n\n¿Confirmas la operación?`)) return;
+
+  // Entrega múltiple — una única petición y transacción
+  const progDiv  = document.getElementById('progreso-entrega');
+  const barra    = document.getElementById('barra-progreso');
+  const txtProg  = document.getElementById('txt-progreso');
+  const btnEnt   = document.getElementById('btn-entregar');
+  progDiv.style.display = 'block';
+  btnEnt.disabled = true;
+
+  txtProg.textContent = `Entregando ${ids.length} herramientas...`;
+
+  const fd = new FormData();
+  fd.append('herramienta_ids', ids.join(','));
+  fd.append('trabajador_id', trab);
+  fd.append('obra_id', obra);
+  fd.append('observaciones', obs);
+  if (firma) { fd.append('firma_datos', firma); fd.append('firma_nombre', fNombre); }
+
+  try {
+    const r = await fetch('/movimientos/entregar/lote', { method: 'POST', body: fd });
+    const destino = new URL(r.url, window.location.origin).pathname;
+    if (!r.ok || destino === '/login') {
+      throw new Error(destino === '/login' ? 'AUTH' : `HTTP ${r.status}`);
+    }
+    const resultado = await r.json();
+    barra.style.width = '100%';
+    barra.style.background = 'var(--success)';
+    Toast.success(`✓ ${resultado.count} herramienta(s) entregadas · albarán preparado`);
+    setTimeout(() => location.href = resultado.albaran_url || '/albaranes-salida', 700);
+  } catch (e) {
+    barra.style.background = 'var(--warning)';
+    btnEnt.disabled = false;
+    txtProg.textContent = e.message === 'AUTH'
+      ? 'Sesión caducada. Inicia sesión y vuelve a intentarlo.'
+      : 'No se realizó ninguna entrega. Revisa los datos y vuelve a intentarlo.';
+    Toast.warning(txtProg.textContent);
+  }
+}
+</script>
+
+{% endblock %}
+

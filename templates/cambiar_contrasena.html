@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}Cambiar contraseña{% endblock %}
+
+{% block extra_css %}
+<style>
+  .pwd-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--bg);
+  }
+  .pwd-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px 36px;
+    width: 100%;
+    max-width: 460px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.08);
+  }
+  .pwd-icon {
+    font-size: 2.8rem;
+    color: var(--primary);
+    margin-bottom: 12px;
+  }
+  .pwd-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
+  .pwd-subtitle { color: var(--text-2); font-size: .92rem; margin-bottom: 28px; }
+
+  /* Requisitos de contraseña */
+  .req-list { list-style: none; padding: 0; margin: 12px 0 20px; }
+  .req-list li {
+    font-size: .85rem;
+    color: var(--text-2);
+    padding: 3px 0;
+    display: flex; align-items: center; gap: 8px;
+    transition: color .2s;
+  }
+  .req-list li .req-icon { width: 16px; text-align: center; }
+  .req-list li.ok  { color: var(--success, #198754); }
+  .req-list li.ok  .req-icon::before { content: "✓"; font-weight: 700; }
+  .req-list li:not(.ok) .req-icon::before { content: "○"; }
+
+  /* Campo con toggle de visibilidad */
+  .pwd-input-wrap { position: relative; }
+  .pwd-input-wrap .pwd-toggle {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer;
+    color: var(--text-2); padding: 4px; font-size: 1rem;
+  }
+  .pwd-input-wrap input { padding-right: 40px; }
+
+  .alerta-obligatoria {
+    background: #fff3cd; border: 1px solid #ffc107;
+    border-radius: 10px; padding: 14px 16px;
+    margin-bottom: 24px; font-size: .9rem;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .alerta-obligatoria i { font-size: 1.2rem; color: #d97706; margin-top: 2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pwd-page">
+  <div class="pwd-card">
+
+    <div class="pwd-icon"><i class="bi bi-shield-lock-fill"></i></div>
+    <div class="pwd-title">
+      {% if modo_obligatorio %}Establece tu contraseña{% else %}Cambiar contraseña{% endif %}
+    </div>
+    <div class="pwd-subtitle">
+      {% if modo_obligatorio %}
+        Para continuar, crea una contraseña segura para tu cuenta.
+      {% else %}
+        Introduce tu nueva contraseña respetando los requisitos.
+      {% endif %}
+    </div>
+
+    {% if modo_obligatorio %}
+    <div class="alerta-obligatoria">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <div>
+        <strong>Cambio requerido.</strong> Tu cuenta requiere una contraseña nueva antes de continuar.
+        No podrás acceder a otras secciones hasta completar este paso.
+      </div>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert alert-danger d-flex align-items-center gap-2 mb-4" style="border-radius:10px">
+      <i class="bi bi-x-circle-fill"></i>
+      <span>{{ error }}</span>
+    </div>
+    {% endif %}
+
+    <form method="post" action="/cambiar-contrasena" id="formCambiarPwd" novalidate>
+      <!-- CSRF Token (Sprint 5.2) -->
+      <input type="hidden" name="_csrf_token" id="csrfField" value="">
+
+      <!-- Nueva contraseña -->
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="pwd1">Nueva contraseña</label>
+        <div class="pwd-input-wrap">
+          <input type="password" class="form-control" id="pwd1" name="password_nuevo"
+                 autocomplete="new-password" required
+                 placeholder="Mínimo 10 caracteres"
+                 oninput="checkReqs()">
+          <button type="button" class="pwd-toggle" onclick="togglePwd('pwd1',this)" tabindex="-1"
+                  title="Mostrar/ocultar contraseña">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Requisitos visuales -->
+      <ul class="req-list" id="reqList">
+        <li id="req-len">  <span class="req-icon"></span>Mínimo 10 caracteres</li>
+        <li id="req-upper"><span class="req-icon"></span>Al menos una mayúscula (A-Z)</li>
+        <li id="req-lower"><span class="req-icon"></span>Al menos una minúscula (a-z)</li>
+        <li id="req-digit"><span class="req-icon"></span>Al menos un número (0-9)</li>
+        <li id="req-spec"> <span class="req-icon"></span>Al menos un carácter especial (!@#$%...)</li>
+      </ul>
+
+      <!-- Confirmar -->
+      <div class="mb-4">
+        <label class="form-label fw-semibold" for="pwd2">Confirmar contraseña</label>
+        <div class="pwd-input-wrap">
+          <input type="password" class="form-control" id="pwd2" name="password_confirm"
+                 autocomplete="new-password" required
+                 placeholder="Repite la nueva contraseña"
+                 oninput="checkMatch()">
+          <button type="button" class="pwd-toggle" onclick="togglePwd('pwd2',this)" tabindex="-1"
+                  title="Mostrar/ocultar contraseña">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
+        <div id="matchMsg" class="form-text" style="display:none"></div>
+      </div>
+
+      <button type="submit" class="btn btn-primary w-100 py-2" id="submitBtn" disabled>
+        <i class="bi bi-check-circle me-1"></i>
+        {% if modo_obligatorio %}Establecer contraseña{% else %}Cambiar contraseña{% endif %}
+      </button>
+
+      {% if not modo_obligatorio %}
+      <div class="text-center mt-3">
+        <a href="/perfil" class="text-muted small">Cancelar</a>
+      </div>
+      {% endif %}
+    </form>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Sprint 5.2 — CSRF token
+(function() {
+  var m = document.cookie.match(/(?:^|; )mrd_csrf=([^;]*)/);
+  var t = m ? decodeURIComponent(m[1]) : '';
+  document.getElementById('csrfField').value = t;
+})();
+
+// Toggle mostrar/ocultar contraseña
+function togglePwd(id, btn) {
+  var inp = document.getElementById(id);
+  var icon = btn.querySelector('i');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    icon.className = 'bi bi-eye-slash';
+  } else {
+    inp.type = 'password';
+    icon.className = 'bi bi-eye';
+  }
+}
+
+// Requisitos de contraseña
+function checkReqs() {
+  var v = document.getElementById('pwd1').value;
+  var reqs = {
+    'req-len':   v.length >= 10,
+    'req-upper': /[A-Z]/.test(v),
+    'req-lower': /[a-z]/.test(v),
+    'req-digit': /[0-9]/.test(v),
+    'req-spec':  /[^A-Za-z0-9\s]/.test(v),
+  };
+  var allOk = true;
+  for (var id in reqs) {
+    var el = document.getElementById(id);
+    if (reqs[id]) { el.classList.add('ok'); }
+    else          { el.classList.remove('ok'); allOk = false; }
+  }
+  updateSubmit(allOk);
+  checkMatch();
+  return allOk;
+}
+
+function checkMatch() {
+  var p1 = document.getElementById('pwd1').value;
+  var p2 = document.getElementById('pwd2').value;
+  var msg = document.getElementById('matchMsg');
+  if (!p2) { msg.style.display = 'none'; return; }
+  msg.style.display = 'block';
+  if (p1 === p2) {
+    msg.textContent = '✓ Las contraseñas coinciden.';
+    msg.style.color = 'var(--success, #198754)';
+  } else {
+    msg.textContent = '✗ Las contraseñas no coinciden.';
+    msg.style.color = 'var(--danger, #dc3545)';
+  }
+  updateSubmit(checkReqs() && p1 === p2);
+}
+
+function updateSubmit(ok) {
+  document.getElementById('submitBtn').disabled = !ok;
+}
+
+// Bloquear doble envío
+document.getElementById('formCambiarPwd').addEventListener('submit', function(e) {
+  if (!checkReqs()) { e.preventDefault(); return; }
+  var btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
+});
+</script>
+{% endblock %}

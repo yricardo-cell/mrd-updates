@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Catálogo EPI y ropa — {{ app_name }}{% endblock %}
+{% block breadcrumb %}<a href="/">Inicio</a><span class="sep">/</span><a href="/epis">EPIs</a><span class="sep">/</span><span class="current">Catálogo</span>{% endblock %}
+
+{% block content %}
+{% set todos = items_epi + items_ropa %}
+{% set activos = todos | selectattr('activo') | list | length %}
+<section class="epi-console-hero">
+  <div><span class="epi-console-eyebrow">Centro de altas</span><h1><i class="bi bi-grid-1x2-fill"></i> Catálogo EPI y ropa</h1><p>Crea una referencia una sola vez. El programa prepara su stock y su QR automáticamente.</p></div>
+  <div class="epi-console-actions"><a href="/epis/stock" class="btn btn-light"><i class="bi bi-boxes"></i> Operar stock</a>{% if user.rol == 'admin' %}<a href="{{ '/epis/catalogo' if mostrar_archivados else '/epis/catalogo?archivados=1' }}" class="btn btn-outline-light"><i class="bi bi-archive"></i> {{ 'Ver activos' if mostrar_archivados else 'Archivados (' ~ archivados_count ~ ')' }}</a>{% endif %}<a href="/scan" class="btn btn-outline-light"><i class="bi bi-upc-scan"></i> Escanear</a></div>
+</section>
+
+{% set ok = request.query_params.get('ok') %}{% set err = request.query_params.get('err') %}
+{% if ok %}<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>{% if ok == 'creado' %}Artículo creado con stock y QR preparados.{% elif ok == 'editado' %}Artículo actualizado.{% elif ok == 'desactivado' %}Artículo desactivado sin borrar su historial.{% elif ok == 'eliminado' %}Artículo creado por error eliminado definitivamente.{% else %}Artículo reactivado.{% endif %}</div>{% endif %}
+{% if err %}<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>{% if err == 'nombre_duplicado' %}Ese nombre ya existe. Usa otro nombre o edita el artículo existente.{% elif err == 'stock_duplicado' %}El cambio produciría dos referencias iguales de la misma talla.{% elif err == 'nombre_vacio' %}El nombre no puede quedar vacío.{% elif err == 'tallas' %}Revisa las tallas: sepáralas por comas y no uses más de 40.{% else %}No se pudo guardar porque los datos entran en conflicto con otro artículo.{% endif %}</div>{% endif %}
+
+<section class="epi-console-kpis">
+  <article><span><i class="bi bi-shield-check"></i></span><div><strong>{{ items_epi|length }}</strong><small>Tipos de EPI</small></div></article>
+  <article><span><i class="bi bi-bag-check"></i></span><div><strong>{{ items_ropa|length }}</strong><small>Prendas</small></div></article>
+  <article><span><i class="bi bi-check2-circle"></i></span><div><strong>{{ activos }}</strong><small>Activos</small></div></article>
+  <article><span><i class="bi bi-qr-code"></i></span><div><strong>{{ stock_por_nombre|length }}</strong><small>QR preparados</small></div></article>
+</section>
+
+{% if not mostrar_archivados %}<section class="mrd-card epi-create-card" id="alta-articulo">
+  <div class="epi-create-head"><div><span class="epi-step">1</span><h2>Dar de alta un artículo</h2><p>EPI para unidades generales; ropa para control por tallas.</p></div><span class="epi-auto-id"><i class="bi bi-stars"></i> Código y QR automáticos</span></div>
+  <form method="post" action="/epis/catalogo/nuevo" class="epi-create-form">
+    <div class="epi-field epi-field-name"><label for="cat-nombre">Nombre</label><input id="cat-nombre" type="text" name="nombre" class="form-control" placeholder="Ej. GUANTE ANTICORTE" required maxlength="100" autocomplete="off"></div>
+    <div class="epi-field"><label for="cat-categoria">Qué estás creando</label><select id="cat-categoria" name="categoria" class="form-select"><option value="epi">EPI / protección</option><option value="ropa">Ropa por tallas</option></select><small>Chalecos y prendas deben marcarse como ropa.</small></div>
+    <div class="epi-field epi-sizes-field" data-sizes-field hidden><label for="cat-tallas">Tallas que quieres</label><input id="cat-tallas" type="text" name="tallas" class="form-control" placeholder="Ej. S, M, L, XL, 2XL" maxlength="200"><small>Tú decides cuántas. Sepáralas por comas.</small></div>
+    <div class="epi-field"><label for="cat-kit">Unidades por dotación</label><input id="cat-kit" type="number" name="cantidad_kit" value="1" min="1" max="99" class="form-control"></div>
+    <div class="epi-field"><label for="cat-marca">Marca</label><input id="cat-marca" type="text" name="marca" class="form-control" placeholder="Opcional" maxlength="100"></div>
+    <div class="epi-field"><label for="cat-notas">Descripción / modelo</label><input id="cat-notas" type="text" name="notas" class="form-control" placeholder="Color, norma, referencia…" maxlength="200"></div>
+    <button type="submit" class="btn btn-success epi-create-submit"><i class="bi bi-plus-circle"></i><span>Crear y preparar QR</span></button>
+  </form>
+</section>{% else %}<div class="alert alert-secondary"><i class="bi bi-archive me-2"></i>Estos artículos están ocultos del stock diario. Puedes abrir Editar y volver a ponerlos como <strong>Activos</strong>.</div>{% endif %}
+
+<section class="epi-catalog-toolbar">
+  <div class="epi-search-box"><i class="bi bi-search"></i><input id="epi-catalog-search" type="search" placeholder="Buscar por nombre, marca o código…" autocomplete="off"></div>
+  <div class="epi-filter-pills" role="group" aria-label="Filtrar catálogo"><button type="button" class="is-active" data-cat-filter="todos">Todos</button><button type="button" data-cat-filter="epi">EPIs</button><button type="button" data-cat-filter="ropa">Ropa</button></div>
+</section>
+
+<div class="epi-catalog-grid" id="epi-catalog-grid">
+{% for item in todos %}{% set stock = stock_por_nombre.get(item.nombre) %}{% set tallas = tallas_por_nombre.get(item.nombre, []) %}
+  <article class="epi-catalog-card{% if not item.activo %} is-inactive{% endif %}" data-category="{{ item.categoria }}" data-active="{{ '1' if item.activo else '0' }}" data-search="{{ (item.nombre ~ ' ' ~ (item.marca or '') ~ ' ' ~ (item.notas or '') ~ ' ' ~ (stock.codigo if stock else ''))|lower|e }}">
+    <div class="epi-card-icon is-{{ item.categoria }}"><i class="bi {% if item.categoria == 'ropa' %}bi-bag-fill{% else %}bi-shield-fill-check{% endif %}"></i></div>
+    <div class="epi-card-main"><div class="epi-card-title"><h3>{{ item.nombre }}</h3><span class="epi-state {{ 'is-active' if item.activo else 'is-off' }}">{{ 'Activo' if item.activo else 'Inactivo' }}</span></div><p>{{ item.marca or 'Sin marca' }}{% if item.notas %} · {{ item.notas }}{% endif %}</p><div class="epi-card-meta"><span><i class="bi bi-collection"></i> {{ item.cantidad_kit }} por dotación</span>{% if item.categoria == 'ropa' %}<span><i class="bi bi-tags"></i> {{ tallas|join(', ') if tallas else 'Sin tallas todavía' }}</span>{% endif %}{% if stock %}<code>{{ stock.codigo }}</code>{% else %}<span class="text-warning">QR pendiente</span>{% endif %}</div></div>
+    <div class="epi-card-actions">{% if stock %}<a href="/qr/stock_epi/{{ stock.id }}/imprimir" target="_blank" class="btn btn-sm btn-outline-dark" title="Ver e imprimir QR"><i class="bi bi-qr-code"></i></a>{% endif %}<button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-cat-{{ item.id }}" title="Modificar"><i class="bi bi-pencil"></i></button>{% if user.rol == 'admin' and item.activo %}<form method="post" action="/epis/catalogo/{{ item.id }}/eliminar" onsubmit="return confirm('¿Quitar este artículo? Si tiene historial quedará archivado y desaparecerá del inventario diario.')"><button class="btn btn-sm btn-outline-danger" type="submit" title="Eliminar o archivar"><i class="bi bi-trash"></i></button></form>{% endif %}</div>
+    <div class="collapse epi-card-editor" id="edit-cat-{{ item.id }}"><form method="post" action="/epis/catalogo/{{ item.id }}/editar" data-clothing-form><input class="form-control" name="nombre" value="{{ item.nombre }}" required><select class="form-select" name="categoria" data-category-select><option value="epi"{% if item.categoria == 'epi' %} selected{% endif %}>EPI / protección</option><option value="ropa"{% if item.categoria == 'ropa' %} selected{% endif %}>Ropa por tallas</option></select><input class="form-control" name="tallas" placeholder="Añadir tallas: S, M, L…" maxlength="200" data-sizes-input{% if item.categoria != 'ropa' %} hidden{% endif %}><input class="form-control" name="marca" value="{{ item.marca or '' }}" placeholder="Marca"><input class="form-control" name="notas" value="{{ item.notas or '' }}" placeholder="Descripción"><input class="form-control" type="number" name="cantidad_kit" value="{{ item.cantidad_kit }}" min="1" max="99"><select class="form-select" name="activo"><option value="1"{% if item.activo %} selected{% endif %}>Activo</option><option value="0"{% if not item.activo %} selected{% endif %}>Inactivo</option></select><button class="btn btn-primary" type="submit"><i class="bi bi-check2"></i> Guardar</button></form></div>
+  </article>
+{% endfor %}
+</div>
+<div class="epi-empty-result" id="epi-catalog-empty" hidden><i class="bi bi-search"></i><strong>No hay resultados</strong><span>Prueba otro texto o filtro.</span></div>
+{% endblock %}
+
+{% block extra_js %}<script>
+(function(){var input=document.getElementById('epi-catalog-search'),cards=Array.from(document.querySelectorAll('.epi-catalog-card')),buttons=Array.from(document.querySelectorAll('[data-cat-filter]')),empty=document.getElementById('epi-catalog-empty'),filter='todos';function apply(){var term=(input.value||'').trim().toLocaleLowerCase('es'),shown=0;cards.forEach(function(card){var categoryOk=filter==='todos'||card.dataset.category===filter||(filter==='inactivo'&&card.dataset.active==='0'),searchOk=!term||(card.dataset.search||'').includes(term),visible=categoryOk&&searchOk;card.hidden=!visible;if(visible)shown++});empty.hidden=shown!==0}input.addEventListener('input',apply);buttons.forEach(function(button){button.addEventListener('click',function(){buttons.forEach(function(b){b.classList.remove('is-active')});button.classList.add('is-active');filter=button.dataset.catFilter;apply()})});var category=document.getElementById('cat-categoria'),sizesField=document.querySelector('[data-sizes-field]');function toggleCreateSizes(){sizesField.hidden=category.value!=='ropa'}category.addEventListener('change',toggleCreateSizes);toggleCreateSizes();document.querySelectorAll('[data-clothing-form]').forEach(function(form){var select=form.querySelector('[data-category-select]'),sizes=form.querySelector('[data-sizes-input]');function toggle(){sizes.hidden=select.value!=='ropa'}select.addEventListener('change',toggle);toggle()})})();
+</script>{% endblock %}

@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Formación — {{ trabajador.nombre_completo }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <a href="/trabajadores/{{ trabajador.id }}/epis" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Volver
+  </a>
+  <div>
+    <h4 class="mb-0"><i class="bi bi-mortarboard-fill text-success me-2"></i>Formación y Habilitaciones</h4>
+    <small class="text-muted">{{ trabajador.nombre_completo }}</small>
+  </div>
+  <button class="btn btn-success btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#modalNueva">
+    <i class="bi bi-plus-lg"></i> Nueva formación
+  </button>
+</div>
+
+{% if ok %}
+<div class="alert alert-success alert-dismissible fade show py-2" role="alert">
+  {% if ok == "creado" %}Formación añadida correctamente.
+  {% elif ok == "eliminado" %}Formación eliminada.{% endif %}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{% if formaciones %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-dark">
+      <tr>
+        <th>Curso / Habilitación</th>
+        <th>Tipo</th>
+        <th>Entidad</th>
+        <th>Realización</th>
+        <th>Caducidad</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in formaciones %}
+      {% set dias = f.dias_para_caducidad %}
+      <tr class="{% if f.caducada %}table-danger{% elif dias is not none and dias <= 30 %}table-warning{% endif %}">
+        <td class="fw-semibold">{{ f.nombre_curso }}</td>
+        <td>{{ f.tipo or "—" }}</td>
+        <td>{{ f.entidad or "—" }}</td>
+        <td>{{ f.fecha_realizacion.strftime("%d/%m/%Y") if f.fecha_realizacion else "—" }}</td>
+        <td>
+          {{ f.fecha_caducidad.strftime("%d/%m/%Y") if f.fecha_caducidad else "—" }}
+          {% if f.caducada %}<span class="badge bg-danger ms-1">VENCIDA</span>
+          {% elif dias is not none and dias <= 30 %}<span class="badge bg-warning text-dark ms-1">{{ dias }}d</span>{% endif %}
+        </td>
+        <td>
+          {% if not f.fecha_caducidad %}<span class="badge bg-secondary">Sin caducidad</span>
+          {% elif f.caducada %}<span class="badge bg-danger">Caducada</span>
+          {% elif dias <= 30 %}<span class="badge bg-warning text-dark">Por vencer</span>
+          {% else %}<span class="badge bg-success">Vigente</span>{% endif %}
+        </td>
+        <td>
+          <form method="post" action="/trabajadores/{{ trabajador.id }}/formacion/{{ f.id }}/eliminar"
+                onsubmit="return confirm('¿Eliminar esta formación?')">
+            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="bi bi-mortarboard display-4 d-block mb-2 opacity-25"></i>
+  No hay formaciones registradas.
+</div>
+{% endif %}
+
+<!-- Modal nueva formación -->
+<div class="modal fade" id="modalNueva" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="/trabajadores/{{ trabajador.id }}/formacion" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-mortarboard me-2"></i>Nueva Formación</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Nombre del curso / habilitación <span class="text-danger">*</span></label>
+          <input type="text" name="nombre_curso" class="form-control" required placeholder="Ej: Trabajo en Altura — Nivel II">
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label">Tipo</label>
+            <select name="tipo" class="form-select">
+              <option value="">— Sin clasificar —</option>
+              {% for tipo in tipos_formacion %}<option value="{{ tipo }}">{{ tipo }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Entidad / Centro</label>
+            <input type="text" name="entidad" class="form-control" placeholder="CAP, FREMAP, …">
+          </div>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label">Fecha de realización</label>
+            <input type="date" name="fecha_realizacion" class="form-control">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Fecha de caducidad</label>
+            <input type="date" name="fecha_caducidad" class="form-control">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Nº certificado</label>
+          <input type="text" name="num_certificado" class="form-control" placeholder="Opcional">
+        </div>
+        <div class="mb-1">
+          <label class="form-label">Notas</label>
+          <textarea name="notas" class="form-control" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i>Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

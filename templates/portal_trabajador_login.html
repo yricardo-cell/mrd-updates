@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#08080b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Acceso trabajador — MRD</title>
+  <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/css/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/static/css/portal-trabajador.css?v=2.8.0-cyan">
+  <link rel="stylesheet" href="/static/css/worker-login.css?v=2.8.0-cyan">
+</head>
+<body class="worker-login-page">
+  <main class="worker-login-shell">
+    <section class="worker-login-card">
+      <div class="worker-login-mark"><img src="/static/img/mrd_sello_blanco.png" alt="MRD Estructuras Tubulares"></div>
+      <span class="portal-eyebrow">MI ESPACIO MRD</span>
+      <h1>Acceso de trabajador</h1>
+      {% if activar_token %}
+      <p>Crea tu PIN personal. Lo usarás con tu código de trabajador o DNI.</p>
+      {% else %}<p>Introduce tu código de trabajador o DNI y tu PIN.</p>{% endif %}
+      {% if error %}<div class="alert alert-warning text-start">{{ error }}</div>{% endif %}
+      {% if mensaje %}<div class="alert alert-success text-start">{{ mensaje }}</div>{% endif %}
+      {% if activar_token %}
+      <form method="post" action="/portal/{{ activar_token }}/activar-pin" autocomplete="off">
+        <input type="hidden" name="_csrf_token">
+        <label>Nuevo PIN
+          <input name="pin" type="password" required inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="new-password" placeholder="4 a 6 números">
+        </label>
+        <label>Repite el PIN
+          <input name="pin_confirm" type="password" required inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="new-password">
+        </label>
+        <button class="portal-primary" type="submit"><i class="bi bi-shield-check"></i> Activar mi espacio</button>
+      </form>
+      {% else %}
+      <form method="post" action="/portal-trabajador/acceso" autocomplete="off">
+        <label>Código o DNI
+          <input name="codigo" value="{{ codigo|e }}" required maxlength="64" autofocus placeholder="Ej. TRB-00001">
+        </label>
+        <label>PIN
+          <input name="pin" type="password" required inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="one-time-code" placeholder="••••">
+        </label>
+        <button class="portal-primary" type="submit"><i class="bi bi-box-arrow-in-right"></i> Entrar</button>
+      </form>
+      {% endif %}
+      <a class="worker-admin-link" href="/login"><i class="bi bi-shield-lock"></i> Acceso de administración</a>
+    </section>
+  </main>
+</body>
+<script>(()=>{const v=document.cookie.split('; ').find(x=>x.startsWith('mrd_csrf='));document.querySelectorAll('input[name="_csrf_token"]').forEach(e=>e.value=v?decodeURIComponent(v.split('=').slice(1).join('=')):'')})();</script>
+</html>

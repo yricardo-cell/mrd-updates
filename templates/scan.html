@@ -1,0 +1,1216 @@
+{% extends "base.html" %}
+{% block title %}Escanear — {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Cámara ── */
+#video-container {
+  position:relative; width:100%; border-radius:16px;
+  overflow:hidden; background:#000; aspect-ratio:4/3;
+}
+#video-container video { width:100%; height:100%; object-fit:cover; display:block; }
+#scan-overlay {
+  position:absolute; inset:0; display:flex;
+  align-items:center; justify-content:center; pointer-events:none;
+}
+#scan-frame {
+  width:65%; height:35%;
+  border:3px solid var(--primary); border-radius:10px;
+  box-shadow:0 0 0 2000px rgba(0,0,0,.5); position:relative;
+}
+#scan-frame.success { border-color:#22c55e; box-shadow:0 0 0 2000px rgba(0,0,0,.5),inset 0 0 0 2px #22c55e; }
+#scan-frame::before {
+  content:''; position:absolute; top:-3px; left:-3px; right:-3px;
+  height:4px; background:var(--primary);
+  animation:scan-line 2s ease-in-out infinite;
+}
+@keyframes scan-line { 0%{top:-3px} 50%{top:calc(100% - 1px)} 100%{top:-3px} }
+#scan-status {
+  position:absolute; bottom:14px; left:0; right:0;
+  text-align:center; color:#fff; font-size:13px; font-weight:500;
+  text-shadow:0 1px 4px rgba(0,0,0,.8);
+}
+
+/* ── Controles de cámara ── */
+.cam-controls { display:flex; gap:8px; justify-content:center; align-items:center; margin-top:12px; flex-wrap:wrap; }
+.btn-torch { padding:8px 14px; border-radius:8px; border:1.5px solid var(--border); background:var(--bg); color:var(--text-secondary); cursor:pointer; font-size:.82rem; display:flex; align-items:center; gap:5px; transition:all .15s; }
+.btn-torch.active { border-color:#f59e0b; color:#f59e0b; background:rgba(245,158,11,.08); }
+.btn-torch:hover { border-color:var(--primary); color:var(--primary); }
+
+/* ── Contador ── */
+.scan-counter { display:flex; align-items:center; gap:8px; padding:8px 14px; background:var(--bg); border:1px solid var(--border); border-radius:8px; font-size:.82rem; }
+.scan-counter .num { font-size:1.2rem; font-weight:700; color:var(--primary); }
+
+/* ── Layout ── */
+.scan-layout { display:grid; grid-template-columns:1fr 380px; gap:20px; align-items:start; }
+@media(max-width:900px){ .scan-layout { grid-template-columns:1fr; } }
+
+/* ── Panel ── */
+.scan-panel { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+.scan-panel-head { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+.scan-panel-head h5 { margin:0; font-size:.92rem; font-weight:700; color:var(--text-primary); flex:1; }
+.scan-panel-body { padding:20px; }
+
+/* ── Input ── */
+.scan-input-wrap { display:flex; gap:8px; margin-bottom:16px; }
+.scan-input-wrap input {
+  flex:1; padding:12px 16px; border-radius:10px; border:2px solid var(--border);
+  font-size:1rem; font-family:monospace; letter-spacing:1px;
+  background:var(--bg); color:var(--text-primary); transition:border-color .15s;
+}
+.scan-input-wrap input:focus { border-color:var(--primary); outline:none; }
+.scan-input-wrap button {
+  padding:12px 16px; border-radius:10px; background:var(--primary);
+  border:none; color:#fff; cursor:pointer; font-size:1.1rem; transition:all .15s;
+}
+.scan-input-wrap button:hover { filter:brightness(1.1); }
+
+/* ── Resultado ── */
+#scan-result-box { display:none; }
+.result-card {
+  background:var(--bg); border:1.5px solid var(--border); border-radius:12px;
+  padding:16px; display:flex; align-items:flex-start; gap:14px;
+}
+.result-icon { font-size:2rem; flex-shrink:0; }
+.result-info { flex:1; min-width:0; }
+.result-name { font-size:1rem; font-weight:700; color:var(--text-primary); }
+.result-code { font-size:.75rem; color:var(--text-secondary); font-family:monospace; }
+.result-badges { margin-top:6px; display:flex; flex-wrap:wrap; gap:5px; }
+.result-badge { padding:3px 10px; border-radius:20px; font-size:.72rem; font-weight:600; }
+
+.quick-actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.qa-btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:9px; font-size:.83rem; font-weight:600; cursor:pointer; border:none; transition:all .18s; text-decoration:none; }
+.qa-entregar { background:#22c55e; color:#fff; }
+.qa-entregar:hover { filter:brightness(1.08); color:#fff; }
+.qa-devolver { background:#3b82f6; color:#fff; }
+.qa-devolver:hover { filter:brightness(1.08); color:#fff; }
+.qa-ver { background:var(--bg-card); border:1.5px solid var(--border); color:var(--text-secondary); }
+.qa-ver:hover { border-color:var(--primary); color:var(--primary); }
+
+/* ── Error box ── */
+#scan-error-box {
+  display:none; background:rgba(239,68,68,.07); border:1.5px solid rgba(239,68,68,.2);
+  border-radius:10px; padding:14px 16px; color:var(--text-primary); font-size:.85rem;
+}
+.scan-operation-status { display:none; margin-top:12px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; font-size:.82rem; }
+.scan-operation-status.success { display:block; color:#15803d; background:rgba(34,197,94,.08); border-color:rgba(34,197,94,.25); }
+.scan-operation-status.error { display:block; color:#b91c1c; background:rgba(239,68,68,.08); border-color:rgba(239,68,68,.25); }
+.scan-operation-status.pending { display:block; color:#b45309; background:rgba(245,158,11,.08); border-color:rgba(245,158,11,.25); }
+
+/* ── Historial ── */
+.hist-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+.hist-row:last-child { border-bottom:none; }
+.hist-code { font-size:.72rem; font-family:monospace; background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:2px 6px; color:var(--text-secondary); flex-shrink:0; }
+.hist-name { flex:1; font-size:.83rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hist-estado { font-size:.7rem; padding:2px 7px; border-radius:10px; flex-shrink:0; }
+.hist-estado.disponible { background:rgba(34,197,94,.1); color:#22c55e; }
+.hist-estado.entregada,.hist-estado.en_obra { background:rgba(59,130,246,.1); color:#3b82f6; }
+
+/* ── Mobile QR ── */
+.mobile-panel { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; overflow:hidden; position:sticky; top:20px; }
+.mobile-panel-head { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; }
+.mobile-panel-head h5 { margin:0; font-size:.9rem; font-weight:700; }
+.mobile-panel-body { padding:20px; }
+.qr-box { background:#fff; border-radius:12px; padding:12px; display:flex; align-items:center; justify-content:center; min-height:150px; margin-bottom:14px; }
+.url-badge { display:flex; align-items:flex-start; gap:6px; padding:8px 12px; border-radius:8px; font-size:.75rem; margin-bottom:8px; word-break:break-all; }
+.url-badge.https { background:rgba(34,197,94,.08); border:1px solid rgba(34,197,94,.2); color:#22c55e; }
+.url-badge.local { background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.2); color:#3b82f6; }
+
+/* ── Modal acción rápida ── */
+#modal-accion {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,.6);
+  z-index:9999; align-items:flex-end; justify-content:center;
+  backdrop-filter:blur(4px);
+}
+#modal-accion.show { display:flex; }
+.modal-accion-box {
+  background:var(--bg-card); border-radius:20px 20px 0 0; padding:28px 24px 32px;
+  width:min(480px,100vw); max-height:80vh; overflow-y:auto;
+  animation:slideUp .25s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+.modal-accion-handle { width:40px; height:4px; background:var(--border); border-radius:2px; margin:0 auto 20px; }
+.modal-accion-title { font-size:1.1rem; font-weight:700; margin-bottom:4px; }
+.modal-accion-sub { font-size:.82rem; color:var(--text-secondary); margin-bottom:20px; }
+
+.modal-field { margin-bottom:14px; }
+.modal-label { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-secondary); margin-bottom:5px; display:block; }
+.modal-select, .modal-textarea { width:100%; padding:9px 12px; border-radius:9px; border:1.5px solid var(--border); background:var(--bg); color:var(--text-primary); font-size:.87rem; }
+.modal-select:focus, .modal-textarea:focus { border-color:var(--primary); outline:none; }
+
+.cond-btns { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.cond-opt { padding:10px 6px; border:2px solid var(--border); border-radius:9px; text-align:center; cursor:pointer; transition:all .15s; }
+.cond-opt i { display:block; font-size:1.2rem; margin-bottom:4px; }
+.cond-opt span { font-size:.7rem; font-weight:600; }
+.cond-opt.sel-buena { border-color:#22c55e; background:rgba(34,197,94,.08); }
+.cond-opt.sel-buena i { color:#22c55e; }
+.cond-opt.sel-revision { border-color:#f59e0b; background:rgba(245,158,11,.08); }
+.cond-opt.sel-revision i { color:#f59e0b; }
+.cond-opt.sel-danada { border-color:#ef4444; background:rgba(239,68,68,.08); }
+.cond-opt.sel-danada i { color:#ef4444; }
+
+/* ── Toast ── */
+.mrd-toast {
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px);
+  background:#1e293b; color:#fff; padding:12px 20px; border-radius:10px;
+  font-size:.85rem; font-weight:500; z-index:99999; display:flex; align-items:center; gap:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.3); transition:transform .3s cubic-bezier(.34,1.56,.64,1); white-space:nowrap;
+}
+.mrd-toast.show { transform:translateX(-50%) translateY(0); }
+.mrd-toast.success { background:#16a34a; }
+.mrd-toast.error { background:#dc2626; }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<span class="current">Escáner</span>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title"><i class="bi bi-upc-scan" style="color:var(--primary)"></i> Escáner de inventario</div>
+    <div class="page-subtitle">Pistola lectora, cámara o entrada manual</div>
+  </div>
+  <div class="scan-counter">
+    <i class="bi bi-check2-circle" style="color:var(--primary)"></i>
+    <span id="scanCountNum" class="num">0</span>
+    <span style="color:var(--text-secondary)">escaneos</span>
+  </div>
+</div>
+
+{% if not user %}
+<div class="alert alert-info" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+  <span><i class="bi bi-info-circle"></i> Modo consulta. Iniciar sesión para operar.</span>
+  <a href="/login" class="btn btn-primary btn-sm"><i class="bi bi-box-arrow-in-right"></i> Iniciar sesión</a>
+</div>
+{% endif %}
+
+<div class="scan-layout">
+
+  <!-- ── Panel izquierdo ─────────────────────── -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    <!-- Pistola / manual -->
+    <div class="scan-panel" id="manual-scanner-panel">
+      <div class="scan-panel-head">
+        <i class="bi bi-input-cursor-text" style="font-size:1rem;color:var(--primary)"></i>
+        <h5>Entrada manual o pistola lectora</h5>
+      </div>
+      <div class="scan-panel-body">
+        <p style="font-size:.82rem;color:var(--text-secondary);margin-bottom:14px">
+          Conecta tu pistola por USB/Bluetooth y escanea — el código se detecta al pulsar Enter.
+        </p>
+        <form id="formScan" onsubmit="buscarCodigo(event)">
+          <div class="scan-input-wrap">
+            <input
+              type="text" id="scan-input"
+              placeholder="Escanea o escribe el código..."
+              autocomplete="off" autocorrect="off" autocapitalize="off"
+              spellcheck="false" inputmode="text" enterkeyhint="search"
+              autofocus onkeydown="_onScanKeydown(event)"
+            >
+            <button type="submit" title="Buscar"><i class="bi bi-search"></i></button>
+          </div>
+        </form>
+
+        <div id="scan-result-box"><div id="scan-result-content"></div></div>
+        <div id="scan-error-box">
+          <i class="bi bi-exclamation-triangle" style="color:var(--danger);margin-right:8px"></i>
+          <span id="scan-error-text"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cámara -->
+    <div class="scan-panel" id="camera-panel" hidden>
+      <div class="scan-panel-head">
+        <i class="bi bi-camera-video" style="font-size:1rem;color:var(--primary)"></i>
+        <h5>Cámara — QR y código de barras</h5>
+        <span id="scan-fps" style="font-size:.7rem;color:var(--text-secondary);margin-left:auto"></span>
+      </div>
+      <div class="scan-panel-body">
+        <div id="video-container" style="margin-bottom:12px">
+          <video id="cam-video" playsinline muted autoplay></video>
+          <div id="scan-overlay">
+            <div id="scan-frame"></div>
+            <div id="scan-status">Pulsa "Activar cámara" para escanear</div>
+          </div>
+        </div>
+        <div class="cam-controls">
+          <button class="btn btn-primary btn-sm" id="btn-cam-start" onclick="iniciarCamara()">
+            <i class="bi bi-camera-video"></i> Activar cámara
+          </button>
+          <button class="btn btn-ghost btn-sm" id="btn-cam-stop" onclick="detenerCamara()" style="display:none">
+            <i class="bi bi-stop-circle"></i> Detener
+          </button>
+          <button class="btn-torch" id="btn-torch" onclick="toggleTorch()" style="display:none" title="Linterna">
+            <i class="bi bi-lightning-charge-fill"></i> Linterna
+          </button>
+          <button class="btn btn-ghost btn-sm" id="btn-fullcam" onclick="toggleFullscreen()" style="display:none" title="Pantalla completa">
+            <i class="bi bi-fullscreen"></i>
+          </button>
+        </div>
+        <p id="camera-help" style="font-size:.76rem;color:var(--text-secondary);margin:10px 0 0">
+          La cámara solo se activa al pulsar el botón. El lector manual seguirá disponible si no hay cámara o se deniega el permiso.
+        </p>
+      </div>
+    </div>
+
+    <!-- Historial sesión -->
+    <div class="scan-panel" id="historial-box" style="display:none">
+      <div class="scan-panel-head">
+        <i class="bi bi-clock-history" style="color:var(--text-secondary)"></i>
+        <h5>Historial de sesión</h5>
+        <button onclick="limpiarHistorial()" class="btn btn-ghost btn-xs" style="margin-left:auto">
+          <i class="bi bi-trash"></i>
+        </button>
+      </div>
+      <div class="scan-panel-body" id="historial-list"></div>
+    </div>
+
+  </div>
+
+  <!-- ── Panel derecho: Acceso móvil ──────────── -->
+  <div>
+    <div class="mobile-panel">
+      <div class="mobile-panel-head">
+        <i class="bi bi-phone" style="color:var(--success)"></i>
+        <h5>Acceso desde el móvil</h5>
+      </div>
+      <div class="mobile-panel-body">
+        <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:14px">
+          Escanea con tu móvil para usar el escáner de cámara directamente desde almacén.
+        </p>
+        <div class="qr-box" id="qr-mobile">
+          <div style="display:flex;align-items:center;justify-content:center;width:130px;height:130px">
+            <div style="font-size:2rem;color:var(--border)"><i class="bi bi-qr-code"></i></div>
+          </div>
+        </div>
+        <div id="mobile-https-block" style="display:none">
+          <div class="url-badge https">
+            <i class="bi bi-lock-fill" style="flex-shrink:0;margin-top:1px"></i>
+            <div><div style="font-weight:600;margin-bottom:2px">HTTPS — iPhone y Android</div>
+            <code id="url-https" style="font-size:.7rem"></code></div>
+          </div>
+        </div>
+        <div id="mobile-local-block">
+          <div class="url-badge local">
+            <i class="bi bi-wifi" style="flex-shrink:0;margin-top:1px"></i>
+            <div><div style="font-weight:600;margin-bottom:2px">Red local — Android</div>
+            <code id="url-local" style="font-size:.7rem">Cargando...</code></div>
+          </div>
+        </div>
+        <p style="font-size:.72rem;color:var(--text-secondary);margin-top:8px">
+          El QR apunta a HTTPS si está disponible, o a la red local si no hay túnel activo.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Modal Stock EPI ────────────────────────────────────── -->
+<div id="modal-stock-epi" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)">
+  <div class="modal-accion-box">
+    <div class="modal-accion-handle"></div>
+    <div class="modal-accion-title" id="sepi-nombre">Artículo</div>
+    <div class="modal-accion-sub" id="sepi-stock">Stock actual: —</div>
+    <div class="modal-field">
+      <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:6px">Cantidad</label>
+      <input id="sepi-qty" type="number" min="1" max="9999" value="1" class="modal-input" style="font-size:1.4rem;text-align:center;width:100%">
+    </div>
+    <div class="modal-field">
+      <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:6px">Motivo (opcional)</label>
+      <input id="sepi-motivo" type="text" maxlength="200" class="modal-input" placeholder="Recepción proveedor, entrega obra…">
+    </div>
+    <div id="sepi-status" style="font-size:.82rem;margin-bottom:12px;min-height:18px"></div>
+    <div style="display:flex;gap:10px">
+      <button class="modal-confirm-btn" style="background:#22c55e;flex:1" onclick="operarStockEPI('entrada')"><i class="bi bi-box-arrow-in-down me-1"></i>Entrada</button>
+      <button class="modal-confirm-btn" style="background:#ef4444;flex:1" onclick="operarStockEPI('salida')"><i class="bi bi-box-arrow-up me-1"></i>Salida</button>
+    </div>
+    <button class="modal-cancel-btn" style="margin-top:10px;width:100%" onclick="cerrarModalStockEPI()">Cancelar</button>
+  </div>
+</div>
+<script>document.getElementById('modal-stock-epi').style.display='none';
+document.getElementById('modal-stock-epi').addEventListener('click',function(e){if(e.target===this)cerrarModalStockEPI();});
+document.addEventListener('DOMContentLoaded',function(){document.getElementById('modal-stock-epi').style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)';});
+</script>
+<style>#modal-stock-epi.show{display:flex!important}</style>
+
+<!-- ── Modal acción rápida ─────────────────────────────────── -->
+<div id="modal-accion">
+  <div class="modal-accion-box" id="modal-box">
+    <div class="modal-accion-handle"></div>
+    <div class="modal-accion-title" id="modal-title">Entregar herramienta</div>
+    <div class="modal-accion-sub" id="modal-sub"></div>
+    <div class="scan-operation-status" id="scan-operation-status" role="status" aria-live="polite"></div>
+
+    <!-- Campos entregar -->
+    <div id="campos-entregar">
+      <div class="modal-field">
+        <label class="modal-label">Trabajador destinatario</label>
+        <select class="modal-select" id="modal-trabajador">
+          <option value="">Sin asignar</option>
+          {% if user %}
+          {% for t in trabajadores %}
+          <option value="{{ t.id }}">{{ t.nombre_completo }}</option>
+          {% endfor %}
+          {% endif %}
+        </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Observaciones</label>
+        <textarea class="modal-textarea" id="modal-obs-e" rows="2" placeholder="Condiciones, notas..."></textarea>
+      </div>
+    </div>
+
+    <!-- Campos devolver -->
+    <div id="campos-devolver" style="display:none">
+      <div class="modal-field">
+        <label class="modal-label">Condición al devolver</label>
+        <div class="cond-btns">
+          <div class="cond-opt sel-buena" onclick="selectCond('buena',this)">
+            <i class="bi bi-check-circle-fill"></i><span>Buena</span>
+          </div>
+          <div class="cond-opt" onclick="selectCond('requiere_revision',this)">
+            <i class="bi bi-exclamation-triangle"></i><span>Revisión</span>
+          </div>
+          <div class="cond-opt" onclick="selectCond('danada',this)">
+            <i class="bi bi-x-circle"></i><span>Dañada</span>
+          </div>
+        </div>
+        <input type="hidden" id="modal-condicion" value="buena">
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Observaciones</label>
+        <textarea class="modal-textarea" id="modal-obs-d" rows="2" placeholder="Estado, notas..."></textarea>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button onclick="cerrarModal()" class="btn btn-ghost">Cancelar</button>
+      <button onclick="confirmarAccion()" class="btn btn-primary" id="modal-confirm-btn">
+        <i class="bi bi-check-lg"></i> <span id="modal-confirm-text">Confirmar</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="mrd-toast" id="toast"><i class="bi bi-check-circle" id="toast-icon"></i><span id="toast-msg"></span></div>
+
+{% endblock %}
+{% block extra_js %}
+
+<!-- ── Scripts ─────────────────────────────── -->
+<script>
+function _loadZXing(cb) {
+  if (window.ZXing) { cb(); return; }
+  var s = document.createElement('script');
+  s.src = '/static/js/zxing.min.js';
+  s.onload = cb;
+  s.onerror = function() { cb(new Error('No se pudo cargar ZXing. Recarga la página.')); };
+  document.head.appendChild(s);
+}
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// MRD SCANNER PREMIUM v3.0
+// + Acción rápida inline (entregar/devolver sin navegación)
+// + Torch / linterna
+// + Beep + vibración
+// + Contador de escaneos
+// ══════════════════════════════════════════════════════════════════
+
+var historial = [];
+var scanCount = 0;
+var torchActivo = false;
+var _currentTool = null;  // herramienta actual escaneada
+var _currentAccion = null; // 'entregar' | 'devolver'
+var _condicion = 'buena';
+var puedeEntregar = {{ 'true' if puede_entregar else 'false' }};
+var puedeDevolver = {{ 'true' if puede_devolver else 'false' }};
+var puedeOperar = puedeEntregar || puedeDevolver;
+var _pendingScanEventId = null;
+var _scanCursor = 0;
+var SCAN_AUTHENTICATED = {{ 'true' if user else 'false' }};
+
+function scanEsc(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, function(char) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char];
+  });
+}
+
+function scanSafeUrl(value, fallback) {
+  try {
+    var parsed = new URL(String(value || ''), window.location.origin);
+    if (parsed.origin !== window.location.origin || !parsed.pathname.startsWith('/')) return fallback || '#';
+    return parsed.pathname + parsed.search;
+  } catch (_) { return fallback || '#'; }
+}
+
+function respuestaOperacionValida(response) {
+  var destino = new URL(response.url, window.location.origin).pathname;
+  return response.ok && destino !== '/login';
+}
+
+function respuestaEsLogin(response) {
+  return new URL(response.url, window.location.origin).pathname === '/login';
+}
+
+// ── Audio beep ────────────────────────────────────────────────────
+var _audioCtx = null;
+function beep(freq, dur, type) {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    var o = _audioCtx.createOscillator();
+    var g = _audioCtx.createGain();
+    o.connect(g); g.connect(_audioCtx.destination);
+    o.frequency.value = freq || 880;
+    o.type = type || 'sine';
+    g.gain.setValueAtTime(.4, _audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001, _audioCtx.currentTime + (dur||.15));
+    o.start(); o.stop(_audioCtx.currentTime + (dur||.15));
+  } catch(e) {}
+}
+function beepSuccess() { beep(880, .12); setTimeout(function(){ beep(1100, .1); }, 130); }
+function beepError()   { beep(220, .3, 'sawtooth'); }
+
+function vibrar(ms) { try { navigator.vibrate && navigator.vibrate(ms||80); } catch(e){} }
+
+// ── Toast ─────────────────────────────────────────────────────────
+var _toastTimer;
+function showToast(msg, type) {
+  var t = document.getElementById('toast');
+  var icon = document.getElementById('toast-icon');
+  t.className = 'mrd-toast ' + (type||'');
+  document.getElementById('toast-msg').textContent = msg;
+  icon.className = type === 'success' ? 'bi bi-check-circle' : type === 'error' ? 'bi bi-x-circle' : 'bi bi-info-circle';
+  clearTimeout(_toastTimer);
+  requestAnimationFrame(function(){ t.classList.add('show'); });
+  _toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 2800);
+}
+
+// ── Contador ──────────────────────────────────────────────────────
+function incrementCount() {
+  scanCount++;
+  document.getElementById('scanCountNum').textContent = scanCount;
+}
+
+// ── Logging ───────────────────────────────────────────────────────
+function _logScanError(type, details) {
+  console.error('[MRD Scanner]', type, details);
+}
+
+// ── HID detection ────────────────────────────────────────────────
+var _scanHidDetector = new MRDScannerHID.Detector({
+  minLength: 2, fastKeyMs: 220, fastRatio: .6, resetMs: 5000, dedupeMs: 900
+});
+function _onScanKeydown(e) {
+  var now = Date.now();
+  var scanInput = document.getElementById('scan-input');
+  var codigoCompleto = scanInput.value;
+  var result = _scanHidDetector.feed(e.key, now, codigoCompleto);
+  if (result.terminated) {
+    if (codigoCompleto.trim().length >= 2) {
+      e.preventDefault();
+      // Una lectura terminada pertenece a un único disparo. Se vacía antes de
+      // consultar para que una segunda lectura Bluetooth nunca se concatene,
+      // incluso si la primera no existe o la red tarda en responder.
+      scanInput.value = '';
+      if (!result.duplicate) buscarCodigo(null, codigoCompleto, result.scannerLike);
+    }
+    return;
+  }
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('a,button,select,textarea,input:not(#scan-input),[id^=modal]')) {
+    setTimeout(function() { var el = document.getElementById('scan-input'); if(el) el.focus(); }, 50);
+  }
+});
+
+// ── Búsqueda ─────────────────────────────────────────────────────
+var _lastLookupCode = '', _lastLookupAt = 0;
+var _pendingScanKey = 'mrd.pendingScans.v1';
+function _pendingScans() {
+  try {
+    var rows = JSON.parse(localStorage.getItem(_pendingScanKey) || '[]');
+    return Array.isArray(rows) ? rows : [];
+  } catch (_) { return []; }
+}
+function guardarEscaneoPendiente(codigo) {
+  var rows = _pendingScans();
+  rows.push({code: String(codigo).slice(0, 512), at: Date.now()});
+  localStorage.setItem(_pendingScanKey, JSON.stringify(rows.slice(-100)));
+  showToast('Lectura guardada. Se comprobará cuando vuelva la conexión.', 'info');
+}
+function refocusScanInput(force) {
+  var input = document.getElementById('scan-input');
+  var active = document.activeElement;
+  var userIsEditing = active && active !== document.body && active !== input &&
+    active.matches && active.matches('input,textarea,select,button,[contenteditable="true"]');
+  if (input && (force || !userIsEditing)) input.focus();
+}
+async function fetchCodigoConReintento(codigo) {
+  var url = '/scan/buscar?codigo=' + encodeURIComponent(codigo);
+  for (var intento = 0; intento < 2; intento++) {
+    var controller = new AbortController();
+    var timeout = setTimeout(function() { controller.abort(); }, 6000);
+    try {
+      var response = await fetch(url, {
+        cache: 'no-store', headers: {'Accept':'application/json'}, signal: controller.signal
+      });
+      if (response.status >= 500 && intento === 0) continue;
+      return response;
+    } catch (error) {
+      if (intento === 0) continue;
+      if (error.name === 'AbortError') {
+        throw new Error('La búsqueda tardó demasiado. Comprueba la conexión y vuelve a escanear.');
+      }
+      throw new Error('No hay conexión con MRD. Comprueba la red y vuelve a intentarlo.');
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  throw new Error('MRD no responde en este momento. Vuelve a intentarlo.');
+}
+async function buscarCodigo(event, codigoExterno, esEscaner, desdePendientes) {
+  if (event) event.preventDefault();
+  var input = document.getElementById('scan-input');
+  var codigo = (codigoExterno || input.value).trim();
+  if (!codigo || codigo.length < 2) return;
+  var lookupNow = Date.now();
+  if (!desdePendientes && codigo === _lastLookupCode && lookupNow - _lastLookupAt < 900) return;
+  _lastLookupCode = codigo; _lastLookupAt = lookupNow;
+  ocultarResultados();
+  var completed = false;
+  try {
+    var resp = await fetchCodigoConReintento(codigo);
+    var data = await resp.json().catch(function(){ return {}; });
+    if (!resp.ok) throw new Error(data.detail || ('Error del escáner (' + resp.status + ')'));
+    completed = true;
+    if (data.found) {
+      beepSuccess();
+      vibrar(80);
+      incrementCount();
+      mostrarResultado(data);
+      if (!data.public) agregarHistorial(data);
+      // Flash verde en frame
+      var frame = document.getElementById('scan-frame');
+      frame.classList.add('success');
+      setTimeout(function(){ frame.classList.remove('success'); }, 600);
+      // Auto-redirigir si es pistola
+      {% if user %}
+      if (esEscaner && !data.public && !['herramienta','material','stock_epi','ubicacion'].includes(data.tipo)) {
+        setTimeout(function() { window.location.href = data.url || '/herramientas/' + data.id; }, 1400);
+      }
+      {% endif %}
+    } else {
+      beepError();
+      vibrar([100, 50, 100]);
+      var normalizedInfo = data.codigo_normalizado ?
+        ' Código normalizado: ' + data.codigo_normalizado + '.' : '';
+      mostrarError((data.detail || 'No se encontró ningún activo con ese código.') + normalizedInfo, codigo);
+    }
+  } catch(e) {
+    beepError();
+    if (!navigator.onLine && !desdePendientes) {
+      guardarEscaneoPendiente(codigo);
+      mostrarError('Sin conexión. La lectura se ha guardado y no se ha realizado ninguna operación.', codigo);
+    } else {
+      mostrarError(e.message || 'Error de conexión al buscar el código.');
+    }
+    _logScanError('SEARCH_ERROR', { message: e.message });
+  }
+  if (!codigoExterno) input.value = '';
+  refocusScanInput(false);
+  return completed;
+}
+
+async function sincronizarEscaneosPendientes() {
+  if (!navigator.onLine) return;
+  var rows = _pendingScans();
+  if (!rows.length) return;
+  var remaining = rows.slice();
+  var completedCount = 0;
+  while (remaining.length && navigator.onLine) {
+    var row = remaining[0];
+    var ok = await buscarCodigo(null, row.code, false, true);
+    if (!ok) break;
+    remaining.shift();
+    completedCount += 1;
+    localStorage.setItem(_pendingScanKey, JSON.stringify(remaining));
+  }
+  if (completedCount) showToast(completedCount + ' lectura(s) pendiente(s) comprobada(s).', 'success');
+}
+
+// ── Stock EPI: modal cantidad ─────────────────────────────────────
+var _currentStockEPI = null;
+function abrirModalStockEPI(data) {
+  _currentStockEPI = data;
+  document.getElementById('sepi-nombre').textContent = data.nombre;
+  document.getElementById('sepi-stock').textContent = 'Stock actual: ' + data.cantidad + ' uds';
+  document.getElementById('sepi-qty').value = 1;
+  document.getElementById('sepi-motivo').value = '';
+  document.getElementById('sepi-status').textContent = '';
+  document.getElementById('modal-stock-epi').classList.add('show');
+}
+function cerrarModalStockEPI() {
+  document.getElementById('modal-stock-epi').classList.remove('show');
+  _currentStockEPI = null;
+  refocusScanInput(true);
+}
+function operarStockEPI(accion) {
+  if (!_currentStockEPI) return;
+  var qty = parseInt(document.getElementById('sepi-qty').value) || 0;
+  if (qty <= 0) { document.getElementById('sepi-status').textContent = 'Introduce una cantidad válida.'; return; }
+  var status = document.getElementById('sepi-status');
+  status.textContent = 'Guardando…';
+  fetch('/scan/stock-epi-operar', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      scan_event_id: nuevoScanEventId(),
+      stock_epi_id: _currentStockEPI.id,
+      accion: accion,
+      cantidad: qty,
+      motivo: document.getElementById('sepi-motivo').value
+    })
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if (d.ok) {
+      status.style.color = '#22c55e';
+      status.textContent = (accion === 'entrada' ? '✓ Entrada' : '✓ Salida') + ' de ' + qty + ' uds registrada. Nuevo stock: ' + d.cantidad_nueva;
+      setTimeout(cerrarModalStockEPI, 1800);
+    } else {
+      status.style.color = '#ef4444';
+      status.textContent = d.detail || 'Error al registrar.';
+    }
+  }).catch(function(){ status.style.color='#ef4444'; status.textContent='Error de conexión.'; });
+}
+
+// ── Resultado ────────────────────────────────────────────────────
+function mostrarResultado(data) {
+  _currentTool = data;
+  if (data.public) {
+    document.getElementById('scan-result-content').innerHTML =
+      '<div class="result-card"><div class="result-icon" style="color:#22c55e"><i class="bi bi-check-circle-fill"></i></div>' +
+      '<div class="result-info"><div class="result-name">Código reconocido</div>' +
+      '<div class="result-code">Inicia sesión para consultar sus datos.</div>' +
+      '<div class="quick-actions"><a href="/login" class="qa-btn qa-ver"><i class="bi bi-box-arrow-in-right"></i> Iniciar sesión</a></div>' +
+      '</div></div>';
+    document.getElementById('scan-result-box').style.display = 'block';
+    document.getElementById('scan-error-box').style.display = 'none';
+    return;
+  }
+  var safeName = scanEsc(data.nombre || 'Activo identificado');
+  var safeCode = scanEsc(data.codigo || '');
+  var safeState = scanEsc(data.estado_label || data.estado || '');
+  var safeType = scanEsc(data.tipo || 'activo');
+  var safeUrl = scanSafeUrl(data.url, '#');
+  var html = '';
+  if (data.tipo === 'stock_epi') {
+    var stockColor = data.bajo_minimo ? '#ef4444' : '#22c55e';
+    var catLabel = data.categoria === 'ropa' ? 'Ropa de trabajo' : 'EPI dotación';
+    html = '<div class="result-card"><div class="result-icon" style="color:#f59e0b"><i class="bi bi-shield-check"></i></div>' +
+      '<div class="result-info"><div class="result-name">' + safeName + '</div>' +
+      '<div class="result-code">' + safeCode + '</div>' +
+      '<div class="result-badges"><span class="result-badge" style="background:rgba(245,158,11,.1);color:#f59e0b">' + catLabel + '</span>' +
+      '<span class="result-badge" style="background:rgba(34,197,94,.1);color:' + stockColor + '">Stock: ' + scanEsc(data.cantidad) + ' uds</span>' +
+      (data.bajo_minimo ? '<span class="result-badge" style="background:rgba(239,68,68,.1);color:#ef4444">⚠ Bajo mínimo</span>' : '') +
+      '</div>' +
+      {% if user %}'<div class="quick-actions"><button class="qa-btn" style="background:#22c55e;color:#fff" onclick="abrirModalStockEPI(_currentTool);document.getElementById(\'sepi-accion-label\').textContent=\'Entrada\';_currentStockEPI.accion=\'entrada\'"><i class="bi bi-box-arrow-in-down me-1"></i>Entrada</button>' +
+      '<button class="qa-btn" style="background:#ef4444;color:#fff" onclick="abrirModalStockEPI(_currentTool);document.getElementById(\'sepi-accion-label\').textContent=\'Salida\';_currentStockEPI.accion=\'salida\'"><i class="bi bi-box-arrow-up me-1"></i>Salida</button>' +
+      '<a href="' + safeUrl + '" class="qa-btn qa-ver"><i class="bi bi-eye"></i> Ver stock</a></div>'{% else %}''{% endif %} +
+      '</div></div>';
+  } else if (data.tipo === 'epi_individual') {
+    var eColor = data.estado === 'activo' ? '#22c55e' : '#f59e0b';
+    html = '<div class="result-card"><div class="result-icon" style="color:#8b5cf6"><i class="bi bi-fingerprint"></i></div>' +
+      '<div class="result-info"><div class="result-name">' + safeName + '</div>' +
+      '<div class="result-code">' + safeCode + '</div>' +
+      '<div class="result-badges"><span class="result-badge" style="background:rgba(139,92,246,.1);color:#8b5cf6">EPI Individual</span>' +
+      '<span class="result-badge" style="background:rgba(34,197,94,.1);color:' + eColor + '">' + safeState + '</span>' +
+      (data.trabajador && SCAN_AUTHENTICATED ? '<span class="result-badge" style="background:rgba(59,130,246,.1);color:#3b82f6"><i class="bi bi-person-fill me-1"></i>' + scanEsc(data.trabajador) + '</span>' : '') +
+      (data.proxima_revision && SCAN_AUTHENTICATED ? '<span class="result-badge" style="background:rgba(245,158,11,.1);color:#f59e0b">Rev. ' + scanEsc(data.proxima_revision) + '</span>' : '') +
+      '</div>' +
+      (SCAN_AUTHENTICATED ? '<div class="quick-actions"><a href="' + safeUrl + '" class="qa-btn qa-ver"><i class="bi bi-eye"></i> Ver ficha</a></div>' : '') +
+      '</div></div>';
+  } else if (data.tipo === 'ubicacion') {
+    var contenido = data.contenido || [];
+    var iconoContenido = {herramienta:'bi-tools', material:'bi-box-seam', stock_epi:'bi-shield-check', epi_individual:'bi-fingerprint', existencia:'bi-bag-fill'};
+    var filasContenido = contenido.length ? contenido.map(function(it) {
+      return '<div class="hist-row" style="cursor:pointer" onclick="buscarCodigo(null, ' + JSON.stringify(String(it.codigo || '')) + ')" title="Ver este artículo">' +
+        '<i class="bi ' + (iconoContenido[it.tipo] || 'bi-box') + '" style="color:var(--text-secondary);flex-shrink:0"></i>' +
+        '<span class="hist-code">' + scanEsc(it.codigo || '?') + '</span>' +
+        '<span class="hist-name">' + scanEsc(it.nombre || '') + (it.detalle ? ' · ' + scanEsc(it.detalle) : '') + '</span>' +
+        '<span class="hist-estado disponible">' + scanEsc(it.cantidad) + ' ' + scanEsc(it.unidad || '') + '</span>' +
+        '</div>';
+    }).join('') : '<p style="font-size:.82rem;color:var(--text-secondary);margin:10px 0 0">Ubicación vacía — no hay artículos asignados aquí.</p>';
+    html = '<div class="result-card"><div class="result-icon" style="color:#0891b2"><i class="bi bi-grid-3x3-gap-fill"></i></div>' +
+      '<div class="result-info"><div class="result-name">' + safeName + '</div>' +
+      '<div class="result-code">' + scanEsc(data.ruta || safeCode) + '</div>' +
+      '<div class="result-badges"><span class="result-badge" style="background:rgba(8,145,178,.1);color:#0891b2">Ubicación</span>' +
+      '<span class="result-badge" style="background:rgba(100,116,139,.1);color:#64748b">' + contenido.length + ' artículo(s)</span></div>' +
+      (SCAN_AUTHENTICATED ? '<div class="quick-actions"><a href="' + safeUrl + '" class="qa-btn qa-ver"><i class="bi bi-map"></i> Ver en el mapa</a></div>' : '') +
+      '</div></div>' +
+      '<div style="margin-top:10px;max-height:280px;overflow-y:auto">' + filasContenido + '</div>';
+  } else if (data.tipo === 'material') {
+    var stockColor = data.bajo_minimo ? '#ef4444' : '#22c55e';
+    html = '<div class="result-card"><div class="result-icon" style="color:#0ea5e9"><i class="bi bi-box-seam"></i></div>' +
+      '<div class="result-info"><div class="result-name">' + safeName + '</div>' +
+      '<div class="result-code">' + safeCode + '</div>' +
+      '<div class="result-badges"><span class="result-badge" style="background:rgba(14,165,233,.1);color:#0ea5e9">Material</span>' +
+      '<span class="result-badge" style="background:rgba(34,197,94,.1);color:' + stockColor + '">Stock: ' + scanEsc(data.stock) + ' ' + scanEsc(data.unidad||'ud') + '</span>' +
+      (data.bajo_minimo ? '<span class="result-badge" style="background:rgba(239,68,68,.1);color:#ef4444"><i class="bi bi-exclamation-triangle-fill"></i> Bajo mínimo</span>' : '') +
+      '</div></div>' +
+      (SCAN_AUTHENTICATED && data.url ? '<a href="' + safeUrl + '" class="qa-btn qa-ver"><i class="bi bi-arrow-right"></i></a>' : '') + '</div>';
+  } else {
+    var icono = data.tipo === 'maquinaria' ? 'bi-truck' : 'bi-tools';
+    var iconColor = data.tipo === 'maquinaria' ? '#8b5cf6' : 'var(--primary)';
+    var accionHtml = '';
+    {% if user %}
+    if (puedeEntregar && data.estado === 'disponible' && data.tipo === 'herramienta') {
+      accionHtml = '<button class="qa-btn qa-entregar" onclick="abrirModal(\'entregar\')"><i class="bi bi-arrow-up-right"></i> Entregar</button>';
+    } else if (puedeDevolver && (data.estado === 'entregada' || data.estado === 'en_obra' || data.estado === 'en_furgoneta' || data.estado === 'en_transporte') && data.tipo === 'herramienta') {
+      accionHtml = '<button class="qa-btn qa-devolver" onclick="abrirModal(\'devolver\')"><i class="bi bi-arrow-down-left"></i> Devolver</button>';
+    }
+    {% endif %}
+    html = '<div class="result-card"><div class="result-icon" style="color:' + iconColor + '"><i class="bi ' + icono + '"></i></div>' +
+      '<div class="result-info"><div class="result-name">' + safeName + '</div>' +
+      '<div class="result-code">' + safeCode + (data.marca ? ' · ' + scanEsc(data.marca) : '') + '</div>' +
+      '<div class="result-badges">' +
+      '<span class="result-badge" style="background:rgba(100,116,139,.1);color:#64748b">' + safeType + '</span>' +
+      '<span class="result-badge" style="background:rgba(59,130,246,.1);color:#3b82f6">' + safeState + '</span>' +
+      '</div>' +
+      '<div class="quick-actions">' +
+      accionHtml +
+      (SCAN_AUTHENTICATED ? '<a href="' + scanSafeUrl(data.url, '#') + '" class="qa-btn qa-ver"><i class="bi bi-eye"></i> Ver ficha</a>' : '') +
+      '</div></div></div>';
+  }
+  document.getElementById('scan-result-content').innerHTML = html;
+  if (SCAN_AUTHENTICATED && data.almacen_nombre) {
+    var locationBox = document.createElement('div');
+    locationBox.className = 'alert ' + (data.requiere_traspaso ? 'alert-warning' : 'alert-info') + ' mt-3 mb-0';
+    var locationTitle = document.createElement('strong');
+    locationTitle.textContent = data.almacen_nombre;
+    locationBox.appendChild(locationTitle);
+    locationBox.appendChild(document.createTextNode(' · ' + (data.ubicacion_nombre || 'Sin ubicación exacta')));
+    {% if user and user.rol == 'admin' %}
+    if (data.requiere_traspaso) {
+      var transferLink = document.createElement('a');
+      transferLink.href = '/multi-almacen';
+      transferLink.className = 'btn btn-sm btn-warning ms-2';
+      transferLink.textContent = 'Iniciar traspaso';
+      locationBox.appendChild(transferLink);
+    }
+    {% endif %}
+    document.getElementById('scan-result-content').appendChild(locationBox);
+  }
+  document.getElementById('scan-result-box').style.display = 'block';
+  document.getElementById('scan-error-box').style.display = 'none';
+}
+
+// ── Modal acción rápida ───────────────────────────────────────────
+function abrirModal(accion) {
+  if (!_currentTool || (accion === 'entregar' ? !puedeEntregar : !puedeDevolver)) return;
+  _currentAccion = accion;
+  _pendingScanEventId = null;
+  _condicion = 'buena';
+  document.getElementById('modal-title').textContent = accion === 'entregar'
+    ? '↑ Entregar: ' + _currentTool.nombre
+    : '↓ Devolver: ' + _currentTool.nombre;
+  document.getElementById('modal-sub').textContent = _currentTool.codigo + (_currentTool.marca ? ' · ' + _currentTool.marca : '');
+  document.getElementById('campos-entregar').style.display = accion === 'entregar' ? 'block' : 'none';
+  document.getElementById('campos-devolver').style.display = accion === 'devolver' ? 'block' : 'none';
+  document.getElementById('modal-confirm-text').textContent = accion === 'entregar' ? 'Registrar entrega' : 'Registrar devolución';
+  // Reset condición
+  document.querySelectorAll('.cond-opt').forEach(function(b){ b.className = 'cond-opt'; });
+  document.querySelector('.cond-opt').classList.add('sel-buena');
+  document.getElementById('modal-obs-e').value = '';
+  document.getElementById('modal-obs-d').value = '';
+  var opStatus = document.getElementById('scan-operation-status');
+  opStatus.className = 'scan-operation-status'; opStatus.textContent = '';
+  document.getElementById('modal-accion').classList.add('show');
+}
+
+function cerrarModal() {
+  document.getElementById('modal-accion').classList.remove('show');
+  _currentAccion = null;
+  _pendingScanEventId = null;
+  refocusScanInput(true);
+}
+
+function selectCond(val, el) {
+  _condicion = val;
+  document.querySelectorAll('.cond-opt').forEach(function(b){ b.className = 'cond-opt'; });
+  var cls = val === 'buena' ? 'sel-buena' : val === 'requiere_revision' ? 'sel-revision' : 'sel-danada';
+  el.classList.add(cls);
+}
+
+function nuevoScanEventId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'scan-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+}
+
+function mostrarEstadoOperacion(data, type) {
+  var box = document.getElementById('scan-operation-status');
+  var tool = (data.codigo || (_currentTool && _currentTool.codigo) || 'herramienta');
+  var actor = data.usuario ? ' por ' + data.usuario : '';
+  var action = data.accion === 'entregar' ? 'Entrega' : data.accion === 'devolver' ? 'Devolución' : 'Operación';
+  box.className = 'scan-operation-status ' + type;
+  box.textContent = action + ' · ' + tool + actor + ' · ' + (data.detalle || data.estado_label || data.resultado);
+  if (data.albaran_pdf_url) {
+    var link = document.createElement('a');
+    link.href = scanSafeUrl(data.albaran_pdf_url, '#'); link.target = '_blank'; link.className = 'btn btn-sm btn-light ms-2';
+    link.innerHTML = '<i class="bi bi-file-pdf"></i> Abrir albarán';
+    box.appendChild(link);
+  }
+}
+
+async function confirmarAccion() {
+  if (!puedeOperar || !_currentTool || !_currentAccion) return;
+  var btn = document.getElementById('modal-confirm-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Procesando...';
+
+  _pendingScanEventId = _pendingScanEventId || nuevoScanEventId();
+  var tid = document.getElementById('modal-trabajador').value;
+  var body = {
+    scan_event_id: _pendingScanEventId,
+    accion: _currentAccion,
+    herramienta_id: _currentTool.id,
+    trabajador_id: _currentAccion === 'entregar' && tid ? Number(tid) : null,
+    condicion: _currentAccion === 'devolver' ? _condicion : 'buena',
+    observaciones: document.getElementById(_currentAccion === 'entregar' ? 'modal-obs-e' : 'modal-obs-d').value
+  };
+  try {
+    var r = await fetch('/scan/operar', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    var destino = new URL(r.url, window.location.origin).pathname;
+    if (r.redirected || destino === '/login' || r.status === 401) throw new Error('AUTH');
+    var contentType = r.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) throw new Error('INVALID_RESPONSE');
+    var data = await r.json();
+    if (r.status === 202 && data.resultado === 'pending') {
+      mostrarEstadoOperacion(data, 'pending');
+      showToast('La operación sigue en proceso; puedes volver a confirmar.', 'info');
+    } else if (!r.ok || data.resultado !== 'ok') {
+      mostrarEstadoOperacion(data, 'error');
+      throw new Error(data.resultado === 'conflicto' ? 'CONFLICT' : (data.detalle || 'ERROR'));
+    } else {
+      beepSuccess(); vibrar(120);
+      mostrarEstadoOperacion(data, 'success');
+      showToast('✓ ' + (data.accion === 'entregar' ? 'Entrega' : 'Devolución') + ' registrada', 'success');
+      _currentTool.estado = data.estado; _currentTool.estado_label = data.estado_label;
+      mostrarResultado(_currentTool);
+      _pendingScanEventId = null;
+      setTimeout(function(){ if (!data.albaran_pdf_url) cerrarModal(); }, 900);
+    }
+  } catch(e) {
+    beepError();
+    var msg = e.message === 'AUTH' ? 'Sesión caducada. Inicia sesión para operar.' :
+      e.message === 'CONFLICT' ? 'Conflicto: otra pistola o puesto procesó esta herramienta.' :
+      'No se confirmó la operación. Revisa el estado y vuelve a intentarlo.';
+    showToast(msg, 'error');
+    if (e.message !== 'AUTH') mostrarEstadoOperacion({accion:_currentAccion,codigo:_currentTool.codigo,detalle:msg}, 'error');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-check-lg"></i> <span id="modal-confirm-text">' + (_currentAccion === 'entregar' ? 'Registrar entrega' : 'Registrar devolución') + '</span>';
+}
+
+// Cerrar modal al hacer click fuera
+document.getElementById('modal-accion').addEventListener('click', function(e) {
+  if (e.target === this) cerrarModal();
+});
+
+function mostrarError(msg, codigoNoEncontrado) {
+  var html = scanEsc(msg);
+  {% if user %}
+  if (codigoNoEncontrado && SCAN_AUTHENTICATED) {
+    var enc = encodeURIComponent(codigoNoEncontrado);
+    html += '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">' +
+      '<a href="/herramientas/nueva?num_serie=' + enc + '" class="btn btn-sm btn-primary"><i class="bi bi-tools me-1"></i>Registrar herramienta</a>' +
+      '<a href="/maquinaria/nueva?codigo_barras=' + enc + '" class="btn btn-sm btn-ghost"><i class="bi bi-truck me-1"></i>Registrar maquinaria</a>' +
+      '</div>';
+  }
+  {% endif %}
+  document.getElementById('scan-error-text').innerHTML = html;
+  document.getElementById('scan-error-box').style.display = 'block';
+  document.getElementById('scan-result-box').style.display = 'none';
+}
+
+function ocultarResultados() {
+  document.getElementById('scan-result-box').style.display = 'none';
+  document.getElementById('scan-error-box').style.display = 'none';
+}
+
+// ── Historial ────────────────────────────────────────────────────
+function agregarHistorial(data) {
+  historial.unshift(data);
+  if (historial.length > 15) historial.pop();
+  var list = document.getElementById('historial-list');
+  list.innerHTML = historial.map(function(h) {
+    var estadoCls = h.estado === 'disponible' ? 'disponible' : (h.estado === 'entregada' || h.estado === 'en_obra') ? 'entregada' : '';
+    return '<div class="hist-row">' +
+      '<span class="hist-code">' + scanEsc(h.codigo||'?') + '</span>' +
+      '<span class="hist-name">' + scanEsc(h.nombre||'Activo identificado') + '</span>' +
+      (h.estado ? '<span class="hist-estado ' + estadoCls + '">' + scanEsc(h.estado_label||h.estado) + '</span>' : '') +
+      (SCAN_AUTHENTICATED ? '<a href="' + scanSafeUrl(h.url, '#') + '" class="btn btn-ghost btn-xs"><i class="bi bi-arrow-right"></i></a>' : '') +
+      '</div>';
+  }).join('');
+  document.getElementById('historial-box').style.display = 'block';
+}
+
+function limpiarHistorial() {
+  historial = [];
+  document.getElementById('historial-list').innerHTML = '';
+  document.getElementById('historial-box').style.display = 'none';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CÁMARA — con torch + fullscreen
+// ══════════════════════════════════════════════════════════════════
+var codeReader = null, _camStream = null, streamActivo = false, _scanCooldown = false, _torchTrack = null;
+var _camRequested = false, _camStarting = false, _lastCameraCode = '', _lastCameraAt = 0;
+var _cameraRestartTimer = null;
+
+function esMovilOTablet() {
+  var ua = navigator.userAgent || '';
+  var sistemaMovil = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var tactil = (navigator.maxTouchPoints || 0) > 0 &&
+    (!window.matchMedia || window.matchMedia('(pointer: coarse)').matches);
+  var ancho = Math.min(screen.width || innerWidth, screen.height || innerHeight);
+  var largo = Math.max(screen.width || innerWidth, screen.height || innerHeight);
+  var pantallaMovilTablet = ancho <= 1024 && largo <= 1366;
+  return (sistemaMovil && tactil) || (tactil && pantallaMovilTablet);
+}
+
+(function configurarCamaraPorDispositivo() {
+  var panel = document.getElementById('camera-panel');
+  if (!panel || !esMovilOTablet()) return; // Ante duda permanece completamente oculto.
+  panel.hidden = false;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    document.getElementById('btn-cam-start').hidden = true;
+    document.getElementById('scan-status').textContent = '⚠ Este dispositivo no ofrece una cámara compatible. Usa la pistola o el lector manual.';
+  }
+})();
+
+async function iniciarCamara(reanudando) {
+  if (streamActivo || _camStarting) return;
+  _camRequested = true;
+  _camStarting = true;
+  clearTimeout(_cameraRestartTimer);
+  var status = document.getElementById('scan-status');
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    status.textContent = '⚠ Se requiere HTTPS para la cámara';
+    _camStarting = false;
+    return;
+  }
+  status.textContent = 'Solicitando permiso de cámara…';
+  _loadZXing(async function(err) {
+    if (err) { _camStarting = false; status.textContent = '⚠ ' + err.message; return; }
+    var Hints = ZXing.DecodeHintType;
+    var hints = new Map([[Hints.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,  ZXing.BarcodeFormat.DATA_MATRIX,
+    ]]]);
+    codeReader = new ZXing.BrowserMultiFormatReader(hints, 250);
+    codeReader.timeBetweenDecodingAttempts = 80;
+    var video = document.getElementById('cam-video');
+    var constraints = { video: {
+      facingMode: { ideal: 'environment' },
+      width: { ideal: 1920, min: 640 },
+      height: { ideal: 1080, min: 480 },
+      frameRate: { ideal: 30, max: 30 }
+    }, audio: false };
+    try {
+      _camStream = await navigator.mediaDevices.getUserMedia(constraints);
+      _torchTrack = _camStream.getVideoTracks()[0];
+      var caps = _torchTrack && _torchTrack.getCapabilities ? _torchTrack.getCapabilities() : {};
+      var advanced = [];
+      if (caps.focusMode && Array.from(caps.focusMode).includes('continuous')) advanced.push({focusMode:'continuous'});
+      if (advanced.length && _torchTrack.applyConstraints) {
+        try { await _torchTrack.applyConstraints({advanced: advanced}); } catch(_) {}
+      }
+      if (caps.torch) document.getElementById('btn-torch').style.display = '';
+      streamActivo = true;
+      _camStarting = false;
+      document.getElementById('btn-cam-start').style.display = 'none';
+      document.getElementById('btn-cam-stop').style.display = '';
+      document.getElementById('btn-fullcam').style.display = '';
+      status.textContent = reanudando ? 'Cámara reanudada. Apunta al código.' : 'Apunta al código QR o de barras';
+      _torchTrack.addEventListener('ended', function() {
+        if (_camRequested && !document.hidden) _programarReinicioCamara();
+      }, {once:true});
+      await codeReader.decodeFromStream(_camStream, video, _onCameraDecode);
+    } catch(e) {
+      _camStarting = false;
+      streamActivo = false;
+      _liberarCamara();
+      var msg = e.name === 'NotAllowedError' ? 'Permiso de cámara denegado' : e.name === 'NotFoundError' ? 'No se encontró ninguna cámara' : 'Error: ' + e.message;
+      status.textContent = '⚠ ' + msg + '. La pistola y la entrada manual siguen disponibles.';
+      showToast(msg + '. Puedes continuar con el lector manual.', 'error');
+      _logScanError('CAM_ERROR', { name: e.name, message: e.message });
+    }
+  });
+}
+
+function _onCameraDecode(result, error) {
+  if (!streamActivo || !result) return;
+  var txt = String(result.getText ? result.getText() : result.text || '').trim();
+  if (!txt) return;
+  var now = Date.now();
+  if (_scanCooldown || (txt === _lastCameraCode && now - _lastCameraAt < 2500)) return;
+  _scanCooldown = true;
+  _lastCameraCode = txt;
+  _lastCameraAt = now;
+  document.getElementById('scan-status').textContent = '✓ Código leído';
+  buscarCodigo(null, txt, false);
+  setTimeout(function() {
+    _scanCooldown = false;
+    if (streamActivo) document.getElementById('scan-status').textContent = 'Listo para el siguiente código';
+  }, 900);
+}
+
+function _liberarCamara() {
+  if (codeReader) { try { codeReader.reset(); } catch(_){} codeReader = null; }
+  if (_camStream) { _camStream.getTracks().forEach(function(t){ try { t.stop(); } catch(_){} }); _camStream = null; }
+  _torchTrack = null;
+  var video = document.getElementById('cam-video');
+  if (video) { try { video.pause(); } catch(_){} video.srcObject = null; }
+}
+
+function _programarReinicioCamara() {
+  if (!_camRequested || document.hidden) return;
+  clearTimeout(_cameraRestartTimer);
+  streamActivo = false;
+  _liberarCamara();
+  document.getElementById('scan-status').textContent = 'Recuperando cámara…';
+  _cameraRestartTimer = setTimeout(function(){ iniciarCamara(true); }, 700);
+}
+
+function detenerCamara(conservarSolicitud) {
+  if (!conservarSolicitud) _camRequested = false;
+  streamActivo = false;
+  _camStarting = false;
+  clearTimeout(_cameraRestartTimer);
+  _liberarCamara();
+  document.getElementById('scan-status').textContent = 'Cámara detenida';
+  document.getElementById('btn-cam-start').style.display = '';
+  document.getElementById('btn-cam-stop').style.display = 'none';
+  document.getElementById('btn-torch').style.display = 'none';
+  document.getElementById('btn-fullcam').style.display = 'none';
+  torchActivo = false;
+  document.getElementById('btn-torch').classList.remove('active');
+}
+
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden && _camRequested) {
+    detenerCamara(true);
+  } else if (!document.hidden && _camRequested && !streamActivo) {
+    setTimeout(function(){ iniciarCamara(true); }, 350);
+  }
+});
+window.addEventListener('pagehide', function(){ detenerCamara(false); });
+window.addEventListener('pageshow', function(){
+  if (!document.querySelector('.scan-modal.show')) refocusScanInput(false);
+});
+
+async function toggleTorch() {
+  if (!_torchTrack) return;
+  try {
+    torchActivo = !torchActivo;
+    await _torchTrack.applyConstraints({ advanced: [{ torch: torchActivo }] });
+    var btn = document.getElementById('btn-torch');
+    btn.classList.toggle('active', torchActivo);
+    btn.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> ' + (torchActivo ? 'Linterna ON' : 'Linterna');
+  } catch(e) { showToast('Linterna no disponible', 'error'); }
+}
+
+function toggleFullscreen() {
+  var cont = document.getElementById('video-container');
+  if (!document.fullscreenElement) {
+    cont.requestFullscreen && cont.requestFullscreen();
+  } else {
+    document.exitFullscreen && document.exitFullscreen();
+  }
+}
+
+{% if puede_entregar or puede_devolver %}
+async function consultarCambiosScan() {
+  try {
+    var response = await fetch('/scan/cambios?ultimo_id=' + _scanCursor + '&limite=50');
+    var destino = new URL(response.url, window.location.origin).pathname;
+    if (response.redirected || destino === '/login' || response.status === 401 || !response.ok) return;
+    var data = await response.json();
+    _scanCursor = Number(data.next_cursor || _scanCursor);
+    (data.cambios || []).forEach(function(change) {
+      if (_currentTool && change.herramienta_id === _currentTool.id && change.resultado === 'ok') {
+        _currentTool.estado = change.estado;
+        _currentTool.estado_label = change.estado_label;
+        mostrarResultado(_currentTool);
+        showToast('Actualizada por ' + (change.usuario || 'otro puesto') + ': ' + change.estado_label, 'info');
+      } else if (_currentTool && change.herramienta_id === _currentTool.id && change.resultado === 'conflicto') {
+        mostrarEstadoOperacion(change, 'error');
+      }
+    });
+  } catch(_) {}
+}
+async function iniciarPollingScan() {
+  try {
+    var response = await fetch('/scan/cambios?inicializar=true&limite=1');
+    var destino = new URL(response.url, window.location.origin).pathname;
+    var contentType = response.headers.get('content-type') || '';
+    if (response.redirected || destino === '/login' || response.status === 401 || !response.ok || !contentType.includes('application/json')) return;
+    var data = await response.json();
+    _scanCursor = Number(data.next_cursor || 0);
+    setInterval(consultarCambiosScan, 3000);
+  } catch(_) {}
+}
+iniciarPollingScan();
+{% endif %}
+
+// ── QR acceso móvil ──────────────────────────────────────────────
+(async function() {
+  try {
+    var r = await fetch('/scan/ip');
+    var d = await r.json();
+    if (d.url_https) {
+      document.getElementById('url-https').textContent = d.url_https;
+      document.getElementById('mobile-https-block').style.display = 'block';
+    }
+    document.getElementById('url-local').textContent = d.url_local || '—';
+    if (d.qr && /^[A-Za-z0-9+/=]+$/.test(d.qr)) {
+      var qrBox = document.getElementById('qr-mobile');
+      var qrImage = document.createElement('img');
+      qrImage.src = 'data:image/png;base64,' + d.qr;
+      qrImage.style.cssText = 'max-width:150px;height:auto;border-radius:4px';
+      qrImage.alt = 'QR';
+      qrBox.replaceChildren(qrImage);
+    }
+  } catch(e) {
+    document.getElementById('url-local').textContent = 'No disponible';
+  }
+})();
+
+// Si una pistola leyó desde otra pantalla, mostrar el activo al llegar aquí.
+document.addEventListener('DOMContentLoaded', function() {
+  var initialCode = new URLSearchParams(window.location.search).get('codigo');
+  if (initialCode) {
+    document.getElementById('scan-input').value = initialCode;
+    buscarCodigo(null, initialCode, true);
+  }
+  setTimeout(sincronizarEscaneosPendientes, initialCode ? 1200 : 200);
+});
+window.addEventListener('online', sincronizarEscaneosPendientes);
+</script>
+
+{% endblock %}

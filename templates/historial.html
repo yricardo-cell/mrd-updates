@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}Historial Global{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<span class="current">Historial Global</span>
+{% endblock %}
+
+{% block content %}
+
+<style>
+.hist-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
+.hist-title { display:flex; align-items:center; gap:12px; }
+.hist-title h3 { margin:0; font-size:1.35rem; font-weight:700; color:var(--text-primary); }
+.hist-title .total-badge { background:var(--primary); color:#fff; border-radius:20px; padding:2px 12px; font-size:.78rem; font-weight:600; }
+
+.filter-bar { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px 20px; margin-bottom:20px; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+.filter-group { display:flex; flex-direction:column; gap:4px; }
+.filter-group label { font-size:.72rem; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.04em; }
+.filter-group .form-control,
+.filter-group .form-select,
+.filter-group select { font-size:.85rem; padding:7px 12px; border-radius:8px; border:1.5px solid var(--border); background:var(--bg); color:var(--text-primary); height:36px; }
+.filter-group input[type=text] { min-width:200px; }
+.filter-group input[type=date] { min-width:140px; }
+.filter-actions { display:flex; gap:8px; align-items:flex-end; margin-left:auto; }
+
+.hist-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+@media(max-width:768px){ .hist-stats { grid-template-columns:repeat(2,1fr); } }
+.hist-stat { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px; }
+.hist-stat-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; }
+.hist-stat-num { font-size:1.5rem; font-weight:700; line-height:1; }
+.hist-stat-lbl { font-size:.72rem; color:var(--text-secondary); margin-top:2px; }
+
+.ev-table-wrap { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+.ev-table-head { display:flex; align-items:center; justify-content:space-between; padding:14px 20px 10px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px; }
+.ev-table-head .search-wrap { position:relative; }
+.ev-table-head .search-wrap i { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-secondary); font-size:.9rem; pointer-events:none; }
+.ev-table-head .search-wrap input { padding:7px 12px 7px 32px; border-radius:8px; border:1.5px solid var(--border); font-size:.85rem; background:var(--bg); color:var(--text-primary); width:220px; }
+.ev-table-head .search-wrap input:focus { border-color:var(--primary); outline:none; }
+
+table.ev-table { width:100%; border-collapse:collapse; }
+table.ev-table thead th { padding:10px 16px; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-secondary); background:var(--bg); border-bottom:1px solid var(--border); white-space:nowrap; }
+table.ev-table tbody tr { border-bottom:1px solid var(--border); transition:background .15s; }
+table.ev-table tbody tr:last-child { border-bottom:none; }
+table.ev-table tbody tr:hover { background:rgba(var(--primary-rgb, 59,130,246),.04); }
+table.ev-table td { padding:12px 16px; font-size:.85rem; vertical-align:middle; }
+
+.ev-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:.72rem; font-weight:600; }
+.ev-badge.bg-primary { background:rgba(59,130,246,.15); color:#3b82f6; }
+.ev-badge.bg-success { background:rgba(34,197,94,.15); color:#22c55e; }
+.ev-badge.bg-warning { background:rgba(245,158,11,.15); color:#d97706; }
+.ev-badge.bg-danger  { background:rgba(239,68,68,.15); color:#ef4444; }
+.ev-badge.bg-info    { background:rgba(14,165,233,.15); color:#0ea5e9; }
+.ev-badge.bg-secondary { background:rgba(100,116,139,.15); color:#64748b; }
+
+.ev-desc { max-width:320px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ev-date { color:var(--text-secondary); font-size:.78rem; white-space:nowrap; }
+.ev-resp { font-size:.78rem; color:var(--text-secondary); }
+.ev-obra { font-size:.78rem; color:var(--text-secondary); }
+.btn-ver { padding:3px 10px; font-size:.75rem; border-radius:6px; border:1.5px solid var(--border); background:transparent; color:var(--text-secondary); cursor:pointer; text-decoration:none; transition:all .15s; white-space:nowrap; }
+.btn-ver:hover { border-color:var(--primary); color:var(--primary); background:rgba(59,130,246,.06); }
+
+.pagination-row { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-top:1px solid var(--border); flex-wrap:wrap; gap:10px; }
+.pagination-info { font-size:.8rem; color:var(--text-secondary); }
+.pagination-links { display:flex; gap:4px; }
+.pagination-links a, .pagination-links span { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:8px; font-size:.82rem; font-weight:500; text-decoration:none; border:1.5px solid var(--border); color:var(--text-secondary); transition:all .15s; }
+.pagination-links a:hover { border-color:var(--primary); color:var(--primary); background:rgba(59,130,246,.06); }
+.pagination-links span.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+
+.empty-state { text-align:center; padding:60px 20px; color:var(--text-secondary); }
+.empty-state i { font-size:3rem; display:block; margin-bottom:12px; opacity:.3; }
+
+.export-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 16px; border-radius:8px; border:1.5px solid var(--border); background:var(--bg-card); color:var(--text-secondary); font-size:.82rem; font-weight:500; cursor:pointer; text-decoration:none; transition:all .15s; }
+.export-btn:hover { border-color:var(--primary); color:var(--primary); background:rgba(59,130,246,.06); }
+</style>
+
+<div class="hist-header">
+  <div class="hist-title">
+    <i class="bi bi-clock-history" style="font-size:1.5rem;color:var(--primary)"></i>
+    <h3>Historial Global</h3>
+    <span class="total-badge">{{ total }} eventos</span>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/historial?export=csv&tipo={{ tipo }}&desde={{ desde }}&hasta={{ hasta }}" class="export-btn">
+      <i class="bi bi-download"></i> Exportar CSV
+    </a>
+  </div>
+</div>
+
+<!-- Stats rápidas -->
+<div class="hist-stats">
+  <div class="hist-stat">
+    <div class="hist-stat-icon" style="background:rgba(59,130,246,.12);color:#3b82f6"><i class="bi bi-tools"></i></div>
+    <div>
+      <div class="hist-stat-num" id="statHerr">—</div>
+      <div class="hist-stat-lbl">Herramientas</div>
+    </div>
+  </div>
+  <div class="hist-stat">
+    <div class="hist-stat-icon" style="background:rgba(34,197,94,.12);color:#22c55e"><i class="bi bi-box-seam"></i></div>
+    <div>
+      <div class="hist-stat-num" id="statMat">—</div>
+      <div class="hist-stat-lbl">Materiales</div>
+    </div>
+  </div>
+  <div class="hist-stat">
+    <div class="hist-stat-icon" style="background:rgba(245,158,11,.12);color:#d97706"><i class="bi bi-truck"></i></div>
+    <div>
+      <div class="hist-stat-num" id="statVeh">—</div>
+      <div class="hist-stat-lbl">Vehículos</div>
+    </div>
+  </div>
+  <div class="hist-stat">
+    <div class="hist-stat-icon" style="background:rgba(139,92,246,.12);color:#8b5cf6"><i class="bi bi-file-earmark-text"></i></div>
+    <div>
+      <div class="hist-stat-num" id="statAlb">—</div>
+      <div class="hist-stat-lbl">Albaranes</div>
+    </div>
+  </div>
+</div>
+
+<!-- Filtros -->
+<form method="get" id="filterForm">
+<div class="filter-bar">
+  <div class="filter-group">
+    <label>Tipo</label>
+    <select name="tipo" class="form-control" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      <option value="herramienta" {% if tipo=='herramienta' %}selected{% endif %}>Herramientas</option>
+      <option value="material"    {% if tipo=='material'    %}selected{% endif %}>Materiales</option>
+      <option value="vehiculo"    {% if tipo=='vehiculo'    %}selected{% endif %}>Vehículos</option>
+      <option value="albaran"     {% if tipo=='albaran'     %}selected{% endif %}>Albaranes</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Desde</label>
+    <input type="date" name="desde" class="form-control" value="{{ desde }}">
+  </div>
+  <div class="filter-group">
+    <label>Hasta</label>
+    <input type="date" name="hasta" class="form-control" value="{{ hasta }}">
+  </div>
+  <div class="filter-actions">
+    <button type="submit" class="btn btn-primary btn-sm">
+      <i class="bi bi-funnel"></i> Filtrar
+    </button>
+    <a href="/historial" class="btn btn-ghost btn-sm">
+      <i class="bi bi-x-circle"></i> Limpiar
+    </a>
+  </div>
+</div>
+</form>
+
+<!-- Tabla -->
+<div class="ev-table-wrap">
+  <div class="ev-table-head">
+    <span style="font-size:.82rem;font-weight:600;color:var(--text-secondary)">
+      {% if eventos %}Mostrando {{ eventos|length }} de {{ total }}{% endif %}
+    </span>
+    <div class="search-wrap">
+      <i class="bi bi-search"></i>
+      <input type="text" id="tableSearch" placeholder="Buscar en resultados..." oninput="filterTable()">
+    </div>
+  </div>
+
+  {% if eventos %}
+  <div style="overflow-x:auto">
+  <table class="ev-table" id="evTable">
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+        <th>Responsable</th>
+        <th>Obra / Destino</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="evBody">
+      {% for ev in eventos %}
+      <tr>
+        <td class="ev-date">
+          {{ ev.fecha.strftime("%d/%m/%Y") if ev.fecha else "—" }}<br>
+          <span style="font-size:.7rem;opacity:.7">{{ ev.fecha.strftime("%H:%M") if ev.fecha else "" }}</span>
+        </td>
+        <td>
+          <span class="ev-badge bg-{{ ev.color }}">
+            <i class="bi {{ ev.icono }}"></i>{{ ev.tipo_cat | capitalize }}
+          </span>
+        </td>
+        <td>
+          <div class="ev-desc" title="{{ ev.descripcion }}">{{ ev.descripcion }}</div>
+        </td>
+        <td class="ev-resp">{{ ev.responsable or "—" }}</td>
+        <td class="ev-obra">{{ ev.obra or "—" }}</td>
+        <td>
+          <a href="{{ ev.detalle }}" class="btn-ver">
+            <i class="bi bi-eye"></i> Ver
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  <!-- Paginación -->
+  {% if paginas > 1 %}
+  <div class="pagination-row">
+    <span class="pagination-info">Página {{ pagina }} de {{ paginas }}</span>
+    <div class="pagination-links">
+      {% if pagina > 1 %}
+      <a href="?tipo={{ tipo }}&desde={{ desde }}&hasta={{ hasta }}&pagina={{ pagina - 1 }}">
+        <i class="bi bi-chevron-left" style="font-size:.7rem"></i>
+      </a>
+      {% endif %}
+      {% for p in range([1, pagina-2]|max, [paginas+1, pagina+3]|min) %}
+      {% if p == pagina %}
+      <span class="active">{{ p }}</span>
+      {% else %}
+      <a href="?tipo={{ tipo }}&desde={{ desde }}&hasta={{ hasta }}&pagina={{ p }}">{{ p }}</a>
+      {% endif %}
+      {% endfor %}
+      {% if pagina < paginas %}
+      <a href="?tipo={{ tipo }}&desde={{ desde }}&hasta={{ hasta }}&pagina={{ pagina + 1 }}">
+        <i class="bi bi-chevron-right" style="font-size:.7rem"></i>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-clock-history"></i>
+    <div style="font-size:1rem;font-weight:600;margin-bottom:4px">Sin eventos</div>
+    <div style="font-size:.85rem">No hay registros con los filtros aplicados.</div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+// Stats rápidas por tipo
+(function(){
+  const rows = document.querySelectorAll('#evBody tr');
+  const counts = { herramienta:0, material:0, vehiculo:0, albaran:0 };
+  rows.forEach(r => {
+    const badge = r.querySelector('.ev-badge');
+    if(!badge) return;
+    const txt = badge.textContent.trim().toLowerCase();
+    if(txt.includes('herramienta')) counts.herramienta++;
+    else if(txt.includes('material')) counts.material++;
+    else if(txt.includes('veh')) counts.vehiculo++;
+    else if(txt.includes('albar')) counts.albaran++;
+  });
+  document.getElementById('statHerr').textContent = counts.herramienta;
+  document.getElementById('statMat').textContent  = counts.material;
+  document.getElementById('statVeh').textContent  = counts.vehiculo;
+  document.getElementById('statAlb').textContent  = counts.albaran;
+})();
+
+// Búsqueda en tabla
+function filterTable(){
+  const q = document.getElementById('tableSearch').value.toLowerCase();
+  document.querySelectorAll('#evBody tr').forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+</script>
+
+{% endblock %}

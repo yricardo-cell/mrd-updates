@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% block title %}Incidencias{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<span class="current">Incidencias</span>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header-row">
+  <div class="page-header">
+    <div class="page-title">Incidencias</div>
+    <div class="page-subtitle">{{ total }} incidencias registradas</div>
+  </div>
+  <a href="/incidencias/nueva" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg"></i> Nueva incidencia
+  </a>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));margin-bottom:16px">
+  <div class="kpi-card" style="padding:14px;cursor:pointer" onclick="filtrarEstado('')">
+    <div class="kpi-icon blue" style="width:32px;height:32px;font-size:.9rem"><i class="bi bi-clipboard-list"></i></div>
+    <div class="kpi-value" style="font-size:1.5rem">{{ total }}</div>
+    <div class="kpi-label">Total</div>
+  </div>
+  <div class="kpi-card" style="padding:14px;cursor:pointer" onclick="filtrarEstado('abierta')">
+    <div class="kpi-icon red" style="width:32px;height:32px;font-size:.9rem"><i class="bi bi-exclamation-circle"></i></div>
+    <div class="kpi-value" style="font-size:1.5rem">{{ abiertas }}</div>
+    <div class="kpi-label">Abiertas</div>
+  </div>
+  <div class="kpi-card" style="padding:14px;cursor:pointer" onclick="filtrarEstado('en_curso')">
+    <div class="kpi-icon orange" style="width:32px;height:32px;font-size:.9rem"><i class="bi bi-hourglass-split"></i></div>
+    <div class="kpi-value" style="font-size:1.5rem">{{ en_proceso }}</div>
+    <div class="kpi-label">En proceso</div>
+  </div>
+  <div class="kpi-card" style="padding:14px">
+    <div class="kpi-icon red" style="width:32px;height:32px;font-size:.9rem"><i class="bi bi-fire"></i></div>
+    <div class="kpi-value" style="font-size:1.5rem">{{ criticas }}</div>
+    <div class="kpi-label">Críticas</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-toolbar">
+    <div class="filter-group">
+      <div style="position:relative">
+        <i class="bi bi-search" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem"></i>
+        <input type="text" id="filtro-busqueda" class="filter-input" placeholder="Buscar incidencia..."
+               style="padding-left:30px;width:220px" oninput="filtrarTabla()">
+      </div>
+      <select id="filtro-estado" class="filter-select" onchange="filtrarTabla()">
+        <option value="">Todos los estados</option>
+        <option value="abierta" {% if estado_filtro=='abierta' %}selected{% endif %}>Abierta</option>
+        <option value="en_curso" {% if estado_filtro=='en_curso' %}selected{% endif %}>En proceso</option>
+        <option value="pendiente" {% if estado_filtro=='pendiente' %}selected{% endif %}>Pendiente</option>
+        <option value="resuelta" {% if estado_filtro=='resuelta' %}selected{% endif %}>Resuelta</option>
+        <option value="cerrada" {% if estado_filtro=='cerrada' %}selected{% endif %}>Cerrada</option>
+      </select>
+      <select id="filtro-prioridad" class="filter-select" onchange="filtrarTabla()">
+        <option value="">Todas las prioridades</option>
+        <option value="critica">Crítica</option>
+        <option value="alta">Alta</option>
+        <option value="media">Media</option>
+        <option value="baja">Baja</option>
+      </select>
+    </div>
+  </div>
+
+  <div style="overflow-x:auto">
+    <table class="smart-table" id="tabla-incidencias">
+      <thead>
+        <tr>
+          <th data-sort="numero">Número ↕</th>
+          <th data-sort="titulo">Título ↕</th>
+          <th>Herramienta</th>
+          <th>Tipo</th>
+          <th data-sort="prioridad">Prioridad ↕</th>
+          <th data-sort="estado">Estado ↕</th>
+          <th>Fecha apertura</th>
+          <th class="col-actions">Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-body">
+        {% for inc in incidencias %}
+        <tr data-numero="{{ inc.numero }}"
+            data-titulo="{{ inc.titulo }}"
+            data-estado="{{ inc.estado }}"
+            data-prioridad="{{ inc.prioridad }}">
+          <td><span style="font-family:monospace;font-size:.8rem;font-weight:700;color:var(--primary)">{{ inc.numero }}</span></td>
+          <td>
+            <div style="font-weight:600;color:var(--text)">{{ inc.titulo }}</div>
+            {% if inc.descripcion %}
+            <div style="font-size:.72rem;color:var(--text-muted)">{{ inc.descripcion[:60] }}...</div>
+            {% endif %}
+          </td>
+          <td>
+            {% if inc.herramienta %}
+            <a href="/herramientas/{{ inc.herramienta_id }}" style="font-size:.8rem;color:var(--primary)">
+              {{ inc.herramienta.codigo }}
+            </a>
+            {% else %}
+            <span style="color:var(--text-muted);font-size:.82rem">—</span>
+            {% endif %}
+          </td>
+          <td><span class="badge badge-gray">{{ inc.tipo | replace('_',' ') | title if inc.tipo else '—' }}</span></td>
+          <td>
+            {% if inc.prioridad == 'critica' %}
+              <span class="badge badge-danger"><i class="bi bi-fire"></i> Crítica</span>
+            {% elif inc.prioridad == 'alta' %}
+              <span class="badge badge-orange">Alta</span>
+            {% elif inc.prioridad == 'media' %}
+              <span class="badge badge-warning">Media</span>
+            {% else %}
+              <span class="badge badge-gray">Baja</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if inc.estado == 'abierta' %}
+              <span class="badge badge-danger">Abierta</span>
+            {% elif inc.estado == 'en_curso' %}
+              <span class="badge badge-warning">En proceso</span>
+            {% elif inc.estado in ('resuelta', 'cerrada') %}
+              <span class="badge badge-success">{{ inc.estado | title }}</span>
+            {% else %}
+              <span class="badge badge-gray">{{ inc.estado | title }}</span>
+            {% endif %}
+          </td>
+          <td><span style="font-size:.8rem;color:var(--text-2)">{{ inc.fecha_apertura | fmt_datetime }}</span></td>
+          <td class="col-actions">
+            <div class="table-actions">
+              <a class="btn btn-primary btn-sm" href="/incidencias/{{ inc.id }}" title="Abrir incidencia">
+                <i class="bi bi-box-arrow-up-right"></i> Abrir
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8">
+            <div class="empty-state">
+              <i class="bi bi-clipboard-check"></i>
+              <h3>Sin incidencias</h3>
+              <p>No hay incidencias registradas</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if false %}<!-- Ventanas antiguas desactivadas: ahora se usa ficha independiente. -->
+<!-- Modal editar incidencia -->
+<div class="modal-overlay" id="modal-editar-inc">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <div class="modal-title">Editar incidencia</div>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-editar-inc')"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <form method="post" id="form-editar-inc" action="">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Título <span class="required">*</span></label>
+          <input type="text" id="ei-titulo" name="titulo" class="form-control" required>
+        </div>
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <select id="ei-tipo" name="tipo" class="form-control">
+              <option value="averia">Avería</option>
+              <option value="golpe">Golpe</option>
+              <option value="rotura">Rotura</option>
+              <option value="perdida">Pérdida</option>
+              <option value="robo">Robo</option>
+              <option value="mal_funcionamiento">Mal funcionamiento</option>
+              <option value="mantenimiento">Mantenimiento</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Prioridad</label>
+            <select id="ei-prioridad" name="prioridad" class="form-control">
+              <option value="baja">Baja</option>
+              <option value="media">Media</option>
+              <option value="alta">Alta</option>
+              <option value="critica">Crítica</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Estado</label>
+          <select id="ei-estado" name="estado" class="form-control">
+            <option value="abierta">Abierta</option>
+            <option value="en_curso">En curso</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="resuelta">Resuelta</option>
+            <option value="cerrada">Cerrada</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descripción</label>
+          <textarea id="ei-desc" name="descripcion" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Observaciones</label>
+          <textarea id="ei-obs" name="observaciones" class="form-control" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-editar-inc')">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- Modal cerrar incidencia -->
+<div class="modal-overlay" id="modal-cerrar">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <div class="modal-title">Cerrar incidencia</div>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-cerrar')"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <form method="post" id="form-cerrar" action="">
+      <div class="modal-body">
+        <p id="cerrar-info" style="font-size:.85rem;color:var(--text-2);margin-bottom:12px"></p>
+        <div class="form-group">
+          <label class="form-label">Solución aplicada</label>
+          <textarea name="solucion" class="form-control" rows="3"
+                    placeholder="Describe la solución..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-cerrar')">Cancelar</button>
+        <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Cerrar incidencia</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function filtrarTabla() {
+  const q = document.getElementById('filtro-busqueda').value.toLowerCase();
+  const est = document.getElementById('filtro-estado').value;
+  const pri = document.getElementById('filtro-prioridad').value;
+  document.querySelectorAll('#tabla-body tr[data-numero]').forEach(row => {
+    const matchQ = !q || row.textContent.toLowerCase().includes(q);
+    const matchEst = !est || row.dataset.estado === est;
+    const matchPri = !pri || row.dataset.prioridad === pri;
+    row.style.display = matchQ && matchEst && matchPri ? '' : 'none';
+  });
+}
+
+function filtrarEstado(estado) {
+  document.getElementById('filtro-estado').value = estado;
+  filtrarTabla();
+}
+
+function cerrarIncidencia(id, titulo) {
+  const form = document.getElementById('form-cerrar');
+  form.action = `/incidencias/${id}/cerrar`;
+  document.getElementById('cerrar-info').textContent = titulo;
+  openModal('modal-cerrar');
+}
+
+document.addEventListener('DOMContentLoaded', () => initSmartTable('tabla-incidencias'));
+
+function editarIncidencia(btn) {
+  const d = btn.dataset;
+  document.getElementById('form-editar-inc').action = `/incidencias/${d.iid}/editar`;
+  document.getElementById('ei-titulo').value = d.titulo;
+  document.getElementById('ei-desc').value = d.desc;
+  document.getElementById('ei-obs').value = d.obs;
+  for (let o of document.getElementById('ei-tipo').options) o.selected = (o.value === d.tipo);
+  for (let o of document.getElementById('ei-prioridad').options) o.selected = (o.value === d.prioridad);
+  for (let o of document.getElementById('ei-estado').options) o.selected = (o.value === d.estado);
+  openModal('modal-editar-inc');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Inventario EPI y ropa — {{ app_name }}{% endblock %}
+{% block breadcrumb %}<a href="/">Inicio</a><span class="sep">/</span><a href="/epis">EPIs</a><span class="sep">/</span><span class="current">Inventario</span>{% endblock %}
+
+{% block content %}
+{% set total_unidades = stock_items | sum(attribute='cantidad') %}
+{% set sin_stock = stock_items | selectattr('sin_stock') | list | length %}
+<section class="epi-console-hero is-stock">
+  <div><span class="epi-console-eyebrow">Operación diaria</span><h1><i class="bi bi-box-seam-fill"></i> Inventario EPI y ropa</h1><p>Busca, escanea, cuenta y mueve grandes cantidades sin abandonar esta pantalla.</p></div>
+  <div class="epi-console-actions"><a href="/scan" class="btn btn-light"><i class="bi bi-upc-scan"></i> Abrir escáner</a><a href="/epis/catalogo#alta-articulo" class="btn btn-outline-light"><i class="bi bi-plus-lg"></i> Nuevo artículo</a></div>
+</section>
+
+{% set ok = request.query_params.get('ok') %}{% if ok %}<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>Cambio guardado correctamente.</div>{% endif %}
+{% if alertas %}<div class="epi-stock-alert"><i class="bi bi-exclamation-triangle-fill"></i><div><strong>{{ alertas|length }} referencias necesitan atención</strong><span>{{ alertas|map(attribute='nombre_display')|join(', ') }}</span></div></div>{% endif %}
+
+<section class="epi-console-kpis">
+  <article><span><i class="bi bi-boxes"></i></span><div><strong>{{ total_unidades|int }}</strong><small>Unidades registradas</small></div></article>
+  <article><span><i class="bi bi-tags"></i></span><div><strong>{{ stock_items|length }}</strong><small>Referencias QR</small></div></article>
+  <article><span><i class="bi bi-exclamation-octagon"></i></span><div><strong>{{ sin_stock }}</strong><small>Sin existencias</small></div></article>
+  <article><span><i class="bi bi-life-preserver"></i></span><div><strong>{{ individuales_stock.values()|map(attribute='sin_asignar')|sum }}</strong><small>Arneses libres</small></div></article>
+</section>
+
+<section class="epi-stock-toolbar">
+  <div class="epi-search-box"><i class="bi bi-search"></i><input id="epi-stock-search" type="search" placeholder="Nombre, talla o código QR…" autocomplete="off"></div>
+  <select id="epi-stock-filter" class="form-select"><option value="todos">Todo el inventario</option><option value="epi">Solo EPIs</option><option value="ropa">Solo ropa</option><option value="bajo">Bajo mínimo</option><option value="cero">Sin stock</option></select>
+  <button type="button" class="btn btn-outline-primary" id="epi-select-all"><i class="bi bi-check2-square"></i> Seleccionar visibles</button>
+</section>
+
+<section class="epi-bulk-bar" id="epi-bulk-bar" hidden>
+  <div><strong id="epi-selected-count">0 seleccionadas</strong><span>Prepara el paquete de etiquetas para Zebra o PDF.</span></div>
+  <form method="post" action="/epis/stock/etiquetas" id="epi-label-form"><input type="hidden" name="ids" id="epi-label-ids"><label>Copias por referencia <input type="number" name="copias" value="1" min="1" max="100"></label><button type="submit" name="formato" value="pdf" class="btn btn-light"><i class="bi bi-file-earmark-pdf"></i> PDF</button><button type="submit" name="formato" value="zpl" class="btn btn-dark"><i class="bi bi-printer"></i> Zebra ZPL</button></form>
+</section>
+
+<section class="mrd-card epi-stock-card">
+  <div class="epi-stock-head"><div><span class="epi-step">2</span><div><h2>Existencias y movimientos</h2><p>Indica la cantidad completa: 1, 50 o 1.000 unidades.</p></div></div><span id="epi-visible-count">{{ stock_items|length }} referencias</span></div>
+  <div class="table-responsive">
+    <table class="epi-stock-table">
+      <thead><tr><th class="epi-check-col"></th><th>Artículo / referencia</th><th>Stock</th><th>Mínimo</th><th>Entrada o salida</th><th>QR y control</th></tr></thead>
+      <tbody>
+      {% for item in stock_items %}
+        <tr class="epi-stock-row{% if item.sin_stock %} is-zero{% elif item.bajo_minimo %} is-low{% endif %}" data-category="{{ item.categoria }}" data-low="{{ '1' if item.bajo_minimo else '0' }}" data-zero="{{ '1' if item.sin_stock else '0' }}" data-search="{{ (item.nombre_display ~ ' ' ~ (item.codigo or ''))|lower|e }}">
+          <td><input type="checkbox" class="form-check-input epi-label-check" value="{{ item.id }}" aria-label="Seleccionar {{ item.nombre_display }}"></td>
+          <td><div class="epi-stock-identity"><span class="epi-stock-icon is-{{ item.categoria }}"><i class="bi {% if item.categoria == 'ropa' %}bi-bag{% else %}bi-shield-check{% endif %}"></i></span><div><strong>{{ item.nombre }}</strong><span>{% if item.talla %}Talla {{ item.talla }} · {% endif %}<code>{{ item.codigo }}</code></span></div></div></td>
+          <td><div class="epi-stock-number {{ 'is-danger' if item.sin_stock else ('is-warning' if item.bajo_minimo else 'is-good') }}"><strong>{{ item.cantidad|int }}</strong><span>unidades</span></div></td>
+          <td><form method="post" action="/epis/stock/minimo" class="epi-min-form"><input type="hidden" name="nombre" value="{{ item.nombre }}"><input type="hidden" name="talla" value="{{ item.talla or '' }}"><input type="number" name="stock_minimo" value="{{ item.stock_minimo|int }}" min="0" max="9999" aria-label="Stock mínimo de {{ item.nombre_display }}"><button type="submit" title="Guardar mínimo"><i class="bi bi-check2"></i></button></form></td>
+          <td><form method="post" class="epi-move-form"><input type="hidden" name="nombre" value="{{ item.nombre }}"><input type="hidden" name="talla" value="{{ item.talla or '' }}"><input type="hidden" name="tipo_seguimiento" value="{{ item.tipo_seguimiento or 'generico' }}"><input type="number" name="cantidad" value="1" min="1" max="9999" aria-label="Cantidad de {{ item.nombre_display }}"><button type="submit" formaction="/epis/stock/salida" class="is-out" title="Registrar salida"><i class="bi bi-dash-lg"></i><span>Salida</span></button><button type="submit" formaction="/epis/stock/entrada" class="is-in" title="Registrar entrada"><i class="bi bi-plus-lg"></i><span>Entrada</span></button></form></td>
+          <td><div class="epi-control-actions"><a href="/qr/stock_epi/{{ item.id }}/imprimir" target="_blank" class="epi-qr-button"><i class="bi bi-qr-code"></i><span>Ver QR</span></a><form method="post" action="/epis/stock/{{ item.id }}/seguimiento"><select name="tipo_seguimiento" onchange="this.form.submit()" aria-label="Tipo de control"><option value="generico"{% if (item.tipo_seguimiento or 'generico') == 'generico' %} selected{% endif %}>Por cantidad</option><option value="individual"{% if item.tipo_seguimiento == 'individual' %} selected{% endif %}>Individual</option></select></form></div></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="epi-empty-result" id="epi-stock-empty" hidden><i class="bi bi-search"></i><strong>No hay referencias con ese filtro</strong></div>
+</section>
+
+{% if ropa_grupos %}<section class="mrd-card epi-size-starter"><div><h2><i class="bi bi-rulers"></i> Añadir tallas o medidas</h2><p>Puedes ampliar cualquier prenda en cualquier momento. Cada talla recibe automáticamente un código QR único.</p></div><div class="epi-size-grid">{% for nombre,tallas in ropa_grupos %}<form method="post" action="/epis/stock/nueva-talla"><input type="hidden" name="nombre" value="{{ nombre }}"><strong>{{ nombre }}</strong><small>{% if tallas %}Actuales: {{ tallas|map(attribute='talla')|select|join(', ') }}{% else %}Sin tallas todavía{% endif %}</small><input name="talla" placeholder="Ej. XS, 3XL, 40 o 52" required maxlength="20" autocomplete="off"><button class="btn btn-warning" type="submit"><i class="bi bi-plus-lg"></i> Añadir talla</button></form>{% endfor %}</div></section>{% endif %}
+
+<section class="epi-individual-strip"><div><i class="bi bi-person-badge"></i><span><strong>Arneses y absorbedores</strong> se controlan por unidad, revisión y trabajador.</span></div><a href="/epis/individuales" class="btn btn-outline-primary">Abrir control individual <i class="bi bi-arrow-right"></i></a></section>
+{% endblock %}
+
+{% block extra_js %}<script>
+(function(){var rows=Array.from(document.querySelectorAll('.epi-stock-row')),search=document.getElementById('epi-stock-search'),filter=document.getElementById('epi-stock-filter'),visibleCount=document.getElementById('epi-visible-count'),empty=document.getElementById('epi-stock-empty'),checks=Array.from(document.querySelectorAll('.epi-label-check')),bar=document.getElementById('epi-bulk-bar'),ids=document.getElementById('epi-label-ids'),count=document.getElementById('epi-selected-count');function apply(){var term=(search.value||'').trim().toLocaleLowerCase('es'),mode=filter.value,shown=0;rows.forEach(function(row){var matchText=!term||(row.dataset.search||'').includes(term),matchMode=mode==='todos'||row.dataset.category===mode||(mode==='bajo'&&row.dataset.low==='1')||(mode==='cero'&&row.dataset.zero==='1'),show=matchText&&matchMode;row.hidden=!show;if(show)shown++});visibleCount.textContent=shown+(shown===1?' referencia':' referencias');empty.hidden=shown!==0}function selected(){var values=checks.filter(function(c){return c.checked}).map(function(c){return c.value});ids.value=values.join(',');count.textContent=values.length+(values.length===1?' seleccionada':' seleccionadas');bar.hidden=values.length===0}search.addEventListener('input',apply);filter.addEventListener('change',apply);checks.forEach(function(c){c.addEventListener('change',selected)});document.getElementById('epi-select-all').addEventListener('click',function(){var visible=rows.filter(function(r){return !r.hidden}),all=visible.length&&visible.every(function(r){return r.querySelector('.epi-label-check').checked});visible.forEach(function(r){r.querySelector('.epi-label-check').checked=!all});selected()});document.getElementById('epi-label-form').addEventListener('submit',function(event){if(!ids.value){event.preventDefault()}})})();
+</script>{% endblock %}

@@ -1,0 +1,66 @@
+# =============================================================
+# MRD TOOL CONTROL — Configuración del Servicio Windows
+# Sprint 5.3 — Servicios de Producción
+# v1.9.3-alpha
+# =============================================================
+# Editar este archivo para ajustar la configuración.
+# Los cambios requieren reiniciar el servicio para aplicarse.
+
+service:
+  name: MRDToolControl
+  display_name: "MRD Tool Control"
+  description: "MRD Tool Control Production Service"
+  startup: automatic  # automatic | manual | disabled
+
+  recovery:
+    first_failure: restart
+    second_failure: restart
+    third_failure: restart
+    reset_period_hours: 24      # Reiniciar contador de fallos cada 24 h
+    restart_delay_seconds: 30   # Esperar 30 s antes de reiniciar tras fallo
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  # workers: SQLite solo admite 1 escritor concurrente.
+  # Cambiar a >1 SOLO si se migra a PostgreSQL (Sprint 5.5).
+  workers: 1
+  timeout_keep_alive: 30         # segundos sin actividad antes de cerrar conexión
+  timeout_graceful_shutdown: 30  # segundos para apagado limpio de workers
+  proxy_headers: true            # Confiar en X-Forwarded-For (Cloudflare, nginx, etc.)
+  forwarded_allow_ips: "*"       # IPs de proxy de confianza (* = cualquier proxy)
+  log_level: "warning"           # debug | info | warning | error | critical
+
+watchdog:
+  enabled: true
+  check_interval_seconds: 10    # Revisar estado de uvicorn cada 10 s
+  max_restarts: 5                # Máximo de reinicios automáticos consecutivos
+  restart_delay_seconds: 30     # Esperar antes de reiniciar uvicorn caído
+  memory_limit_mb: 512          # Alerta si uvicorn supera este uso de RAM
+  cooldown_minutes: 5           # Ventana para contar reinicios consecutivos
+
+health_check:
+  enabled: true
+  interval_seconds: 60
+  timeout_seconds: 10
+  disk_min_free_gb: 1.0         # Alerta si queda menos de 1 GB libre
+  memory_warn_percent: 80       # Alerta si RAM del sistema supera el 80%
+
+cleanup:
+  enabled: true
+  schedule_hour: 2              # 2:00 AM diario
+  temp_max_age_days: 7
+  log_max_age_days: 30
+  cache_max_age_days: 3
+  session_max_age_hours: 24
+
+logging:
+  level: INFO
+  service_log: logs/service.log
+  startup_log: logs/startup.log
+  shutdown_log: logs/shutdown.log
+  crash_log: logs/crash.log
+  rotation_log: logs/rotation.log
+  max_size_mb: 10
+  backup_count: 5
+  # NUNCA registrar: contraseñas, tokens JWT, claves API, datos personales

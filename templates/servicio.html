@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+{% block title %}Servicio — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <h2 class="mrd-page-title"><i class="bi bi-gear-wide-connected me-2"></i>Servicio Windows</h2>
+  <div class="d-flex gap-2 flex-wrap">
+    <button class="btn btn-sm btn-outline-success" id="btn-start" onclick="svcAction('start')">
+      <i class="bi bi-play-fill me-1"></i>Iniciar
+    </button>
+    <button class="btn btn-sm btn-outline-warning" id="btn-restart" onclick="svcAction('restart')">
+      <i class="bi bi-arrow-clockwise me-1"></i>Reiniciar
+    </button>
+    <button class="btn btn-sm btn-outline-primary" id="btn-watchdog" onclick="svcAction('watchdog')">
+      <i class="bi bi-shield-check me-1"></i>Instalar vigilante 24/7
+    </button>
+    <button class="btn btn-sm btn-outline-danger" id="btn-stop" onclick="svcAction('stop')">
+      <i class="bi bi-stop-fill me-1"></i>Detener
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="svcRefresh()">
+      <i class="bi bi-arrow-clockwise me-1" id="icon-refresh"></i>Actualizar
+    </button>
+  </div>
+</div>
+
+<!-- Mensaje de acción -->
+<div id="svc-alert" class="alert py-2 mb-3 d-none" role="alert"></div>
+
+<!-- ═══ FILA SUPERIOR: Estado + Métricas ══════════════════════════════════ -->
+<div class="row g-3 mb-3">
+
+  <!-- Estado general -->
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="mrd-card h-100">
+      <div class="mrd-card-header"><i class="bi bi-circle-fill me-2" id="icon-status-dot" style="color:#6c757d"></i>Estado del servicio</div>
+      <div class="p-3">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <span class="badge fs-6 px-3 py-2" id="badge-status" style="background:#6c757d">Comprobando…</span>
+          <div>
+            <div class="fw-semibold" id="svc-version">—</div>
+            <div class="text-muted small">MRD TOOL CONTROL</div>
+          </div>
+        </div>
+        <table class="table table-sm table-borderless mb-0" style="font-size:.82rem">
+          <tbody>
+            <tr>
+              <td class="text-muted">Uptime</td>
+              <td class="fw-semibold" id="svc-uptime">—</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Iniciado</td>
+              <td id="svc-start-time">—</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Reinicios auto</td>
+              <td id="svc-restarts">—</td>
+            </tr>
+            <tr>
+              <td class="text-muted">PID uvicorn</td>
+              <td id="svc-pid">—</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Puerto</td>
+              <td id="svc-port">—</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Workers</td>
+              <td id="svc-workers">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Métricas del sistema -->
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="mrd-card h-100">
+      <div class="mrd-card-header"><i class="bi bi-cpu me-2"></i>Recursos del sistema</div>
+      <div class="p-3">
+        <!-- CPU -->
+        <div class="mb-3">
+          <div class="d-flex justify-content-between small mb-1">
+            <span class="text-muted">CPU</span>
+            <span class="fw-semibold" id="metric-cpu">—</span>
+          </div>
+          <div class="progress" style="height:6px">
+            <div class="progress-bar" id="bar-cpu" role="progressbar" style="width:0%"></div>
+          </div>
+        </div>
+        <!-- RAM sistema -->
+        <div class="mb-3">
+          <div class="d-flex justify-content-between small mb-1">
+            <span class="text-muted">RAM sistema</span>
+            <span class="fw-semibold" id="metric-ram">—</span>
+          </div>
+          <div class="progress" style="height:6px">
+            <div class="progress-bar bg-info" id="bar-ram" role="progressbar" style="width:0%"></div>
+          </div>
+        </div>
+        <!-- RAM uvicorn -->
+        <div class="mb-3">
+          <div class="d-flex justify-content-between small mb-1">
+            <span class="text-muted">RAM uvicorn</span>
+            <span class="fw-semibold" id="metric-uv-ram">—</span>
+          </div>
+        </div>
+        <!-- Disco -->
+        <div>
+          <div class="d-flex justify-content-between small mb-1">
+            <span class="text-muted">Disco libre</span>
+            <span class="fw-semibold" id="metric-disk">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Health checks -->
+  <div class="col-12 col-xl-4">
+    <div class="mrd-card h-100">
+      <div class="mrd-card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-heart-pulse me-2"></i>Health checks</span>
+        <span id="badge-health" class="badge bg-secondary">—</span>
+      </div>
+      <div class="p-2" id="health-checks-list">
+        <div class="text-center text-muted py-3 small">
+          <span class="spinner-border spinner-border-sm me-2"></span>Comprobando…
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ LOGS RECIENTES ════════════════════════════════════════════════════ -->
+<div class="mrd-card">
+  <div class="mrd-card-header d-flex align-items-center justify-content-between">
+    <span><i class="bi bi-journal-text me-2"></i>Logs recientes</span>
+    <div class="d-flex gap-2">
+      <select class="form-select form-select-sm" id="log-select" onchange="loadLog()" style="width:auto">
+        <option value="service">service.log</option>
+        <option value="startup">startup.log</option>
+        <option value="shutdown">shutdown.log</option>
+        <option value="crash">crash.log</option>
+        <option value="rotation">rotation.log</option>
+      </select>
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadLog()">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+  </div>
+  <div class="p-0">
+    <pre id="log-content" style="background:var(--bs-dark,#212529);color:#adb5bd;font-size:.73rem;padding:1rem;margin:0;max-height:320px;overflow-y:auto;border-radius:0 0 .5rem .5rem;white-space:pre-wrap;word-break:break-all"><span class="text-muted">Cargando logs…</span></pre>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ──── Estado global ────────────────────────────────────────────────────────────
+let _svcRefreshTimer = null;
+
+function _fmt_uptime(s) {
+  if (!s && s !== 0) return '—';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${h}h ${m}m ${sec}s`;
+}
+
+function _fmt_dt(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('es-ES', {
+      day:'2-digit', month:'2-digit', year:'numeric',
+      hour:'2-digit', minute:'2-digit', second:'2-digit'
+    });
+  } catch { return iso; }
+}
+
+// ──── Estado del servicio ──────────────────────────────────────────────────────
+async function svcRefresh() {
+  const icon = document.getElementById('icon-refresh');
+  icon.classList.add('spin-anim');
+  try {
+    await Promise.all([loadStatus(), loadHealth()]);
+    loadLog();
+  } finally {
+    icon.classList.remove('spin-anim');
+  }
+}
+
+async function loadStatus() {
+  try {
+    const r = await fetch('/api/service/status');
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+
+    // Badge de estado
+    const badge = document.getElementById('badge-status');
+    const dot   = document.getElementById('icon-status-dot');
+    if (d.status === 'running') {
+      badge.textContent = 'ACTIVO';
+      badge.style.background = '#198754';
+      dot.style.color = '#198754';
+    } else {
+      badge.textContent = d.status?.toUpperCase() || 'DESCONOCIDO';
+      badge.style.background = '#dc3545';
+      dot.style.color = '#dc3545';
+    }
+
+    document.getElementById('svc-version').textContent    = d.version || '—';
+    document.getElementById('svc-uptime').textContent     = _fmt_uptime(d.uptime_seconds);
+    document.getElementById('svc-start-time').textContent = _fmt_dt(d.start_time);
+    document.getElementById('svc-restarts').textContent   = d.restart_count ?? '0';
+    document.getElementById('svc-pid').textContent        = d.pid || '—';
+    document.getElementById('svc-port').textContent       = d.port || '—';
+    document.getElementById('svc-workers').textContent    = d.workers || '—';
+
+    // Métricas
+    if (d.metrics) {
+      const m = d.metrics;
+      const cpu = m.cpu_percent ?? 0;
+      document.getElementById('metric-cpu').textContent   = `${cpu.toFixed(1)} %`;
+      document.getElementById('bar-cpu').style.width      = `${Math.min(cpu,100)}%`;
+      document.getElementById('bar-cpu').className = 'progress-bar ' +
+        (cpu > 90 ? 'bg-danger' : cpu > 70 ? 'bg-warning' : 'bg-success');
+
+      if (m.memory_percent != null) {
+        const ramPct = m.memory_percent;
+        document.getElementById('metric-ram').textContent = `${m.memory_used_mb?.toFixed(0)} / ${m.memory_total_mb?.toFixed(0)} MB (${ramPct.toFixed(0)}%)`;
+        document.getElementById('bar-ram').style.width = `${Math.min(ramPct,100)}%`;
+        document.getElementById('bar-ram').className = 'progress-bar bg-info ' +
+          (ramPct > 90 ? 'bg-danger' : ramPct > 75 ? 'bg-warning' : 'bg-info');
+      }
+
+      document.getElementById('metric-uv-ram').textContent = m.uvicorn_memory_mb
+        ? `${m.uvicorn_memory_mb.toFixed(1)} MB` : '—';
+      document.getElementById('metric-disk').textContent = m.disk_free_gb != null
+        ? `${m.disk_free_gb.toFixed(1)} GB libres` : '—';
+    }
+  } catch(e) {
+    console.warn('Error cargando estado:', e);
+  }
+}
+
+// ──── Health checks ────────────────────────────────────────────────────────────
+async function loadHealth() {
+  try {
+    const r = await fetch('/api/service/health');
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+
+    const badge = document.getElementById('badge-health');
+    badge.textContent = d.healthy ? 'OK' : 'PROBLEMAS';
+    badge.className = 'badge ' + (d.healthy ? 'bg-success' : 'bg-danger');
+
+    const list  = document.getElementById('health-checks-list');
+    const icons = { ok: 'bi-check-circle-fill text-success', error: 'bi-x-circle-fill text-danger' };
+    list.innerHTML = Object.entries(d.checks || {}).map(([k, v]) => `
+      <div class="d-flex align-items-start gap-2 px-2 py-1 border-bottom" style="font-size:.78rem">
+        <i class="bi ${icons[v.status] || 'bi-dash-circle text-secondary'} mt-1 flex-shrink-0"></i>
+        <div>
+          <span class="fw-semibold text-capitalize">${k.replace('_',' ')}</span>
+          <div class="text-muted" style="font-size:.72rem">${v.detail}</div>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    document.getElementById('health-checks-list').innerHTML =
+      '<div class="text-danger small p-2">Error al cargar health checks</div>';
+  }
+}
+
+// ──── Logs ────────────────────────────────────────────────────────────────────
+async function loadLog() {
+  const sel  = document.getElementById('log-select').value;
+  const pre  = document.getElementById('log-content');
+  try {
+    const r = await fetch(`/api/service/logs/${sel}`);
+    if (!r.ok) { pre.textContent = '(sin datos)'; return; }
+    const d = await r.json();
+    pre.textContent = d.content || '(log vacío)';
+    pre.scrollTop   = pre.scrollHeight;
+  } catch(e) {
+    pre.textContent = 'Error al cargar log.';
+  }
+}
+
+// ──── Acciones de servicio ────────────────────────────────────────────────────
+async function svcAction(action) {
+  const labels = { start:'Iniciar', stop:'Detener', restart:'Reiniciar', watchdog:'Instalar vigilante' };
+  const alertEl = document.getElementById('svc-alert');
+
+  alertEl.className = 'alert alert-info py-2 mb-3';
+  alertEl.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${labels[action] || action}ando servicio…`;
+  alertEl.classList.remove('d-none');
+
+  try {
+    const resp = await fetch(`/api/service/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await resp.json().catch(() => ({}));
+
+    if (resp.ok) {
+      alertEl.className = 'alert alert-success py-2 mb-3';
+      alertEl.textContent = data.message || `Acción '${action}' ejecutada.`;
+      setTimeout(() => svcRefresh(), 3000);
+    } else {
+      alertEl.className = 'alert alert-danger py-2 mb-3';
+      alertEl.textContent = data.detail || `Error al ejecutar '${action}' (${resp.status}).`;
+    }
+  } catch(e) {
+    alertEl.className = 'alert alert-danger py-2 mb-3';
+    alertEl.textContent = `Error de red: ${e.message}`;
+  }
+
+  setTimeout(() => alertEl.classList.add('d-none'), 8000);
+}
+
+// ──── Animación de recarga ─────────────────────────────────────────────────────
+const _style = document.createElement('style');
+_style.textContent = '.spin-anim { animation: spin 0.7s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }';
+document.head.appendChild(_style);
+
+// ──── Inicialización ──────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  svcRefresh();
+  _svcRefreshTimer = setInterval(svcRefresh, 30000);  // Actualizar cada 30 s
+});
+</script>
+{% endblock %}

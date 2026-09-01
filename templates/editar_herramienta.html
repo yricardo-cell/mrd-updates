@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% block title %}Editar — {{ herramienta.nombre }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/herramientas">Herramientas</a><span class="sep">/</span>
+<a href="/herramientas/{{ herramienta.id }}">{{ herramienta.codigo }}</a><span class="sep">/</span>
+<span class="current">Editar</span>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">Editar herramienta</div>
+    <div class="page-subtitle">{{ herramienta.codigo }} — {{ herramienta.nombre }}</div>
+  </div>
+  <a href="/herramientas/{{ herramienta.id }}" class="btn btn-outline btn-sm">
+    <i class="bi bi-arrow-left"></i> Volver
+  </a>
+</div>
+
+<form method="post" action="/herramientas/{{ herramienta.id }}/editar" enctype="multipart/form-data" id="form-editar">
+  <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start">
+
+    <!-- Formulario principal -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+
+      <!-- Identificación -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-fingerprint"></i> Identificación</div></div>
+        <div class="card-body">
+          <div class="form-row form-row-2">
+            <div class="form-group">
+              <label class="form-label">Código</label>
+              <input type="text" class="form-control" value="{{ herramienta.codigo }}" disabled
+                     style="opacity:.6;cursor:not-allowed">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Número de serie</label>
+              <div style="position:relative">
+                <input type="text" name="num_serie" id="num-serie-input" class="form-control"
+                       value="{{ herramienta.num_serie or '' }}"
+                       oninput="verificarSerie(this.value)">
+                <span id="serie-status" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:.8rem"></span>
+              </div>
+              <div id="serie-aviso" style="font-size:.78rem;color:var(--danger);margin-top:3px;display:none">
+                <i class="bi bi-exclamation-circle"></i> Número de serie ya registrado.
+                <a id="serie-link" href="#" target="_blank" style="color:var(--danger)">Ver herramienta</a>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nombre <span class="required">*</span></label>
+            <input type="text" name="nombre" class="form-control" value="{{ herramienta.nombre }}" required autofocus>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Descripción</label>
+            <textarea name="descripcion" class="form-control" rows="2">{{ herramienta.descripcion or '' }}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Clasificación -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-folder"></i> Clasificación</div></div>
+        <div class="card-body">
+          <div class="form-row form-row-3">
+            <div class="form-group">
+              <label class="form-label">Categoría <span class="required">*</span></label>
+              <select name="categoria" class="form-control" required>
+                {% for cat in categorias %}
+                <option value="{{ cat }}" {% if cat == herramienta.categoria %}selected{% endif %}>{{ cat }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Subcategoría</label>
+              <input type="text" name="subcategoria" class="form-control" value="{{ herramienta.subcategoria or '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Familia</label>
+              <input type="text" name="familia" class="form-control" value="{{ herramienta.familia or '' }}">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Datos técnicos -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-cpu"></i> Datos técnicos</div></div>
+        <div class="card-body">
+          <div class="form-row form-row-3">
+            <div class="form-group">
+              <label class="form-label">Marca</label>
+              <input type="text" name="marca" class="form-control" value="{{ herramienta.marca or '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Modelo</label>
+              <input type="text" name="modelo" class="form-control" value="{{ herramienta.modelo or '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Fabricante</label>
+              <input type="text" name="fabricante" class="form-control" value="{{ herramienta.fabricante or '' }}">
+            </div>
+          </div>
+          <div class="form-row" style="grid-template-columns:repeat(4,1fr)">
+            <div class="form-group">
+              <label class="form-label">Potencia</label>
+              <input type="text" name="potencia" class="form-control" value="{{ herramienta.potencia or '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Voltaje</label>
+              <input type="text" name="voltaje" class="form-control" value="{{ herramienta.voltaje or '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Peso (kg)</label>
+              <input type="number" name="peso" class="form-control" step="0.1" value="{{ herramienta.peso or '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Color</label>
+              <input type="text" name="color" class="form-control" value="{{ herramienta.color or '' }}">
+            </div>
+          </div>
+          <div class="form-row form-row-3">
+            <div class="form-group">
+              <label class="form-label">Dimensiones</label>
+              <input type="text" name="dimensiones" class="form-control" placeholder="30x15x10 cm"
+                     value="{{ herramienta.dimensiones or '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nº activo fijo</label>
+              <input type="text" name="activo_fijo" class="form-control" placeholder="AF-2024-001"
+                     value="{{ herramienta.activo_fijo or '' }}">
+              <div class="form-hint">Número de inmovilizado contable</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Vida útil (años)</label>
+              <input type="number" name="vida_util_anos" class="form-control" min="1" max="50"
+                     value="{{ herramienta.vida_util_anos or '' }}">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Adquisición -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-receipt"></i> Adquisición</div></div>
+        <div class="card-body">
+          <div class="form-row form-row-3">
+            <div class="form-group">
+              <label class="form-label">Fecha de compra</label>
+              <input type="date" name="fecha_compra" class="form-control"
+                     value="{{ herramienta.fecha_compra.strftime('%Y-%m-%d') if herramienta.fecha_compra else '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Precio de compra (€)</label>
+              <input type="number" name="precio_compra" class="form-control" step="0.01"
+                     value="{{ herramienta.precio_compra or '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Garantía hasta</label>
+              <input type="date" name="garantia_hasta" class="form-control"
+                     value="{{ herramienta.garantia_hasta.strftime('%Y-%m-%d') if herramienta.garantia_hasta else '' }}">
+            </div>
+          </div>
+          <div class="form-row form-row-2">
+            <div class="form-group">
+              <label class="form-label">Proveedor</label>
+              <input type="text" name="proveedor_texto" class="form-control"
+                     value="{{ herramienta.proveedor_texto or '' }}" placeholder="Nombre del proveedor">
+            </div>
+            <div class="form-group">
+              <label class="form-label">N° de factura</label>
+              <input type="text" name="numero_factura" class="form-control"
+                     value="{{ herramienta.numero_factura or '' }}">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ubicación -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-geo-alt"></i> Ubicación</div></div>
+        <div class="card-body">
+          <div class="form-row form-row-2">
+            <div class="form-group">
+              <label class="form-label">Almacén</label>
+              <select name="almacen_id" class="form-control">
+                <option value="">Sin almacén específico</option>
+                {% for a in almacenes %}
+                <option value="{{ a.id }}" {% if herramienta.almacen_id == a.id %}selected{% endif %}>{{ a.nombre }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Descripción de ubicación</label>
+              <input type="text" name="ubicacion_texto" class="form-control"
+                     value="{{ herramienta.ubicacion_texto or '' }}" placeholder="Estantería A-3">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Observaciones -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-chat-text"></i> Observaciones</div></div>
+        <div class="card-body">
+          <textarea name="observaciones" class="form-control" rows="3">{{ herramienta.observaciones or '' }}</textarea>
+        </div>
+      </div>
+
+      <!-- Tipo de seguimiento QR -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-upc-scan"></i> Tipo de seguimiento QR</div></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:10px">
+            <input type="radio" name="tipo_seguimiento" value="individual" {% if (herramienta.tipo_seguimiento or 'individual') != 'generico' %}checked{% endif %}>
+            <div><strong>Individual</strong><div style="font-size:.78rem;color:var(--text-muted)">Código único por pieza física. Seguimiento nominal.</div></div>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:10px">
+            <input type="radio" name="tipo_seguimiento" value="generico" {% if herramienta.tipo_seguimiento == 'generico' %}checked{% endif %}>
+            <div><strong>Genérico (cantidad)</strong><div style="font-size:.78rem;color:var(--text-muted)">Un QR para el tipo. Al escanear se pide cantidad.</div></div>
+          </label>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Panel lateral -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+
+      <!-- Foto actual -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-camera"></i> Fotografía</div></div>
+        <div class="card-body" style="text-align:center">
+          <div id="foto-preview" style="width:100%;height:180px;background:var(--surface-2);border:2px dashed var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;overflow:hidden;cursor:pointer"
+               onclick="document.getElementById('foto-input').click()">
+            {% if herramienta.foto %}
+            <img src="/uploads/herramientas/{{ herramienta.foto }}" style="width:100%;height:100%;object-fit:cover" alt="">
+            {% else %}
+            <div style="text-align:center;color:var(--text-muted)">
+              <i class="bi bi-camera" style="font-size:2rem;display:block;margin-bottom:6px"></i>
+              <span style="font-size:.78rem">Clic para añadir foto</span>
+            </div>
+            {% endif %}
+          </div>
+          <input type="file" name="foto" id="foto-input" accept="image/*" style="display:none"
+                 onchange="previewFoto(this)">
+          <button type="button" class="btn btn-outline btn-sm w-100" onclick="document.getElementById('foto-input').click()">
+            <i class="bi bi-upload"></i> Cambiar foto
+          </button>
+        </div>
+      </div>
+
+      <!-- Guardar -->
+      <div class="card">
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+          <button type="submit" class="btn btn-primary w-100" id="btn-guardar">
+            <i class="bi bi-floppy"></i> Guardar cambios
+          </button>
+          <a href="/qr/herramienta/{{ herramienta.id }}/imprimir" class="btn btn-outline w-100" target="_blank">
+            <i class="bi bi-qr-code"></i> Ver / imprimir QR
+          </a>
+          <a href="/herramientas/{{ herramienta.id }}" class="btn btn-ghost w-100">
+            <i class="bi bi-x"></i> Cancelar
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</form>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function previewFoto(input) {
+  if (!input.files.length) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const preview = document.getElementById('foto-preview');
+    preview.innerHTML = '<img src="' + e.target.result + '" style="width:100%;height:100%;object-fit:cover">';
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+// Validar número de serie duplicado (excluye la herramienta actual)
+let serieTimer;
+async function verificarSerie(val) {
+  clearTimeout(serieTimer);
+  const aviso = document.getElementById('serie-aviso');
+  const status = document.getElementById('serie-status');
+  if (!val || val.length < 3) {
+    aviso.style.display = 'none';
+    status.textContent = '';
+    return;
+  }
+  serieTimer = setTimeout(async () => {
+    try {
+      const hid = {{ herramienta.id }};
+      const r = await fetch(`/api/herramientas/${hid}/check_serie?serie=${encodeURIComponent(val)}`);
+      const d = await r.json();
+      if (d.duplicado) {
+        aviso.style.display = 'block';
+        document.getElementById('serie-link').href = `/herramientas/${d.id_existente}`;
+        status.innerHTML = '<i class="bi bi-x-circle-fill" style="color:var(--danger)"></i>';
+      } else {
+        aviso.style.display = 'none';
+        status.innerHTML = '<i class="bi bi-check-circle-fill" style="color:var(--success)"></i>';
+      }
+    } catch { /* silent */ }
+  }, 500);
+}
+
+document.getElementById('form-editar').addEventListener('submit', function() {
+  setSubmitting(document.getElementById('btn-guardar'), true);
+});
+</script>
+{% endblock %}

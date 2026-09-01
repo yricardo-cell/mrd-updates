@@ -1,0 +1,551 @@
+{% extends "base.html" %}
+{% block title %}Mantenimiento Predictivo — {{ app_name }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<span class="current">Mantenimiento Predictivo</span>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Hero banner ── */
+.mant-hero {
+  background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0c4a6e 100%);
+  border-radius:16px; padding:24px 28px; margin-bottom:20px;
+  display:flex; align-items:center; justify-content:space-between; gap:20px;
+  position:relative; overflow:hidden;
+}
+.mant-hero::before {
+  content:''; position:absolute; top:-40px; right:-40px;
+  width:200px; height:200px; background:radial-gradient(circle,rgba(14,165,233,.18),transparent 70%);
+  border-radius:50%;
+}
+.mant-hero-title { font-size:1.35rem; font-weight:700; color:#f8fafc; display:flex; align-items:center; gap:10px; }
+.mant-hero-sub { font-size:.8rem; color:#94a3b8; margin-top:4px; }
+.mant-hero-actions { display:flex; gap:10px; align-items:center; z-index:1; }
+
+/* ── Salud global badge ── */
+.health-badge {
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12);
+  border-radius:12px; padding:12px 20px; min-width:100px;
+}
+.health-score { font-size:2rem; font-weight:800; line-height:1; }
+.health-label { font-size:.68rem; color:#94a3b8; text-transform:uppercase; letter-spacing:.05em; }
+
+/* ── KPI risk cards ── */
+.risk-grid {
+  display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:20px;
+}
+@media(max-width:1000px){ .risk-grid{ grid-template-columns:repeat(3,1fr); } }
+@media(max-width:600px){ .risk-grid{ grid-template-columns:repeat(2,1fr); } }
+
+.risk-card {
+  border-radius:12px; padding:14px 12px; text-align:center; cursor:pointer;
+  border:2px solid var(--border); background:var(--bg-card);
+  text-decoration:none; display:block; transition:all .15s;
+  position:relative; overflow:hidden;
+}
+.risk-card:hover { transform:translateY(-2px); box-shadow:0 4px 16px rgba(0,0,0,.12); }
+.risk-card.active { box-shadow:0 0 0 3px currentColor; }
+.risk-card::after {
+  content:''; position:absolute; bottom:0; left:0; right:0; height:3px;
+  background:currentColor; opacity:.5;
+}
+.risk-num { font-size:1.8rem; font-weight:800; line-height:1; }
+.risk-lbl { font-size:.7rem; color:var(--text-secondary); text-transform:capitalize; margin-top:3px; font-weight:500; }
+.risk-icon { font-size:1rem; margin-bottom:4px; }
+
+/* ── Layout dos columnas ── */
+.mant-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
+@media(max-width:900px){ .mant-grid{ grid-template-columns:1fr; } }
+
+/* ── Score bar ── */
+.score-bar-wrap { display:flex; align-items:center; gap:8px; min-width:90px; }
+.score-bar-bg { flex:1; height:6px; background:var(--border); border-radius:3px; overflow:hidden; min-width:50px; }
+.score-bar-fill { height:100%; border-radius:3px; transition:width .4s; }
+.score-num { font-weight:700; font-size:.85rem; min-width:28px; text-align:right; }
+.nivel-pill {
+  font-size:.68rem; font-weight:600; padding:2px 8px; border-radius:20px;
+  text-transform:capitalize; white-space:nowrap;
+}
+
+/* ── Urgency badge ── */
+.urg-vencido { color:var(--danger); font-weight:700; }
+.urg-critico { color:#dc2626; }
+.urg-pronto  { color:#f59e0b; }
+.urg-ok      { color:var(--text-secondary); }
+
+/* ── Timeline strip ── */
+.timeline-item {
+  display:flex; align-items:flex-start; gap:10px; padding:10px 0;
+  border-bottom:1px solid var(--border);
+}
+.timeline-item:last-child { border-bottom:none; }
+.timeline-dot {
+  width:10px; height:10px; border-radius:50%; flex-shrink:0; margin-top:4px;
+}
+.timeline-name { font-weight:600; font-size:.84rem; }
+.timeline-type { font-size:.73rem; color:var(--text-secondary); }
+.timeline-date { margin-left:auto; text-align:right; font-size:.78rem; white-space:nowrap; }
+
+/* ── Modal ── */
+.modal-backdrop {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,.55);
+  z-index:9999; align-items:center; justify-content:center;
+}
+.modal-backdrop.open { display:flex; }
+.modal-box {
+  background:var(--bg-card); border-radius:16px; padding:24px;
+  width:min(540px,95vw); max-height:90vh; overflow-y:auto;
+  box-shadow:0 24px 64px rgba(0,0,0,.3);
+  animation:modalIn .2s ease;
+}
+@keyframes modalIn { from{opacity:0;transform:scale(.97) translateY(8px)} to{opacity:1;transform:none} }
+.modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+.modal-title { font-size:1rem; font-weight:700; display:flex; align-items:center; gap:8px; }
+
+/* ── Cards ── */
+.mant-card { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+.mant-card-head {
+  padding:14px 20px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.mant-card-title { font-weight:600; font-size:.9rem; display:flex; align-items:center; gap:8px; }
+.mant-card-body { padding:0; }
+
+/* ── Empty state ── */
+.empty-state {
+  text-align:center; padding:32px 20px; color:var(--text-secondary); font-size:.84rem;
+}
+.empty-icon { font-size:2rem; display:block; margin-bottom:8px; opacity:.5; }
+
+/* ── Table compact ── */
+.tbl-compact { width:100%; border-collapse:collapse; font-size:.82rem; }
+.tbl-compact th { padding:10px 14px; text-align:left; font-size:.73rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.04em; border-bottom:2px solid var(--border); font-weight:600; }
+.tbl-compact td { padding:9px 14px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.tbl-compact tr:last-child td { border-bottom:none; }
+.tbl-compact tr:hover td { background:var(--bg); }
+
+/* ── Action btns ── */
+.act-btn { background:none; border:none; cursor:pointer; padding:4px 6px; border-radius:6px; transition:all .12s; }
+.act-btn:hover { background:var(--border); }
+.act-btn.ok:hover { background:#d1fae5; color:#059669; }
+.act-btn.del:hover { background:#fee2e2; color:#dc2626; }
+
+/* ── Completion sparkle ── */
+@keyframes sparkle { 0%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} 100%{opacity:0;transform:scale(0)} }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% set total_riesgo = plan.resumen.criticos + plan.resumen.altos %}
+{% set salud = [100 - (total_riesgo * 15), 0]|max %}
+{% set salud_color = '#22c55e' if salud >= 70 else '#f59e0b' if salud >= 40 else '#ef4444' %}
+
+<!-- HERO -->
+<div class="mant-hero">
+  <div>
+    <div class="mant-hero-title">
+      <i class="bi bi-tools" style="color:#38bdf8"></i>
+      Mantenimiento Predictivo
+    </div>
+    <div class="mant-hero-sub">
+      {{ plan.generado_en }} &nbsp;·&nbsp; {{ plan.resumen.total_activos }} activos analizados
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px;z-index:1">
+    <!-- Salud global -->
+    <div class="health-badge">
+      <span class="health-score" style="color:{{ salud_color }}">{{ salud }}</span>
+      <span class="health-label">salud</span>
+    </div>
+
+    {% if request.query_params.get('ok') %}
+    <div style="background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.35);border-radius:8px;padding:8px 14px;color:#4ade80;font-size:.82rem">
+      <i class="bi bi-check-circle-fill"></i> {{ request.query_params.get('ok')|replace('+',' ') }}
+    </div>
+    {% endif %}
+
+    <button class="btn btn-primary btn-sm" onclick="abrirModal()">
+      <i class="bi bi-calendar-plus"></i> Programar
+    </button>
+  </div>
+</div>
+
+<!-- RISK CARDS -->
+{% set risk_cfg = [
+  ('critico', plan.resumen.criticos, '#dc2626', 'bi-x-octagon-fill',     'Crítico'),
+  ('alto',    plan.resumen.altos,    '#ea580c', 'bi-exclamation-triangle-fill','Alto'),
+  ('medio',   plan.resumen.medios,   '#d97706', 'bi-dash-circle-fill',   'Medio'),
+  ('bajo',    plan.resumen.bajos,    '#16a34a', 'bi-check-circle-fill',  'Bajo'),
+  ('vencidos',plan.resumen.vencidos, '#7c3aed', 'bi-clock-history',      'Vencidos'),
+  ('proximos',plan.resumen.proximos, '#2563eb', 'bi-calendar-event',     'Próximos'),
+] %}
+<div class="risk-grid">
+  {% for key, cnt, color, icon, label in risk_cfg %}
+  <a href="/mantenimiento{% if filtro_nivel == key %}{% else %}?nivel={{ key }}{% endif %}"
+     class="risk-card {% if filtro_nivel == key %}active{% endif %}"
+     style="color:{{ color }}">
+    <i class="bi {{ icon }} risk-icon"></i>
+    <div class="risk-num">{{ cnt }}</div>
+    <div class="risk-lbl">{{ label }}</div>
+  </a>
+  {% endfor %}
+</div>
+
+{% if filtro_nivel %}
+<div style="margin-bottom:14px">
+  <a href="/mantenimiento" class="btn btn-ghost btn-sm">
+    <i class="bi bi-x-circle"></i> Quitar filtro "{{ filtro_nivel }}"
+  </a>
+</div>
+{% endif %}
+
+<!-- MAIN GRID -->
+<div class="mant-grid">
+
+  <!-- RANKING -->
+  <div class="mant-card">
+    <div class="mant-card-head">
+      <div class="mant-card-title">
+        <i class="bi bi-bar-chart-steps" style="color:var(--primary)"></i>
+        Ranking de riesgo
+      </div>
+      <span style="font-size:.75rem;color:var(--text-secondary)">{{ scores|length }} activos</span>
+    </div>
+    {% if scores %}
+    <div class="mant-card-body" style="overflow-x:auto">
+      <table class="tbl-compact">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Activo</th>
+            <th>Score</th>
+            <th>Próx. mant.</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in scores %}
+          <tr>
+            <td style="color:var(--text-secondary);font-size:.75rem;width:28px">{{ loop.index }}</td>
+            <td>
+              <div style="font-weight:600;font-size:.84rem">{{ s.nombre }}</div>
+              <div style="font-size:.72rem;color:var(--text-secondary)">{{ s.codigo }} · {{ s.tipo_activo }}</div>
+            </td>
+            <td>
+              <div class="score-bar-wrap">
+                <div class="score-bar-bg">
+                  <div class="score-bar-fill" style="width:{{ s.score }}%;background:{{ s.color }}"></div>
+                </div>
+                <span class="score-num" style="color:{{ s.color }}">{{ s.score }}</span>
+              </div>
+              <span class="nivel-pill" style="background:{{ s.color }}18;color:{{ s.color }}">{{ s.nivel }}</span>
+            </td>
+            <td>
+              {% if s.dias_para_proximo == 0 %}
+              <span class="urg-vencido"><i class="bi bi-exclamation-circle-fill"></i> Vencido</span>
+              {% elif s.dias_para_proximo <= 7 %}
+              <span class="urg-critico">{{ s.dias_para_proximo }}d</span>
+              {% elif s.dias_para_proximo <= 14 %}
+              <span class="urg-pronto">{{ s.dias_para_proximo }}d</span>
+              {% else %}
+              <span class="urg-ok">{{ s.dias_para_proximo }}d</span>
+              {% endif %}
+              {% if s.fecha_predicha %}
+              <div style="font-size:.7rem;color:var(--text-secondary)">
+                {{ s.fecha_predicha.strftime('%d/%m/%Y') }}
+              </div>
+              {% endif %}
+            </td>
+            <td>
+              <a href="{{ s.enlace }}" class="act-btn" title="Ver detalle">
+                <i class="bi bi-arrow-up-right-square" style="font-size:.9rem"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-inbox empty-icon"></i>
+      Sin activos registrados.
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- COLUMNA DERECHA -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+
+    <!-- VENCIDOS -->
+    {% if plan.vencidos %}
+    <div class="mant-card" style="border-color:#dc2626">
+      <div class="mant-card-head" style="background:rgba(220,38,38,.06)">
+        <div class="mant-card-title" style="color:#dc2626">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          Vencidos ({{ plan.vencidos|length }})
+        </div>
+        <span style="font-size:.72rem;color:#dc2626;font-weight:600">¡Acción requerida!</span>
+      </div>
+      <div style="max-height:240px;overflow-y:auto">
+        <table class="tbl-compact">
+          <tbody>
+            {% for mp in plan.vencidos %}
+            <tr>
+              <td>
+                <div style="font-weight:600;font-size:.84rem">{{ mp.nombre_activo }}</div>
+                <div style="font-size:.73rem;color:var(--text-secondary)">
+                  {{ tipos_mantenimiento.get(mp.tipo, mp.tipo) }}
+                </div>
+              </td>
+              <td style="white-space:nowrap;color:#dc2626;font-size:.8rem">
+                <i class="bi bi-calendar-x"></i>
+                {{ mp.fecha_programada.strftime('%d/%m/%Y') if mp.fecha_programada }}
+              </td>
+              <td style="white-space:nowrap">
+                <form method="post" action="/mantenimiento/{{ mp.id }}/completar" style="display:inline">
+                  <input type="hidden" name="fecha_realizada"
+                         value="{{ now.strftime('%Y-%m-%d') if now else '' }}">
+                  <button type="submit" class="act-btn ok" title="Marcar completado">
+                    <i class="bi bi-check-lg" style="color:#16a34a;font-size:1rem"></i>
+                  </button>
+                </form>
+                {% if user.rol == 'admin' %}
+                <form method="post" action="/mantenimiento/{{ mp.id }}/cancelar" style="display:inline" onsubmit="return confirm('¿Cancelar este mantenimiento?')">
+                  <button type="submit" class="act-btn del" title="Cancelar">
+                    <i class="bi bi-x-lg" style="font-size:.85rem"></i>
+                  </button>
+                </form>
+                <form method="post" action="/mantenimiento/{{ mp.id }}/aplazar" style="display:inline-flex;gap:3px;align-items:center"><input type="date" name="nueva_fecha" required class="form-control form-control-sm" style="width:125px"><button class="act-btn" title="Aplazar"><i class="bi bi-calendar-plus"></i></button></form>
+                <form method="post" action="/mantenimiento/{{ mp.id }}/eliminar" style="display:inline" onsubmit="return confirm('¿Eliminar este mantenimiento pendiente?')"><button type="submit" class="act-btn del" title="Eliminar"><i class="bi bi-trash"></i></button></form>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- PRÓXIMOS -->
+    <div class="mant-card">
+      <div class="mant-card-head">
+        <div class="mant-card-title">
+          <i class="bi bi-calendar-check" style="color:#2563eb"></i>
+          Próximos programados
+        </div>
+        <span style="font-size:.75rem;color:var(--text-secondary)">{{ plan.proximos|length }}</span>
+      </div>
+      {% if plan.proximos %}
+      <div style="max-height:260px;overflow-y:auto;padding:8px 16px 4px">
+        {% for mp in plan.proximos %}
+        {% set dias = (mp.fecha_programada - now).days if now else 0 %}
+        {% set dot_color = '#dc2626' if dias <= 7 else '#f59e0b' if dias <= 14 else '#2563eb' %}
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background:{{ dot_color }};margin-top:5px"></div>
+          <div>
+            <div class="timeline-name">{{ mp.nombre_activo }}</div>
+            <div class="timeline-type">{{ tipos_mantenimiento.get(mp.tipo, mp.tipo) }}</div>
+          </div>
+          <div class="timeline-date">
+            <div style="color:{{ dot_color }};font-weight:600">en {{ dias }}d</div>
+            <div style="color:var(--text-secondary);font-size:.72rem">
+              {{ mp.fecha_programada.strftime('%d/%m/%Y') if mp.fecha_programada }}
+            </div>
+          </div>
+          <form method="post" action="/mantenimiento/{{ mp.id }}/completar" style="display:inline;margin-left:4px">
+            <input type="hidden" name="fecha_realizada"
+                   value="{{ mp.fecha_programada.strftime('%Y-%m-%d') if mp.fecha_programada else '' }}">
+            <button type="submit" class="act-btn ok" title="Marcar completado" style="align-self:center">
+              <i class="bi bi-check-lg" style="color:#16a34a;font-size:1rem"></i>
+            </button>
+          </form>
+          {% if user.rol == 'admin' %}<form method="post" action="/mantenimiento/{{ mp.id }}/aplazar" style="display:inline-flex;gap:3px;align-items:center"><input type="date" name="nueva_fecha" required class="form-control form-control-sm" style="width:125px"><button class="act-btn" title="Aplazar"><i class="bi bi-calendar-plus"></i></button></form><form method="post" action="/mantenimiento/{{ mp.id }}/eliminar" style="display:inline" onsubmit="return confirm('¿Eliminar este mantenimiento pendiente?')"><button type="submit" class="act-btn del" title="Eliminar"><i class="bi bi-trash"></i></button></form>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <i class="bi bi-calendar-check empty-icon" style="color:#22c55e;opacity:1"></i>
+        Sin mantenimientos programados pendientes.
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- ÚLTIMOS REALIZADOS -->
+    {% if plan.recientes %}
+    <div class="mant-card">
+      <div class="mant-card-head">
+        <div class="mant-card-title">
+          <i class="bi bi-clock-history" style="color:#16a34a"></i>
+          Últimos realizados
+        </div>
+      </div>
+      <div style="max-height:200px;overflow-y:auto">
+        <table class="tbl-compact">
+          <tbody>
+            {% for mp in plan.recientes %}
+            <tr>
+              <td>
+                <div style="font-weight:600;font-size:.84rem">{{ mp.nombre_activo }}</div>
+                <div style="font-size:.73rem;color:var(--text-secondary)">
+                  {{ tipos_mantenimiento.get(mp.tipo, mp.tipo) }}
+                </div>
+              </td>
+              <td style="color:#16a34a;white-space:nowrap;font-size:.8rem">
+                <i class="bi bi-check-circle"></i>
+                {{ mp.fecha_realizada.strftime('%d/%m/%Y') if mp.fecha_realizada else '—' }}
+              </td>
+              <td style="font-size:.78rem;color:var(--text-secondary);text-align:right">
+                {% if mp.coste_real %}
+                <span style="font-weight:600">{{ "%.0f€"|format(mp.coste_real) }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- ═══ MODAL PROGRAMAR ═══ -->
+<div id="modal-programar" class="modal-backdrop" onclick="if(event.target===this)cerrarModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">
+        <i class="bi bi-calendar-plus" style="color:var(--primary)"></i>
+        Programar mantenimiento
+      </div>
+      <button onclick="cerrarModal()" class="btn btn-ghost btn-xs">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+
+    <form method="post" action="/mantenimiento/programar">
+      <div class="form-row form-row-2">
+        <div class="form-group">
+          <label class="form-label">Tipo de activo</label>
+          <select name="tipo_activo" class="form-control" onchange="filtrarActivos(this.value)">
+            <option value="herramienta">🔧 Herramienta</option>
+            <option value="maquinaria">🚜 Maquinaria</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo de mantenimiento</label>
+          <select name="tipo" class="form-control">
+            {% for key, label in tipos_mantenimiento.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group" id="sel-herramienta-wrap">
+        <label class="form-label">Herramienta <span style="color:var(--danger)">*</span></label>
+        <select name="activo_id" class="form-control" id="sel-herramienta">
+          {% for h in herramientas %}
+          <option value="{{ h.id }}">{{ h.nombre }} ({{ h.codigo }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" id="sel-maquina-wrap" style="display:none">
+        <label class="form-label">Maquinaria <span style="color:var(--danger)">*</span></label>
+        <select name="activo_id" class="form-control" id="sel-maquina" disabled>
+          {% for m in maquinas %}
+          <option value="{{ m.id }}">{{ m.nombre }} ({{ m.codigo }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Descripción</label>
+        <input type="text" name="descripcion" class="form-control"
+               placeholder="Ej: Revisión general, cambio de aceite...">
+      </div>
+
+      <div class="form-row form-row-2">
+        <div class="form-group">
+          <label class="form-label">Fecha programada <span style="color:var(--danger)">*</span></label>
+          <input type="date" name="fecha_programada" class="form-control" required id="fecha-prog">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Repetir cada (días)</label>
+          <input type="number" name="intervalo_dias" class="form-control"
+                 min="1" max="730" placeholder="Sin repetición">
+        </div>
+      </div>
+
+      <div class="form-row form-row-2">
+        <div class="form-group">
+          <label class="form-label">Proveedor / Técnico</label>
+          <input type="text" name="proveedor_texto" class="form-control"
+                 placeholder="Taller o técnico responsable">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Coste estimado (€)</label>
+          <input type="number" name="coste_estimado" class="form-control" step="0.01" min="0">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Notas</label>
+        <textarea name="notas" class="form-control" rows="2"
+                  placeholder="Observaciones adicionales..."></textarea>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="bi bi-calendar-plus"></i> Programar mantenimiento
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="cerrarModal()">
+          Cancelar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('fecha-prog').value = new Date().toISOString().split('T')[0];
+
+function abrirModal() {
+  document.getElementById('modal-programar').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function cerrarModal() {
+  document.getElementById('modal-programar').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function filtrarActivos(tipo) {
+  const hw = document.getElementById('sel-herramienta-wrap');
+  const mw = document.getElementById('sel-maquina-wrap');
+  const hs = document.getElementById('sel-herramienta');
+  const ms = document.getElementById('sel-maquina');
+  if (tipo === 'herramienta') {
+    hw.style.display = 'block'; hs.disabled = false;
+    mw.style.display = 'none';  ms.disabled = true;
+  } else {
+    hw.style.display = 'none';  hs.disabled = true;
+    mw.style.display = 'block'; ms.disabled = false;
+  }
+}
+
+// Abrir modal automáticamente si hay parámetro ?programar en URL
+if (new URLSearchParams(location.search).has('programar')) abrirModal();
+</script>
+{% endblock %}

@@ -1,0 +1,6 @@
+tunnel: 1c76432c-6882-4ad1-8593-d54de2c29917
+credentials-file: C:\ProgramData\cloudflared\1c76432c-6882-4ad1-8593-d54de2c29917.json
+ingress:
+  - hostname: app.iasmrd.com
+    service: http://localhost:8000
+  - service: http_status:404

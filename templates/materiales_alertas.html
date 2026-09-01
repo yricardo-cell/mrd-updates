@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Alertas de stock — {{ app_name }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/materiales">Materiales</a><span class="sep">/</span>
+<span class="current">Alertas de stock</span>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">
+      <i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>Alertas de stock bajo
+    </div>
+    <div class="page-subtitle">
+      {% if total_bajo > 0 %}
+        <span class="text-danger fw-bold">{{ total_bajo }} referencia{% if total_bajo != 1 %}s{% endif %}</span> por debajo del mínimo
+      {% else %}
+        Todo el stock está en orden
+      {% endif %}
+    </div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/materiales" class="btn btn-ghost btn-sm"><i class="bi bi-arrow-left"></i> Materiales</a>
+    {% if total_bajo > 0 %}
+    <button class="btn btn-primary btn-sm" onclick="imprimirLista()">
+      <i class="bi bi-file-earmark-text"></i> Generar albarán de pedido
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+{% if total_bajo == 0 %}
+<div class="card">
+  <div class="card-body text-center py-5">
+    <i class="bi bi-check-circle-fill display-3 text-success d-block mb-3"></i>
+    <h4>Todo el stock está bien</h4>
+    <p class="text-muted">No hay materiales, ropa ni EPIs por debajo del mínimo configurado.</p>
+    <a href="/materiales" class="btn btn-primary mt-2">Ver todos los materiales</a>
+  </div>
+</div>
+
+{% else %}
+
+{# ── Resumen rápido ── #}
+<div class="row g-3 mb-4">
+  <div class="col-sm-4">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div style="font-size:2rem;font-weight:800;color:var(--danger)">{{ total_bajo }}</div>
+        <div class="text-muted small">referencias bajo mínimo</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div style="font-size:2rem;font-weight:800;color:var(--warning)">{{ grupos|length }}</div>
+        <div class="text-muted small">almacén{% if grupos|length != 1 %}es{% endif %} afectado{% if grupos|length != 1 %}s{% endif %}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        {% set total_falta = namespace(n=0) %}
+        {% for g in grupos %}
+          {% for m in g.materiales %}
+            {% set total_falta.n = total_falta.n + m.falta %}
+          {% endfor %}
+        {% endfor %}
+        <div style="font-size:2rem;font-weight:800;color:var(--info)">{{ "%.1f"|format(total_falta.n) }}</div>
+        <div class="text-muted small">unidades totales a reponer</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Lista por almacén ── #}
+{% for grupo in grupos %}
+<div class="card mb-3" id="print-section">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-title">
+      {% if grupo.almacen %}
+      <i class="bi bi-house-gear me-1"></i>
+      <a href="/almacenes/{{ grupo.almacen.id }}" style="color:inherit;text-decoration:none">{{ grupo.almacen.nombre }}</a>
+      {% else %}
+      <i class="bi bi-question-circle me-1"></i>Sin almacén asignado
+      {% endif %}
+    </div>
+    <span class="badge bg-danger">{{ grupo.materiales|length }} bajo mínimo</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Código</th>
+            <th>Artículo</th>
+            <th>Ubicación</th>
+            <th class="text-end">Stock actual</th>
+            <th class="text-end">Stock mínimo</th>
+            <th class="text-end text-danger">Faltan</th>
+            <th>Sugerencia</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in grupo.materiales %}
+          <tr>
+            <td><code>{{ m.codigo }}</code></td>
+            <td>
+              <a href="{{ m.url }}" style="color:var(--text);font-weight:500">{{ m.nombre }}</a>
+              {% if m.categoria %}
+              <div class="text-muted" style="font-size:.72rem">{{ m.tipo }} · {{ m.categoria }}</div>
+              {% endif %}
+            </td>
+            <td class="text-muted small">
+              {{ m.ubicacion or '—' }}
+            </td>
+            <td class="text-end fw-bold text-danger">{{ m.stock_actual }} {{ m.unidad or 'ud' }}</td>
+            <td class="text-end text-muted">{{ m.stock_minimo }} {{ m.unidad or 'ud' }}</td>
+            <td class="text-end">
+              <span class="badge bg-danger">
+                +{{ "%.1f"|format(m.falta) }} {{ m.unidad or 'ud' }}
+              </span>
+            </td>
+            <td>
+              {% if m.traslado_disponible and m.traslado_almacen %}
+              <a href="/multi-almacen" class="badge bg-warning text-dark text-decoration-none">
+                Mover hasta {{ "%.1f"|format(m.traslado_disponible) }} desde {{ m.traslado_almacen.nombre }}
+              </a>
+              {% else %}<span class="small text-muted">Preparar pedido</span>{% endif %}
+            </td>
+            <td>
+              <a href="{{ m.url }}" class="btn btn-ghost btn-sm" title="Ver ficha">
+                <i class="bi bi-eye"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% if grupo.almacen %}
+  <div class="card-footer" style="background:transparent;border-top:1px solid var(--border)">
+    <a href="/almacenes/{{ grupo.almacen.id }}?tab=mat" class="btn btn-ghost btn-sm">
+      <i class="bi bi-clipboard-check me-1"></i>Hacer inventario express
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+{# ── Lista de compra imprimible ── #}
+<div class="card mt-3" id="lista-compra" style="display:none">
+  <div class="card-header">
+    <div><div class="card-title"><i class="bi bi-cart me-2"></i>ALBARÁN DE PEDIDO / REPOSICIÓN</div><div class="small">{{ company_name }} · Ref. {{ pedido_referencia }} · {{ pedido_fecha }}</div></div>
+  </div>
+  <div class="card-body">
+    <div class="row g-3 mb-3"><div class="col-6"><strong>Proveedor:</strong> ______________________________</div><div class="col-6"><strong>Preparado por:</strong> {{ user.nombre }}</div><div class="col-12"><strong>Observaciones:</strong> ________________________________________________________________</div></div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead class="table-dark">
+          <tr><th>Artículo</th><th>Tipo / talla</th><th>Código</th><th>Ref. proveedor</th><th>Cantidad a pedir</th><th>Almacén</th></tr>
+        </thead>
+        <tbody>
+          {% for grupo in grupos %}
+          {% for m in grupo.materiales %}
+          <tr>
+            <td>{{ m.nombre }}</td>
+            <td>{{ m.tipo }}</td>
+            <td><code>{{ m.codigo }}</code></td>
+            <td>{{ m.referencia_proveedor or '—' }}</td>
+            <td class="fw-bold">{{ "%.1f"|format(m.falta) }} {{ m.unidad or 'ud' }}</td>
+            <td>{{ grupo.almacen.nombre if grupo.almacen else '—' }}</td>
+          </tr>
+          {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-4 d-flex justify-content-between"><span>Firma almacén: ____________________</span><span>Aprobación: ____________________</span></div>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function imprimirLista() {
+  document.getElementById('lista-compra').style.display = 'block';
+  window.print();
+  setTimeout(function() {
+    document.getElementById('lista-compra').style.display = 'none';
+  }, 500);
+}
+</script>
+<style>
+@media print {
+  body * { visibility: hidden !important; }
+  #lista-compra, #lista-compra * { visibility: visible !important; }
+  #lista-compra { position:absolute;left:0;top:0;width:100%;display:block !important;border:0 !important; }
+  .btn, .page-header-row, nav, .sidebar, header { display: none !important; }
+  #lista-compra { display: block !important; }
+  .card { break-inside: avoid; }
+}
+</style>
+{% endblock %}

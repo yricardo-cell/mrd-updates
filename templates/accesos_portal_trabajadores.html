@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Accesos de trabajadores{% endblock %}
+{% block content %}
+<div class="page-header"><div><p class="eyebrow">PORTAL DEL TRABAJADOR</p><h1><i class="bi bi-phone"></i> Accesos para enviar</h1><p>Número, enlace y mensaje preparado para cada trabajador.</p></div><a class="btn btn-outline-secondary" href="/trabajadores">Volver</a></div>
+{% if request.query_params.get('ok') == 'preparados' %}<div class="alert alert-success">Se prepararon {{ request.query_params.get('n','0') }} accesos nuevos. No se cambió ningún PIN personal existente.</div>{% endif %}
+<div class="alert alert-info"><strong>PIN inicial: 123456.</strong> Solo aparece en cuentas nuevas y obliga a crear un PIN personal al primer acceso.</div>
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <form method="post" action="/accesos-portal-trabajadores/preparar"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><button class="btn btn-primary"><i class="bi bi-key"></i> Preparar accesos que faltan</button></form>
+  <button class="btn btn-outline-primary" id="copy-all"><i class="bi bi-clipboard"></i> Copiar todos los mensajes</button>
+</div>
+<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Trabajador</th><th>Número</th><th>PIN inicial</th><th>Acciones</th></tr></thead><tbody>
+{% for acceso in accesos %}<tr><td><strong>{{ acceso.nombre }}</strong><br><small>{{ acceso.telefono }}</small></td><td><code>{{ acceso.codigo }}</code></td><td>{{ acceso.pin_provisional }}</td><td><button type="button" class="btn btn-sm btn-outline-secondary copy-one" data-message="{{ acceso.mensaje|e }}">Copiar</button>{% if acceso.whatsapp_url %} <a class="btn btn-sm btn-success" href="{{ acceso.whatsapp_url }}" target="_blank" rel="noopener">WhatsApp</a>{% endif %}</td></tr>{% else %}<tr><td colspan="4">No hay trabajadores activos en este almacén.</td></tr>{% endfor %}
+</tbody></table></div>
+<script>const messages={{ accesos|map(attribute='mensaje')|list|tojson }};const copy=text=>navigator.clipboard.writeText(text);document.getElementById('copy-all').addEventListener('click',()=>copy(messages.join('\n\n──────────\n\n')));document.querySelectorAll('.copy-one').forEach(button=>button.addEventListener('click',()=>copy(button.dataset.message)))</script>
+{% endblock %}

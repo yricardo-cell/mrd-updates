@@ -1,0 +1,75 @@
+.worker-login-page {
+  min-height: 100vh;
+  background:
+    repeating-linear-gradient(180deg, #ffffff04 0px, #ffffff04 1px, transparent 1px, transparent 3px),
+    radial-gradient(circle at 80% 10%, #22d3ee38, transparent 34%),
+    radial-gradient(circle at 12% 88%, #7b61ff28, transparent 42%),
+    linear-gradient(145deg, #08080b, #07161c);
+  -webkit-tap-highlight-color: transparent;
+}
+.worker-login-shell { min-height: 100vh; display: grid; place-items: center; padding: calc(22px + env(safe-area-inset-top)) 22px calc(22px + env(safe-area-inset-bottom)); }
+.worker-login-card {
+  position: relative; overflow: hidden;
+  width: min(440px, 100%); padding: 34px; border-radius: 26px;
+  background: linear-gradient(160deg,#14161de6,#1a0d0de6); backdrop-filter: blur(14px);
+  border: 1px solid #22d3ee2a;
+  clip-path: polygon(20px 0,100% 0,100% calc(100% - 20px),calc(100% - 20px) 100%,0 100%,0 20px);
+  box-shadow: 0 1px 2px #00000040, 0 26px 50px -22px #000000a0, 0 0 40px -18px #22d3ee38;
+  text-align: center; color: #e7ebf2;
+}
+.worker-login-card::before{content:'';position:absolute;left:-20%;right:-20%;height:3px;top:0;
+  background:linear-gradient(90deg,transparent,#22d3ee,#7b61ff,#22d3ee,transparent);
+  background-size:220% 100%;
+  box-shadow:0 0 14px 1px #22d3ee90;
+  animation:workerLoginScan 2.5s linear infinite,hueDrift 5s ease-in-out infinite}
+@keyframes workerLoginScan{0%{transform:translateY(-4px);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translateY(220px);opacity:0}}
+@keyframes hueDrift{0%{background-position:0% 0}50%{background-position:100% 0}100%{background-position:0% 0}}
+@media(prefers-reduced-motion:reduce){.worker-login-card::before{animation:none;display:none}}
+.worker-login-card h1 { margin: 8px 0; font-size: clamp(1.65rem, 6vw, 2.2rem); color: #e7ebf2; }
+.worker-login-card > p { color: #8493a8; margin-bottom: 22px; }
+.worker-login-card label { display: block; text-align: left; margin-top: 14px; font-size: .78rem; font-weight: 700; color: #8493a8; letter-spacing: .04em; text-transform: uppercase; }
+.worker-login-card input {
+  font-size: 1.1rem; padding: 13px 14px; margin-top: 6px; width: 100%;
+  border: 1px solid #22d3ee2a; border-radius: 12px; background: #ffffff08; color: #e7ebf2;
+  font-family: ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+}
+.worker-login-card input::placeholder{color:#5c6f89}
+.worker-login-card input:focus{outline:none;border-color:#22d3ee;box-shadow:0 0 0 4px #22d3ee20,0 0 14px -4px #22d3ee38}
+.worker-login-card input[name="pin"] { letter-spacing: .35em; font-size: 1.5rem; text-align: center; }
+.worker-login-kicker{display:block;font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:.68rem;font-weight:700;letter-spacing:.16em;color:#67e8f9;text-transform:uppercase;margin-bottom:6px;text-shadow:0 0 8px #22d3ee38}
+.worker-login-kicker::before{content:'// '}
+.worker-login-mark {
+  position: relative; width: 168px; height: 84px; margin: 0 auto 16px; padding: 12px 16px; border-radius: 18px;
+  display: grid; place-items: center; background: #fff;
+  animation: markPulseIrid 4.5s ease-in-out infinite;
+}
+.worker-login-mark img{width:100%;height:100%;object-fit:contain;display:block}
+.worker-login-mark::before,.worker-login-mark::after{content:'';position:absolute;width:12px;height:12px;opacity:.9;pointer-events:none;animation:bracketIrid 4.5s ease-in-out infinite}
+.worker-login-mark::before{top:-5px;left:-5px;border-top:2px solid;border-left:2px solid}
+.worker-login-mark::after{bottom:-5px;right:-5px;border-bottom:2px solid;border-right:2px solid}
+@keyframes markPulseIrid{
+  0%{box-shadow:0 14px 30px #22d3ee50,0 0 0 0 #22d3ee55}
+  33%{box-shadow:0 14px 30px #7b61ff50,0 0 0 12px #7b61ff00}
+  66%{box-shadow:0 14px 30px #00e5ff50,0 0 0 0 #00e5ff00}
+  100%{box-shadow:0 14px 30px #22d3ee50,0 0 0 0 #22d3ee00}
+}
+@keyframes bracketIrid{0%{border-color:#22d3ee}33%{border-color:#7b61ff}66%{border-color:#00e5ff}100%{border-color:#22d3ee}}
+@media(prefers-reduced-motion:reduce){.worker-login-mark{animation:none;box-shadow:0 14px 30px #22d3ee50}.worker-login-mark::before,.worker-login-mark::after{animation:none;border-color:#22d3ee}}
+.worker-login-card .portal-primary { width: 100%; font-size: 1rem; min-height: 44px; }
+.worker-admin-link { display: inline-block; margin-top: 22px; color: #8493a8; text-decoration: none; }
+.worker-admin-link:hover{color:#67e8f9}
+.portal-logout { margin-left: auto; color: #fff; text-decoration: none; padding: 9px 12px; border: 1px solid #ffffff55; border-radius: 10px; min-height: 40px; display: inline-flex; align-items: center; }
+.catalog-help { margin: 4px 0 0; color: #66758a; font-size: .84rem; }
+.request-line { grid-template-columns: minmax(190px,1.25fr) 120px minmax(170px,1.5fr) 80px 72px 38px; }
+.catalog-picker { min-width: 0; border: 1px solid #a5f3fc; border-radius: 10px; padding: 10px 11px; background: #ecfeff; color: #0e4a5c; font-weight: 700; }
+@media(max-width: 700px) {
+  .request-line { grid-template-columns: 1fr 86px 38px; padding: 12px; border: 1px solid #dce5ef; border-radius: 14px; }
+  .request-line .catalog-picker { grid-column: 1/-1; }
+  .request-line select[name="tipo"] { grid-column: 1/-1; }
+  .request-line input[name="descripcion"] { grid-column: 1/-1; grid-row: auto; }
+  .request-line input[name="talla"] { grid-column: 1; }
+  .request-line input[name="cantidad"] { grid-column: 2; }
+  .request-line .remove-line { grid-column: 3; grid-row: auto; }
+}
+@media(max-width: 520px) { .worker-login-card { padding: 26px 20px; } .portal-logout { font-size: 0; } .portal-logout i { font-size: 1.1rem; } }
+

@@ -1,0 +1,501 @@
+{% extends "base.html" %}
+{% block title %}Acceso remoto — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <h2 class="mrd-page-title"><i class="bi bi-globe me-2"></i>Acceso remoto</h2>
+  <div class="d-flex gap-2 flex-wrap">
+    <button class="btn btn-sm btn-success" onclick="arAbrirApp()" title="Abrir aplicación">
+      <i class="bi bi-box-arrow-up-right me-1"></i>Abrir aplicación
+    </button>
+    <button class="btn btn-sm btn-info text-white" onclick="arAbrirScan()" title="Abrir escáner">
+      <i class="bi bi-qr-code-scan me-1"></i>Abrir escáner
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="arCopiarURL()" title="Copiar URL pública">
+      <i class="bi bi-clipboard me-1"></i>Copiar URL
+    </button>
+    <button class="btn btn-sm btn-outline-primary" onclick="arProbar()">
+      <i class="bi bi-broadcast me-1"></i>Probar conexión
+    </button>
+    <button class="btn btn-sm btn-warning text-dark" onclick="arReiniciarCF()" title="Reiniciar cloudflared">
+      <i class="bi bi-arrow-repeat me-1"></i>Reiniciar cloudflared
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="arRefrescar()">
+      <i class="bi bi-arrow-clockwise me-1" id="ar-refresh-icon"></i>Actualizar
+    </button>
+  </div>
+</div>
+
+<div id="ar-alert" class="alert py-2 mb-3 d-none" role="alert"></div>
+
+<div class="row g-3 mb-3">
+  <!-- Estado general -->
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="mrd-card h-100">
+      <div class="mrd-card-header">
+        <i class="bi bi-circle-fill me-2" id="ar-dot" style="color:#6c757d"></i>Estado del acceso
+      </div>
+      <div class="p-3">
+        <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+          <span class="badge fs-6 px-3 py-2" id="ar-badge" style="background:#6c757d">Comprobando</span>
+          <span class="badge bg-secondary" id="ar-provider-badge">—</span>
+        </div>
+        <div class="text-muted small mb-3" id="ar-message">—</div>
+        <table class="table table-sm table-borderless mb-0" style="font-size:.82rem">
+          <tbody>
+            <tr>
+              <td class="text-muted" style="width:42%">URL pública</td>
+              <td><a id="ar-public-url" href="#" target="_blank" class="text-break" style="font-size:.78rem">—</a></td>
+            </tr>
+            <tr>
+              <td class="text-muted">URL local</td>
+              <td><a id="ar-local-url" href="#" target="_blank" class="text-break" style="font-size:.78rem">—</a></td>
+            </tr>
+            <tr><td class="text-muted">HTTPS</td><td id="ar-https">—</td></tr>
+            <tr><td class="text-muted">Latencia</td><td id="ar-latency">—</td></tr>
+            <tr><td class="text-muted">Diagnóstico</td><td id="ar-diag-summary">—</td></tr>
+            <tr><td class="text-muted">Última comprobación</td><td id="ar-checked" style="font-size:.7rem">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Servicios -->
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="mrd-card h-100">
+      <div class="mrd-card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-gear-fill me-2"></i>Servicios y Cloudflare</span>
+        <span id="ar-diag-badge" class="badge bg-secondary">—</span>
+      </div>
+      <div class="p-3">
+        <table class="table table-sm table-borderless mb-3" style="font-size:.82rem">
+          <tbody>
+            <tr>
+              <td class="text-muted" style="width:52%">Cloudflare conectado</td>
+              <td id="ar-cf-connected">—</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Servicio cloudflared</td>
+              <td id="ar-cf-svc">—</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Servicio MRDToolControl</td>
+              <td id="ar-svc-mrd">—</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Túnel</td>
+              <td id="ar-cf-tunnel">—</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Dominio</td>
+              <td id="ar-cf-hostname">—</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Versión cloudflared</td>
+              <td id="ar-cf-version">—</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Ver logs -->
+        <button class="btn btn-sm btn-outline-secondary w-100 mb-2" onclick="arVerLogs()" id="ar-logs-btn">
+          <i class="bi bi-terminal me-1"></i>Ver logs de cloudflared
+        </button>
+        <div id="ar-logs-box" class="d-none">
+          <pre id="ar-logs-pre" class="bg-dark text-light rounded p-2 mb-0"
+               style="max-height:150px;overflow-y:auto;font-size:.68rem;white-space:pre-wrap"></pre>
+        </div>
+
+        <!-- Diagnóstico detallado -->
+        <div id="ar-diag-list" class="mt-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR -->
+  <div class="col-12 col-xl-4">
+    <div class="mrd-card h-100">
+      <div class="mrd-card-header"><i class="bi bi-qr-code me-2"></i>Código QR — Escáner</div>
+      <div class="p-3 d-flex flex-column align-items-center">
+        <div id="ar-qr-wrap"
+             style="background:#fff;padding:10px;border-radius:12px;min-width:160px;min-height:160px;
+                    display:flex;align-items:center;justify-content:center;
+                    border:1px solid rgba(0,0,0,.1);box-shadow:0 2px 8px rgba(0,0,0,.07)">
+          <span class="spinner-border spinner-border-sm text-secondary"></span>
+        </div>
+        <div class="text-muted mt-2 text-center" style="font-size:.68rem;word-break:break-all;max-width:220px"
+             id="ar-qr-label">Cargando…</div>
+        <div class="d-flex gap-2 mt-3 flex-wrap justify-content-center">
+          <button class="btn btn-sm btn-outline-primary" onclick="arDescargarQR()">
+            <i class="bi bi-download me-1"></i>Descargar QR
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="arCopiarScanUrl()">
+            <i class="bi bi-clipboard me-1"></i>Copiar URL scan
+          </button>
+          <button class="btn btn-sm btn-outline-info" onclick="arAbrirScan()">
+            <i class="bi bi-qr-code-scan me-1"></i>Abrir escáner
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Proveedores detectados -->
+<div class="mrd-card mb-3">
+  <div class="mrd-card-header"><i class="bi bi-diagram-3 me-2"></i>Proveedores detectados</div>
+  <div class="p-3" id="ar-providers-list">
+    <span class="text-muted small">Cargando…</span>
+  </div>
+</div>
+
+<!-- Configuración rápida -->
+<div class="mrd-card">
+  <div class="mrd-card-header d-flex align-items-center justify-content-between">
+    <span><i class="bi bi-sliders me-2"></i>Configuración rápida</span>
+    <a href="/cloudflare" class="btn btn-sm btn-outline-info">
+      <i class="bi bi-cloud-check me-1"></i>Configuración Cloudflare completa
+    </a>
+  </div>
+  <div class="p-3">
+    <form id="ar-quick-form" onsubmit="arGuardarConfig(event)">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <div class="row g-3 align-items-end">
+        <div class="col-12 col-md-5">
+          <label class="form-label small fw-semibold">PUBLIC_URL (URL pública completa)</label>
+          <input type="url" class="form-control form-control-sm" name="cf_public_url"
+                 id="inp-public-url" placeholder="https://app.iasmrd.com">
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label small fw-semibold">Proveedor preferido</label>
+          <select class="form-select form-select-sm" name="preferred_provider" id="sel-provider">
+            <option value="auto">Auto (recomendado)</option>
+            <option value="cloudflare">Cloudflare</option>
+            <option value="tailscale">Tailscale</option>
+            <option value="local">Red local</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-2">
+          <label class="form-label small fw-semibold">Puerto</label>
+          <input type="number" class="form-control form-control-sm" name="port"
+                 id="inp-port" value="8000" min="1" max="65535">
+        </div>
+        <div class="col-12 col-md-2 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary btn-sm w-100">
+            <i class="bi bi-floppy me-1"></i>Guardar
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── Estado global ──────────────────────────────────────────────────────────────
+let _scanUrl = 'https://app.iasmrd.com/scan';
+let _publicUrl = 'https://app.iasmrd.com';
+let _qrB64 = '';
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function _alert(msg, type) {
+  const a = document.getElementById('ar-alert');
+  a.className = `alert alert-${type} py-2 mb-3`;
+  a.textContent = msg;
+  a.classList.remove('d-none');
+  setTimeout(() => a.classList.add('d-none'), 8000);
+}
+
+function _dt(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('es-ES', {
+      day:'2-digit', month:'2-digit', year:'numeric',
+      hour:'2-digit', minute:'2-digit', second:'2-digit'
+    });
+  } catch { return iso; }
+}
+
+function _csrf() {
+  return (document.cookie.split(';').find(c => c.trim().startsWith('mrd_csrf=')) || '').split('=')[1] || '';
+}
+
+// ── Actualizar todo ────────────────────────────────────────────────────────────
+async function arRefrescar() {
+  const icon = document.getElementById('ar-refresh-icon');
+  icon.classList.add('spin-anim');
+  try {
+    await Promise.all([loadArStatus(), loadCfStatus()]);
+  } finally {
+    icon.classList.remove('spin-anim');
+  }
+}
+
+// ── Estado de acceso remoto ────────────────────────────────────────────────────
+async function loadArStatus() {
+  try {
+    const r = await fetch('/api/remote-access/status');
+    if (!r.ok) return;
+    const d = await r.json();
+
+    const colors = { online:'#198754', private:'#0d6efd', local_only:'#6c757d', error:'#dc3545' };
+    const labels = { online:'EN LÍNEA', private:'PRIVADO', local_only:'RED LOCAL', error:'ERROR' };
+    const c = colors[d.status] || '#6c757d';
+
+    const badge = document.getElementById('ar-badge');
+    badge.textContent = labels[d.status] || (d.status||'').toUpperCase();
+    badge.style.background = c;
+    document.getElementById('ar-dot').style.color = c;
+    document.getElementById('ar-provider-badge').textContent = (d.primary_provider||'').toUpperCase();
+    document.getElementById('ar-message').textContent = d.message || '—';
+
+    const pubEl = document.getElementById('ar-public-url');
+    pubEl.textContent = d.public_url || 'No disponible';
+    if (d.public_url) { pubEl.href = d.public_url; _publicUrl = d.public_url; }
+    else pubEl.removeAttribute('href');
+
+    const locEl = document.getElementById('ar-local-url');
+    locEl.textContent = d.local_url || '—';
+    if (d.local_url) locEl.href = d.local_url;
+
+    document.getElementById('ar-https').innerHTML = d.https
+      ? '<i class="bi bi-shield-check text-success me-1"></i>Activo'
+      : '<i class="bi bi-shield-x text-danger me-1"></i>No activo';
+
+    document.getElementById('ar-latency').textContent = d.latency_ms != null ? d.latency_ms + ' ms' : '—';
+    document.getElementById('ar-checked').textContent = _dt(d.checked_at);
+
+    // Resumen diagnóstico en campo "Diagnóstico"
+    const diag = d.diagnostics || {};
+    const diagOk = Object.values(diag).filter(Boolean).length;
+    const diagTotal = Object.keys(diag).length;
+    if (diagTotal > 0) {
+      const col = diagOk === diagTotal ? 'text-success' : (diagOk >= diagTotal * 0.7 ? 'text-warning' : 'text-danger');
+      document.getElementById('ar-diag-summary').innerHTML =
+        `<span class="${col}">${diagOk}/${diagTotal} OK</span>`;
+    } else {
+      document.getElementById('ar-diag-summary').innerHTML =
+        '<span class="text-muted">Pulsa "Probar conexión"</span>';
+    }
+
+    // Estado MRDToolControl desde diagnostics si existe
+    if (d.diagnostics && d.diagnostics.app_running !== undefined) {
+      document.getElementById('ar-svc-mrd').innerHTML = d.diagnostics.app_running
+        ? '<span class="badge bg-success" style="font-size:.65rem">EN EJECUCIÓN</span>'
+        : '<span class="badge bg-danger" style="font-size:.65rem">DETENIDO</span>';
+    }
+
+    // QR — siempre apunta a scan_url (https://app.iasmrd.com/scan)
+    if (d.scan_url) {
+      _scanUrl = d.scan_url;
+      document.getElementById('ar-qr-label').textContent = d.scan_url;
+    }
+    if (d.qr) {
+      _qrB64 = d.qr;
+      document.getElementById('ar-qr-wrap').innerHTML =
+        `<img src="data:image/png;base64,${d.qr}" style="max-width:170px;max-height:170px">`;
+    }
+
+    // Proveedores
+    const provs = d.providers || [];
+    const picons = { cloudflare:'bi-cloud-check', ngrok:'bi-box-arrow-up-right', tailscale:'bi-shield-lock', local:'bi-house-fill' };
+    document.getElementById('ar-providers-list').innerHTML = provs.length === 0
+      ? '<span class="text-muted small">Sin proveedores detectados</span>'
+      : `<div class="row g-2">${provs.map(p => `
+          <div class="col-12 col-md-6 col-xl-3">
+            <div class="border rounded p-2" style="font-size:.78rem">
+              <div class="d-flex align-items-center gap-2 mb-1">
+                <i class="bi ${picons[p.name]||'bi-circle'} text-primary"></i>
+                <span class="fw-semibold">${p.label}</span>
+                ${p.name===d.primary_provider?'<span class="badge bg-primary ms-auto" style="font-size:.6rem">Principal</span>':''}
+              </div>
+              ${p.url?`<div class="text-muted text-break" style="font-size:.68rem">${p.url}</div>`:'<div class="text-muted" style="font-size:.68rem">Sin URL</div>'}
+              <div class="mt-1">
+                <span class="badge ${p.active?'bg-success':'bg-secondary'}" style="font-size:.6rem">${p.active?'Activo':'Inactivo'}</span>
+                <span class="badge bg-secondary ms-1" style="font-size:.6rem">${p.type||''}</span>
+              </div>
+            </div>
+          </div>`).join('')}</div>`;
+
+    // Rellenar form
+    if (d.public_url) { const i=document.getElementById('inp-public-url'); if(i&&!i.value) i.value=d.public_url; }
+    if (d.port) { const i=document.getElementById('inp-port'); if(i) i.value=d.port; }
+
+  } catch(e) { console.warn('loadArStatus:', e); }
+}
+
+// ── Estado Cloudflare ──────────────────────────────────────────────────────────
+async function loadCfStatus() {
+  try {
+    const r = await fetch('/api/cloudflare/status');
+    if (!r.ok) return;
+    const d = await r.json();
+
+    // Cloudflare conectado
+    document.getElementById('ar-cf-connected').innerHTML = d.connected
+      ? '<i class="bi bi-check-circle-fill text-success me-1"></i><span class="text-success">Conectado</span>'
+      : d.service_running
+        ? '<i class="bi bi-exclamation-circle-fill text-warning me-1"></i><span class="text-warning">Servicio activo</span>'
+        : '<i class="bi bi-x-circle-fill text-danger me-1"></i><span class="text-danger">Desconectado</span>';
+
+    // Servicio cloudflared
+    const svcRunning = d.service_running || d.process_running;
+    document.getElementById('ar-cf-svc').innerHTML = svcRunning
+      ? `<span class="badge bg-success" style="font-size:.65rem">${d.service_state || 'EN EJECUCIÓN'}</span>`
+      : `<span class="badge bg-danger" style="font-size:.65rem">${d.service_state || 'DETENIDO'}</span>`;
+
+    document.getElementById('ar-cf-tunnel').textContent  = d.tunnel_name || '—';
+    document.getElementById('ar-cf-hostname').textContent = d.hostname || '—';
+    document.getElementById('ar-cf-version').textContent  = d.cloudflared_version ? 'v'+d.cloudflared_version : '—';
+
+  } catch(e) { /* CF puede no estar configurado aún */ }
+}
+
+// ── Probar conexión (diagnóstico completo) ─────────────────────────────────────
+async function arProbar() {
+  const list  = document.getElementById('ar-diag-list');
+  const badge = document.getElementById('ar-diag-badge');
+  list.innerHTML = '<div class="text-center text-muted py-2 small"><span class="spinner-border spinner-border-sm me-2"></span>Ejecutando diagnóstico…</div>';
+  try {
+    const r = await fetch('/api/cloudflare/test', { method:'POST', headers:{'X-CSRF-Token':_csrf()} });
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    badge.textContent = d.healthy ? 'OK' : 'PROBLEMAS';
+    badge.className = 'badge ' + (d.healthy ? 'bg-success' : 'bg-danger');
+    list.innerHTML = (d.checks||[]).map(c => `
+      <div class="d-flex align-items-start gap-2 px-1 py-1 border-bottom" style="font-size:.72rem">
+        <i class="bi ${c.ok?'bi-check-circle-fill text-success':'bi-x-circle-fill text-danger'} mt-1 flex-shrink-0"></i>
+        <div>
+          <span class="fw-semibold">${c.label}</span>
+          ${c.ms!=null?`<span class="text-muted ms-1">(${c.ms}ms)</span>`:''}
+          <div class="text-muted" style="font-size:.68rem">${c.detail||''}</div>
+        </div>
+      </div>`).join('');
+
+    const passed = (d.checks||[]).filter(c=>c.ok).length;
+    const total  = (d.checks||[]).length;
+    if (total > 0) {
+      const col = passed === total ? 'text-success' : (passed >= total*0.7 ? 'text-warning' : 'text-danger');
+      document.getElementById('ar-diag-summary').innerHTML = `<span class="${col}">${passed}/${total} OK</span>`;
+    }
+    _alert(`Diagnóstico: ${d.healthy?'Todo correcto':'Hay problemas'}.`, d.healthy?'success':'warning');
+  } catch(e) {
+    list.innerHTML = '<div class="text-danger small p-2">Error al ejecutar diagnóstico: '+e.message+'</div>';
+    badge.textContent = 'ERROR'; badge.className = 'badge bg-danger';
+  }
+}
+
+// ── Reiniciar cloudflared ──────────────────────────────────────────────────────
+async function arReiniciarCF() {
+  if (!confirm('¿Reiniciar el servicio cloudflared? La conexión se interrumpirá brevemente.')) return;
+  _alert('Reiniciando cloudflared…', 'info');
+  try {
+    const r = await fetch('/api/cloudflare/restart', {
+      method:'POST',
+      headers:{'X-CSRF-Token':_csrf(),'Content-Type':'application/json'}
+    });
+    const d = await r.json();
+    if (d.ok || r.ok) {
+      _alert('cloudflared reiniciado. Reconectando en unos segundos…', 'success');
+      setTimeout(arRefrescar, 4000);
+    } else {
+      _alert('Error al reiniciar: ' + (d.error || d.detail || 'desconocido'), 'danger');
+    }
+  } catch(e) {
+    _alert('No se pudo contactar con el servidor: ' + e.message, 'danger');
+  }
+}
+
+// ── Ver logs de cloudflared ────────────────────────────────────────────────────
+async function arVerLogs() {
+  const box = document.getElementById('ar-logs-box');
+  const pre = document.getElementById('ar-logs-pre');
+  const btn = document.getElementById('ar-logs-btn');
+  if (!box.classList.contains('d-none')) {
+    box.classList.add('d-none');
+    btn.innerHTML = '<i class="bi bi-terminal me-1"></i>Ver logs de cloudflared';
+    return;
+  }
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cargando…';
+  try {
+    const r = await fetch('/api/service/logs/cloudflared?lines=50');
+    const d = await r.json();
+    pre.textContent = Array.isArray(d.lines) ? d.lines.join('\n') : (d.error || 'Sin logs disponibles');
+    box.classList.remove('d-none');
+    btn.innerHTML = '<i class="bi bi-terminal me-1"></i>Ocultar logs';
+    pre.scrollTop = pre.scrollHeight;
+  } catch(e) {
+    pre.textContent = 'No se pudieron obtener los logs: ' + e.message;
+    box.classList.remove('d-none');
+    btn.innerHTML = '<i class="bi bi-terminal me-1"></i>Ocultar logs';
+  }
+}
+
+// ── Botones de acción ──────────────────────────────────────────────────────────
+function arAbrirApp() {
+  window.open(_publicUrl || 'https://app.iasmrd.com', '_blank');
+}
+
+function arAbrirScan() {
+  window.open(_scanUrl || 'https://app.iasmrd.com/scan', '_blank');
+}
+
+function arCopiarURL() {
+  const url = _publicUrl || 'https://app.iasmrd.com';
+  navigator.clipboard.writeText(url)
+    .then(() => _alert('URL copiada: ' + url, 'success'))
+    .catch(() => _alert('URL: ' + url, 'info'));
+}
+
+function arCopiarScanUrl() {
+  const url = _scanUrl || 'https://app.iasmrd.com/scan';
+  navigator.clipboard.writeText(url)
+    .then(() => _alert('URL de escaneo copiada: ' + url, 'success'))
+    .catch(() => _alert('URL: ' + url, 'info'));
+}
+
+function arDescargarQR() {
+  if (!_qrB64) { _alert('QR no disponible. Pulsa Actualizar primero.', 'warning'); return; }
+  const a = document.createElement('a');
+  a.href = 'data:image/png;base64,' + _qrB64;
+  a.download = 'QR_IASMRD_scan.png';
+  a.click();
+}
+
+// ── Guardar configuración ──────────────────────────────────────────────────────
+async function arGuardarConfig(e) {
+  e.preventDefault();
+  const data = {};
+  new FormData(document.getElementById('ar-quick-form')).forEach((v, k) => {
+    if (k === '_csrf_token') return;
+    if (k === 'port') { data[k] = parseInt(v) || 8000; return; }
+    data[k] = v.trim();
+  });
+  if (data['cf_public_url']) data['manual_url'] = data['cf_public_url'];
+  try {
+    const r = await fetch('/api/cloudflare/config', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRF-Token':_csrf()},
+      body: JSON.stringify(data),
+    });
+    const d = await r.json();
+    _alert(r.ok ? 'Configuración guardada.' : (d.detail||'Error.'), r.ok?'success':'danger');
+    if (r.ok) setTimeout(arRefrescar, 1000);
+  } catch(e) { _alert('Error de red: '+e.message, 'danger'); }
+}
+
+// ── Animación de giro ──────────────────────────────────────────────────────────
+const _sty = document.createElement('style');
+_sty.textContent = '.spin-anim{animation:spin .7s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}';
+document.head.appendChild(_sty);
+
+// ── Inicio ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  arRefrescar();
+  setInterval(loadArStatus, 30000);
+  setInterval(loadCfStatus, 60000);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Centro de Patio{% endblock %}
+{% block breadcrumb %}<a href="/">Inicio</a><span class="sep">/</span><span class="current">Centro de Patio</span>{% endblock %}
+{% block content %}
+<style>
+.patio-hero{padding:22px;border-radius:18px;background:linear-gradient(135deg,#111827,#1f2937 58%,#0f766e);color:#fff;box-shadow:0 18px 42px rgba(15,23,42,.18)}
+.patio-hero h1{font-size:clamp(1.45rem,3vw,2.15rem);margin:0}.patio-hero p{margin:7px 0 0;color:#d1fae5}
+.patio-actions{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px;margin:16px 0}.patio-action{min-height:78px;border-radius:14px;padding:12px;text-decoration:none;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;gap:10px;font-weight:700;color:var(--text-primary);box-shadow:0 6px 18px rgba(15,23,42,.06);font-size:.88rem}.patio-action i{font-size:1.35rem;color:var(--primary);flex-shrink:0}
+.patio-section-label{font-size:.7rem;font-weight:700;letter-spacing:.08em;color:var(--text-muted);text-transform:uppercase;margin:14px 0 6px}
+.patio-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.patio-kpi{padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}.patio-kpi strong{display:block;font-size:1.65rem}.patio-kpi span{font-size:.76rem;color:var(--text-muted)}
+.patio-filter{display:flex;gap:7px;overflow:auto;margin:16px 0 10px}.patio-filter a{white-space:nowrap;padding:7px 12px;border-radius:999px;border:1px solid var(--border);color:var(--text-secondary);text-decoration:none}.patio-filter a.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.patio-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.patio-list{margin:0;padding:0;list-style:none}.patio-list li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}.patio-list li:last-child{border:0}.patio-muted{font-size:.78rem;color:var(--text-muted)}
+@media(max-width:1300px){.patio-actions{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:1050px){.patio-kpis{grid-template-columns:repeat(3,1fr)}.patio-actions{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:680px){.patio-grid{grid-template-columns:1fr}.patio-kpis{grid-template-columns:repeat(2,1fr)}.patio-actions{grid-template-columns:1fr 1fr}.patio-action{min-height:70px}.patio-action span{font-size:.82rem}}
+</style>
+<section class="patio-hero">
+  <h1><i class="bi bi-command me-2"></i>Centro diario del Encargado de Patio</h1>
+  <p>{{ hoy.strftime('%d/%m/%Y') }} · {{ almacen.nombre }} · Lo urgente, lo pendiente y la siguiente acción en una sola pantalla.</p>
+</section>
+<div class="patio-actions">
+  <a class="patio-action" href="/mostrador"><i class="bi bi-basket2-fill"></i><span>Mostrador Único</span></a>
+  <a class="patio-action" href="/scan"><i class="bi bi-upc-scan"></i><span>Consultar un QR</span></a>
+  <a class="patio-action" href="/herramientas"><i class="bi bi-tools"></i><span>Herramientas</span></a>
+  <a class="patio-action" href="/maquinaria"><i class="bi bi-truck-front"></i><span>Maquinaria</span></a>
+  <a class="patio-action" href="/materiales"><i class="bi bi-box-seam"></i><span>Materiales</span></a>
+  <a class="patio-action" href="/epis"><i class="bi bi-shield-shaded"></i><span>EPIs dotación</span></a>
+  <a class="patio-action" href="/epis/individuales"><i class="bi bi-life-preserver"></i><span>Arneses</span></a>
+  <a class="patio-action" href="/epis/stock"><i class="bi bi-bag-fill"></i><span>Ropa y variantes</span></a>
+  <a class="patio-action" href="/trabajadores"><i class="bi bi-person-badge"></i><span>Dotaciones</span></a>
+  <a class="patio-action" href="/inventario/v2"><i class="bi bi-clipboard-check"></i><span>Inventario masivo</span></a>
+  <a class="patio-action" href="/preparaciones-entrega"><i class="bi bi-box2-heart"></i><span>Entregas preparadas</span></a>
+  <a class="patio-action" href="/pedidos-proveedor"><i class="bi bi-cart-check"></i><span>Pedidos y recepción</span></a>
+  <a class="patio-action" href="/centro-etiquetas"><i class="bi bi-printer"></i><span>Centro de etiquetas</span></a>
+  <a class="patio-action" href="/localizador"><i class="bi bi-geo-alt-fill"></i><span>Localizador visual</span></a>
+  <a class="patio-action" href="/tablet"><i class="bi bi-tablet-landscape"></i><span>Modo tableta</span></a>
+  <a class="patio-action" href="/cierres-diarios"><i class="bi bi-journal-check"></i><span>Cierre diario</span></a>
+</div>
+<div class="patio-kpis">
+  <div class="patio-kpi"><strong>{{ herramientas_fuera|length }}</strong><span>Herramientas fuera</span></div>
+  <div class="patio-kpi"><strong>{{ dotaciones_pendientes|length }}</strong><span>Dotaciones incompletas</span></div>
+  <div class="patio-kpi"><strong>{{ materiales_bajos|length + ropa_baja|length }}</strong><span>Stocks en alerta</span></div>
+  <div class="patio-kpi"><strong>{{ maquinas_revision|length + epis_revision|length }}</strong><span>Revisiones ≤ 30 días</span></div>
+  <div class="patio-kpi"><strong>{{ suministros_recientes|length }}</strong><span>Entradas en 7 días</span></div>
+  <div class="patio-kpi"><strong>{{ inventarios_abiertos|length }}</strong><span>Inventarios abiertos</span></div>
+</div>
+<nav class="patio-filter" aria-label="Filtrar panel">
+{% for clave, texto in [('todos','Todo'),('operativa','Operativa'),('salidas','Salidas'),('dotaciones','Dotaciones'),('stock','Stock'),('revisiones','Revisiones'),('suministros','Suministros'),('inventarios','Inventarios')] %}
+  <a href="/panel-patio?filtro={{ clave }}" class="{% if filtro == clave %}active{% endif %}">{{ texto }}</a>
+{% endfor %}
+</nav>
+<div class="patio-grid">
+{% if filtro in ['todos','operativa'] %}<section class="card"><div class="card-header"><div class="card-title"><i class="bi bi-lightning-charge"></i> Operativa pendiente</div><a href="/cierres-diarios" class="btn btn-sm btn-outline">{{ 'Cerrado' if cierre_hoy else 'Cerrar día' }}</a></div><div class="card-body"><ul class="patio-list"><li><a href="/multi-almacen">Traspasos en tránsito</a><span class="badge bg-warning">{{ transferencias_pendientes|length }}</span></li><li><a href="/pedidos-proveedor">Pedidos pendientes</a><span class="badge bg-warning">{{ pedidos_pendientes|length }}</span></li><li><a href="/preparaciones-entrega">Entregas preparadas</a><span class="badge bg-primary">{{ preparaciones_pendientes|length }}</span></li><li><span>Lotes que caducan ≤ 60 días</span><span class="badge bg-danger">{{ lotes_proximos|length + lotes_variante_proximos|length }}</span></li></ul></div></section>{% endif %}
+{% if filtro in ['todos','salidas'] %}<section class="card"><div class="card-header"><div class="card-title"><i class="bi bi-box-arrow-up-right"></i> Fuera del almacén</div><a href="/panel-salidas" class="btn btn-sm btn-outline">Ver todo</a></div><div class="card-body"><ul class="patio-list">{% for h in herramientas_fuera %}<li><div><a href="/herramientas/{{ h.id }}"><strong>{{ h.nombre }}</strong></a><div class="patio-muted">{{ h.codigo }} · {{ h.estado }}</div></div><i class="bi bi-chevron-right"></i></li>{% else %}<li class="patio-muted">No hay salidas pendientes.</li>{% endfor %}</ul></div></section>{% endif %}
+{% if filtro in ['todos','dotaciones'] %}<section class="card"><div class="card-header"><div class="card-title"><i class="bi bi-person-check"></i> Dotaciones incompletas</div><a href="/inventario/v2" class="btn btn-sm btn-outline">Gestionar</a></div><div class="card-body"><ul class="patio-list">{% for d in dotaciones_pendientes %}{% set trabajador = trabajadores_dotacion.get(d.trabajador_id) %}<li><div><strong>{{ trabajador.nombre_completo if trabajador else 'Trabajador #' ~ d.trabajador_id }}</strong><div class="patio-muted">Dotación #{{ d.id }} · {{ d.estado }}</div></div><span class="badge bg-warning">Pendiente</span></li>{% else %}<li class="patio-muted">Todas las dotaciones están completas.</li>{% endfor %}</ul></div></section>{% endif %}
+{% if filtro in ['todos','stock'] %}<section class="card"><div class="card-header"><div class="card-title"><i class="bi bi-exclamation-triangle"></i> Stock bajo</div><a href="/materiales/alertas" class="btn btn-sm btn-outline">Reponer</a></div><div class="card-body"><ul class="patio-list">{% for m in materiales_bajos %}<li><div><strong>{{ m.nombre }}</strong><div class="patio-muted">Material · mínimo {{ m.stock_minimo }}</div></div><span class="badge bg-danger">{{ m.stock_actual }} {{ m.unidad }}</span></li>{% endfor %}{% for s in ropa_baja %}<li><div><strong>{{ s.nombre_display }}</strong><div class="patio-muted">Ropa / EPI · mínimo {{ s.stock_minimo }}</div></div><span class="badge bg-danger">{{ s.cantidad }}</span></li>{% endfor %}{% if not materiales_bajos and not ropa_baja %}<li class="patio-muted">No hay alertas de stock.</li>{% endif %}</ul></div></section>{% endif %}
+{% if filtro in ['todos','revisiones'] %}<section class="card"><div class="card-header"><div class="card-title"><i class="bi bi-shield-exclamation"></i> Revisiones</div><a href="/mantenimiento" class="btn btn-sm btn-outline">Planificar</a></div><div class="card-body"><ul class="patio-list">{% for m in maquinas_revision %}<li><div><a href="/maquinaria/{{ m.id }}"><strong>{{ m.nombre }}</strong></a><div class="patio-muted">Maquinaria · {{ m.codigo_interno }}</div></div><span class="badge {% if m.proxima_revision < hoy %}bg-danger{% else %}bg-warning{% endif %}">{{ m.proxima_revision.strftime('%d/%m/%Y') }}</span></li>{% endfor %}{% for e in epis_revision %}<li><div><strong>{{ e.tipo }} {{ e.codigo_fabricacion }}</strong><div class="patio-muted">EPI individual</div></div><span class="badge {% if e.proxima_revision < hoy %}bg-danger{% else %}bg-warning{% endif %}">{{ e.proxima_revision.strftime('%d/%m/%Y') }}</span></li>{% endfor %}{% if not maquinas_revision and not epis_revision %}<li class="patio-muted">No hay revisiones próximas.</li>{% endif %}</ul></div></section>{% endif %}
+{% if filtro in ['todos','suministros'] %}<section class="card"><div class="card-header"><div class="card-title"><i class="bi bi-box-seam"></i> Suministros recientes</div><a href="/inventario/v2" class="btn btn-sm btn-outline">Recepción</a></div><div class="card-body"><ul class="patio-list">{% for s in suministros_recientes %}<li><div><strong>{{ s.motivo }}</strong><div class="patio-muted">{{ s.tipo_articulo }} · {{ s.creado_en.strftime('%d/%m %H:%M') }}</div></div><span class="badge bg-success">+{{ s.cantidad|int }}</span></li>{% else %}<li class="patio-muted">No hay entradas registradas en los últimos 7 días.</li>{% endfor %}</ul></div></section>{% endif %}
+{% if filtro in ['todos','inventarios'] %}<section class="card"><div class="card-header"><div class="card-title"><i class="bi bi-clipboard-data"></i> Inventarios abiertos</div><a href="/inventario/v2" class="btn btn-sm btn-outline">Abrir centro</a></div><div class="card-body"><ul class="patio-list">{% for i in inventarios_abiertos %}<li><div><a href="/inventario/sesiones/{{ i.id }}"><strong>{{ i.nombre }}</strong></a><div class="patio-muted">{{ i.tipo_articulo }} · {{ i.estado }}</div></div><span class="badge bg-primary">{{ i.lineas|length }} líneas</span></li>{% else %}<li class="patio-muted">No hay inventarios abiertos.</li>{% endfor %}</ul></div></section>{% endif %}
+</div>
+{% endblock %}

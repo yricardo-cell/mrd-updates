@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Pedidos a proveedor{% endblock %}
+{% block content %}
+<style>.ops-hero{background:linear-gradient(135deg,#1e3a5f,#0f766e);color:white;padding:22px;border-radius:18px}.ops-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:16px;margin-top:16px}@media(max-width:800px){.ops-grid{grid-template-columns:1fr}}</style>
+<section class="ops-hero"><h1><i class="bi bi-cart-check"></i> Pedidos · {{ almacen.nombre }}</h1><p>Reponer sin mezclar almacenes. Las recepciones admiten lotes y caducidad.</p></section>
+<div class="ops-grid">
+ <section class="card"><div class="card-header"><strong>Crear propuesta</strong></div><div class="card-body">
+  <label class="form-label">Proveedor</label><input id="supplier" class="form-control mb-2" placeholder="Nombre del proveedor">
+  <label class="form-label">O escanea una referencia concreta</label><input id="purchase-code" class="form-control mb-2" autocomplete="off" placeholder="Código QR / pistola">
+  <label class="form-label">Cantidad</label><input id="purchase-qty" class="form-control mb-3" type="number" min="1" value="1">
+  <label class="d-flex gap-2 mb-3"><input id="include-low" type="checkbox" checked> Incluir todo el stock bajo</label>
+  <button id="create-order" class="btn btn-primary w-100">Crear pedido borrador</button><div id="order-state" class="small mt-2"></div>
+ </div></section>
+ <section class="card"><div class="card-header"><strong>Necesidades detectadas</strong><span class="badge bg-danger">{{ materiales_bajos|length + epis_bajos|length }}</span></div><div class="card-body">
+ {% for item in materiales_bajos %}<div class="d-flex justify-content-between border-bottom py-2"><span><b>{{ item.nombre }}</b><small class="d-block text-muted">{{ item.codigo }}</small></span><span>{{ item.stock_actual }} / mín. {{ item.stock_minimo }}</span></div>{% endfor %}
+ {% for item in epis_bajos %}<div class="d-flex justify-content-between border-bottom py-2"><span><b>{{ item.nombre_display }}</b><small class="d-block text-muted">{{ item.codigo }}</small></span><span>{{ item.cantidad }} / mín. {{ item.stock_minimo }}</span></div>{% endfor %}
+ {% if not materiales_bajos and not epis_bajos %}<p class="text-success">No hay roturas de stock.</p>{% endif %}
+ </div></section>
+</div>
+<section class="card mt-3"><div class="card-header"><strong>Histórico de pedidos</strong></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Número</th><th>Proveedor</th><th>Fecha</th><th>Estado</th><th></th></tr></thead><tbody>{% for p in pedidos %}<tr><td><b>{{ p.numero }}</b></td><td>{{ p.proveedor or 'Sin indicar' }}</td><td>{{ p.fecha_pedido.strftime('%d/%m/%Y') }}</td><td><span class="badge bg-{% if p.estado == 'recibido' %}success{% elif p.estado == 'cancelado' %}secondary{% else %}warning{% endif %}">{{ p.estado }}</span></td><td><a class="btn btn-sm btn-outline-primary" href="/pedidos-proveedor/{{ p.id }}">Abrir</a></td></tr>{% else %}<tr><td colspan="5" class="text-muted">Todavía no hay pedidos.</td></tr>{% endfor %}</tbody></table></div></section>
+<script>document.getElementById('create-order').onclick=async()=>{const b=document.getElementById('create-order'),s=document.getElementById('order-state');b.disabled=true;s.textContent='Creando…';try{const r=await fetch('/api/pedidos-proveedor',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},redirect:'manual',body:JSON.stringify({proveedor:document.getElementById('supplier').value,incluir_stock_bajo:document.getElementById('include-low').checked,codigo:document.getElementById('purchase-code').value||null,cantidad:Number(document.getElementById('purchase-qty').value)||1})});if(r.status===0||r.type==='opaqueredirect'){location.href='/login';return}const d=await r.json();if(!r.ok)throw Error(d.detail||'No se pudo crear');location.href=d.url}catch(e){s.textContent=e.message;s.className='small mt-2 text-danger';b.disabled=false}};</script>
+{% endblock %}

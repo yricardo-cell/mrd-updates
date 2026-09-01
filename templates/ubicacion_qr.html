@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>QR Ubicación — {{ ubicacion.nombre }}</title>
+  <style>
+    @page { size: 60mm 80mm; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Arial', sans-serif;
+      background: #fff;
+      color: #111;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .label {
+      width: 58mm;
+      padding: 3mm 4mm;
+      border: 2px solid #222;
+      border-radius: 3mm;
+      text-align: center;
+    }
+    .almacen-name {
+      font-size: 6.5pt;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #666;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 2mm;
+      margin-bottom: 2mm;
+    }
+    .ubi-name {
+      font-size: 14pt;
+      font-weight: 900;
+      line-height: 1.1;
+      margin-bottom: 1mm;
+      color: #000;
+    }
+    .ubi-desc {
+      font-size: 7pt;
+      color: #555;
+      margin-bottom: 2mm;
+    }
+    .qr-img {
+      width: 44mm;
+      height: 44mm;
+      border: 1px solid #ddd;
+      border-radius: 2mm;
+      padding: 1.5mm;
+      margin: 0 auto 2mm;
+      display: block;
+    }
+    .codigo {
+      font-family: 'Courier New', monospace;
+      font-size: 9pt;
+      font-weight: 800;
+      background: #f3f3f3;
+      border: 1px solid #ccc;
+      border-radius: 2mm;
+      padding: 1mm 3mm;
+      display: inline-block;
+      letter-spacing: .05em;
+      margin-bottom: 2mm;
+    }
+    .kpis {
+      font-size: 6.5pt;
+      color: #777;
+      margin-bottom: 1mm;
+    }
+    .footer {
+      border-top: 1px solid #ddd;
+      margin-top: 1.5mm;
+      padding-top: 1.5mm;
+      font-size: 5.5pt;
+      color: #aaa;
+    }
+    .btn-print {
+      position: fixed; bottom: 16px; right: 16px;
+      background: #f5a623; color: #000;
+      border: none; border-radius: 8px;
+      padding: 10px 20px; font-weight: 700;
+      cursor: pointer; font-size: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    }
+    @media print { .btn-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="label">
+    <div class="almacen-name">{{ almacen.nombre }}</div>
+
+    <div class="ubi-name">{{ ubicacion.nombre }}</div>
+
+    {% if ubicacion.descripcion %}
+    <div class="ubi-desc">{{ ubicacion.descripcion }}</div>
+    {% endif %}
+
+    <img src="data:image/png;base64,{{ qr_b64 }}" class="qr-img" alt="QR">
+
+    {% if ubicacion.codigo %}
+    <div><span class="codigo">{{ ubicacion.codigo }}</span></div>
+    {% endif %}
+
+    <div class="kpis">
+      🔧 {{ herramientas_count }} herr. &nbsp;·&nbsp; 📦 {{ materiales_count }} mat.
+    </div>
+
+    <div class="footer">
+      Almacén {{ almacen.id }} · Ubicación {{ ubicacion.id }}
+    </div>
+  </div>
+
+  <button class="btn-print" onclick="window.print()">🖨 Imprimir</button>
+</body>
+</html>

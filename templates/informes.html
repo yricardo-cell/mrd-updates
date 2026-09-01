@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}Analytics — {{ app_name }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<span class="current">Analytics</span>
+{% endblock %}
+
+{% block content %}
+
+<!-- Hero -->
+<div class="analytics-hero">
+  <div>
+    <div class="analytics-eyebrow">Centro de análisis</div>
+    <h2><i class="bi bi-graph-up-arrow"></i>Analytics & Informes</h2>
+    <p>Generado el {{ analisis.generado_en }} · Análisis inteligente de inventario</p>
+  </div>
+  <div class="hero-actions">
+    <a href="/informes/resumen/pdf"><i class="bi bi-file-pdf"></i> Exportar PDF</a>
+    <a href="/informes/inventario/excel"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+  </div>
+</div>
+
+<!-- Alertas / Insights compactos -->
+{% if analisis.alertas %}
+<div class="analytics-alerts">
+  {% for a in analisis.alertas %}
+  <div class="alert-item"><i class="bi bi-exclamation-triangle-fill"></i><span class="alert-text">{{ a }}</span></div>
+  {% endfor %}
+</div>
+{% endif %}
+{% if analisis.insights %}
+<div class="analytics-insights">
+  {% for i in analisis.insights %}
+  <div class="insight-item"><i class="bi bi-lightbulb-fill"></i><span class="alert-text">{{ i }}</span></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- KPI Grid -->
+<div class="analytics-grid">
+  {% set kpis = [
+    ('bi-wrench-adjustable', analisis.herramientas.total, 'Total herramientas', 'var(--primary)'),
+    ('bi-check-circle-fill', analisis.herramientas.estados.get('disponible',0), 'Disponibles', '#22c55e'),
+    ('bi-person-check-fill', analisis.herramientas.pct_uso|string + '%', 'Utilización', '#f59e0b'),
+    ('bi-truck-front-fill', analisis.maquinaria.total, 'Maquinaria', '#8b5cf6'),
+    ('bi-exclamation-octagon-fill', analisis.incidencias.abiertas, 'Incidencias', '#ef4444'),
+    ('bi-hammer', analisis.reparaciones.abiertas, 'Reparaciones', '#f97316'),
+  ] %}
+  {% for icon, val, label, color in kpis %}
+  <div class="kpi-analytics analytics-tone-{{ loop.index }}">
+    <span class="icon"><i class="bi {{ icon }}"></i></span>
+    <div class="val">{{ val }}</div>
+    <div class="lbl">{{ label }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Charts principales -->
+<div class="charts-row">
+  <!-- Movimientos por mes (grande) -->
+  <div class="card chart-card">
+    <div class="card-header analytics-card-header">
+      <div class="card-title"><i class="bi bi-activity"></i> Actividad mensual</div>
+      <span class="analytics-card-meta">Últimos meses</span>
+    </div>
+    <div class="card-body analytics-chart-body">
+      <canvas id="chartMov" height="140"></canvas>
+    </div>
+  </div>
+
+  <!-- Gauge utilización -->
+  <div class="card chart-card analytics-gauge-card">
+    <div class="analytics-section-label">Utilización</div>
+    <div class="util-gauge">
+      <canvas id="chartGauge" width="120" height="120"></canvas>
+      <div class="util-gauge-text">
+        <div class="util-gauge-pct">{{ analisis.herramientas.pct_uso }}%</div>
+        <div class="util-gauge-sub">en uso</div>
+      </div>
+    </div>
+    <div class="analytics-gauge-copy">
+      {{ analisis.herramientas.estados.get('disponible',0) }} disponibles<br>
+      de {{ analisis.herramientas.total }} totales
+    </div>
+  </div>
+
+  <!-- Estado herramientas -->
+  <div class="card chart-card">
+    <div class="card-header"><div class="card-title"><i class="bi bi-pie-chart"></i> Estado inventario</div></div>
+    <div class="card-body analytics-state-chart">
+      <canvas id="chartEstados" height="150"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Rankings y Exportaciones -->
+<div class="bottom-row">
+
+  <!-- Top herramientas más movidas -->
+  <div class="card">
+    <div class="card-header"><div class="card-title"><i class="bi bi-trophy"></i> Herramientas más activas</div></div>
+    <div class="card-body analytics-card-body">
+      {% set top_h = analisis.herramientas.get('top_herramientas', analisis.herramientas.get('mas_movidas', [])) %}
+      {% if top_h %}
+        {% for h in top_h[:5] %}
+        {% set idx = loop.index %}
+        <div class="ranking-item">
+          <div class="rank-num {% if idx==1 %}gold{% elif idx==2 %}silver{% elif idx==3 %}bronze{% endif %}">{{ idx }}</div>
+          <div class="rank-info">
+            <div class="rank-name">{{ h.nombre }}</div>
+            <div class="rank-sub">{{ h.get('codigo','') }}{% if h.get('marca') %} · {{ h.marca }}{% endif %}</div>
+          </div>
+          <div class="rank-bar-wrap">
+            <progress class="rank-bar" max="100" value="{{ [((h.get('movimientos',h.get('count',1)) / ([top_h[0].get('movimientos',top_h[0].get('count',1)),1]|max))*100)|int, 100]|min }}"></progress>
+            <span class="rank-val">{{ h.get('movimientos', h.get('count','—')) }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="analytics-empty">
+          <i class="bi bi-inbox"></i>
+          Sin datos de movimientos
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Exportaciones -->
+  <div class="card">
+    <div class="card-header"><div class="card-title"><i class="bi bi-download"></i> Exportar datos</div></div>
+    <div class="card-body analytics-card-body">
+      <div class="analytics-section-label">Excel</div>
+      <div class="export-grid">
+        <a href="/informes/inventario/excel" class="export-item">
+          <i class="bi bi-file-earmark-spreadsheet export-icon-excel"></i> Inventario
+        </a>
+        <a href="/informes/maquinaria/excel" class="export-item">
+          <i class="bi bi-file-earmark-spreadsheet export-icon-excel"></i> Maquinaria
+        </a>
+        <a href="/informes/movimientos/excel" class="export-item">
+          <i class="bi bi-file-earmark-spreadsheet export-icon-excel"></i> Movimientos
+        </a>
+        <a href="/informes/incidencias/excel" class="export-item">
+          <i class="bi bi-file-earmark-spreadsheet export-icon-excel"></i> Incidencias
+        </a>
+        <a href="/informes/reparaciones/excel" class="export-item">
+          <i class="bi bi-file-earmark-spreadsheet export-icon-excel"></i> Reparaciones
+        </a>
+        <a href="/informes/epis/excel" class="export-item">
+          <i class="bi bi-file-earmark-spreadsheet export-icon-excel"></i> EPIs/Ropa
+        </a>
+      </div>
+      <div class="analytics-section-label analytics-section-spaced">PDF & Informes</div>
+      <div class="export-grid">
+        <a href="/informes/resumen/pdf" class="export-item">
+          <i class="bi bi-file-earmark-pdf export-icon-pdf"></i> Resumen PDF
+        </a>
+        <a href="/informes/inventario/pdf" class="export-item">
+          <i class="bi bi-file-earmark-pdf export-icon-pdf"></i> Inventario PDF
+        </a>
+        <a href="/informes/epis-trabajadores" class="export-item">
+          <i class="bi bi-shield-check export-icon-primary"></i> EPIs trabajador
+        </a>
+        <a href="/informes/trabajadores/excel" class="export-item">
+          <i class="bi bi-people export-icon-purple"></i> Trabajadores
+        </a>
+        <a href="/historial" class="export-item">
+          <i class="bi bi-clock-history export-icon-warning"></i> Historial global
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+<script>
+const COLORS = ['#22d3ee','#7b61ff','#2dd4bf','#ef4444','#a78bfa','#0891b2','#f97316','#64748b'];
+
+function initCharts() {
+  if (typeof Chart === 'undefined') { setTimeout(initCharts, 150); return; }
+
+  const grid = 'rgba(255,255,255,.08)';
+  Chart.defaults.color = '#94a3b8';
+
+  // ── Movimientos / mes ──
+  const cm = {{ chart_mov_json | safe }};
+  if (cm.labels.length) {
+    new Chart(document.getElementById('chartMov'), {
+      type: 'bar',
+      data: {
+        labels: cm.labels,
+        datasets: [{
+          label: 'Movimientos',
+          data: cm.data,
+          backgroundColor: 'rgba(8,145,178,.75)',
+          borderColor: '#0891b2',
+          borderWidth: 0,
+          borderRadius: 6,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { color: grid }, ticks: { stepSize: 1 } },
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  // ── Gauge utilización ──
+  const pct = {{ analisis.herramientas.pct_uso | default(0) }};
+  new Chart(document.getElementById('chartGauge'), {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: [pct, 100 - pct],
+        backgroundColor: [pct > 70 ? '#ef4444' : pct > 40 ? '#f59e0b' : '#22c55e', 'rgba(255,255,255,.08)'],
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      cutout: '75%',
+      rotation: -90,
+      circumference: 180,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      responsive: false,
+    }
+  });
+
+  // ── Estado herramientas ──
+  const ce = {{ chart_estados_json | safe }};
+  if (ce.labels.length) {
+    new Chart(document.getElementById('chartEstados'), {
+      type: 'doughnut',
+      data: { labels: ce.labels, datasets: [{ data: ce.data, backgroundColor: COLORS, borderWidth: 0 }] },
+      options: {
+        cutout: '65%',
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 9 }, padding: 6, boxWidth: 10 } } }
+      }
+    });
+  } else {
+    document.getElementById('chartEstados').parentElement.innerHTML =
+      '<p class="analytics-chart-empty">Sin datos</p>';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', initCharts);
+</script>
+{% endblock %}

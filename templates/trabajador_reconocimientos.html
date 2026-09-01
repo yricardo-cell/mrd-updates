@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Reconocimientos Médicos — {{ trabajador.nombre_completo }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <a href="/trabajadores/{{ trabajador.id }}/epis" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Volver
+  </a>
+  <div>
+    <h4 class="mb-0"><i class="bi bi-heart-pulse-fill text-danger me-2"></i>Reconocimientos Médicos</h4>
+    <small class="text-muted">{{ trabajador.nombre_completo }}</small>
+  </div>
+  <button class="btn btn-danger btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#modalNuevo">
+    <i class="bi bi-plus-lg"></i> Nuevo reconocimiento
+  </button>
+</div>
+
+{% if ok %}
+<div class="alert alert-success alert-dismissible fade show py-2" role="alert">
+  {% if ok == "creado" %}Reconocimiento añadido.{% elif ok == "eliminado" %}Reconocimiento eliminado.{% endif %}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{% if reconocimientos %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-dark">
+      <tr>
+        <th>Fecha</th>
+        <th>Resultado</th>
+        <th>Próximo</th>
+        <th>Centro / Médico</th>
+        <th>Restricciones</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in reconocimientos %}
+      {% set dias = r.dias_para_vencimiento %}
+      <tr class="{% if r.vencido %}table-danger{% elif dias is not none and dias <= 30 %}table-warning{% endif %}">
+        <td>{{ r.fecha.strftime("%d/%m/%Y") if r.fecha else "—" }}</td>
+        <td>
+          {% if r.resultado == "apto" %}<span class="badge bg-success">Apto</span>
+          {% elif r.resultado == "apto_con_restricciones" %}<span class="badge bg-warning text-dark">Apto c/ restricciones</span>
+          {% elif r.resultado == "no_apto" %}<span class="badge bg-danger">No apto</span>
+          {% else %}<span class="badge bg-secondary">Pendiente</span>{% endif %}
+        </td>
+        <td>
+          {{ r.fecha_proxima.strftime("%d/%m/%Y") if r.fecha_proxima else "—" }}
+          {% if r.vencido %}<span class="badge bg-danger ms-1">VENCIDO</span>
+          {% elif dias is not none and dias <= 30 %}<span class="badge bg-warning text-dark ms-1">{{ dias }}d</span>{% endif %}
+        </td>
+        <td>
+          {{ r.centro or "—" }}<br>
+          <small class="text-muted">{{ r.medico or "" }}</small>
+        </td>
+        <td><small>{{ r.restricciones or "—" }}</small></td>
+        <td>
+          {% if r.vencido %}<span class="badge bg-danger">Vencido</span>
+          {% elif dias is not none and dias <= 30 %}<span class="badge bg-warning text-dark">Próximo</span>
+          {% else %}<span class="badge bg-success">Vigente</span>{% endif %}
+        </td>
+        <td>
+          <form method="post" action="/trabajadores/{{ trabajador.id }}/reconocimientos/{{ r.id }}/eliminar"
+                onsubmit="return confirm('¿Eliminar este reconocimiento?')">
+            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="bi bi-heart-pulse display-4 d-block mb-2 opacity-25"></i>
+  No hay reconocimientos médicos registrados.
+</div>
+{% endif %}
+
+<!-- Modal nuevo reconocimiento -->
+<div class="modal fade" id="modalNuevo" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="/trabajadores/{{ trabajador.id }}/reconocimientos" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-heart-pulse me-2"></i>Nuevo Reconocimiento Médico</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold">Fecha <span class="text-danger">*</span></label>
+            <input type="date" name="fecha" class="form-control" required>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Próximo reconocimiento</label>
+            <input type="date" name="fecha_proxima" class="form-control">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Resultado</label>
+          <select name="resultado" class="form-select">
+            <option value="apto">Apto</option>
+            <option value="apto_con_restricciones">Apto con restricciones</option>
+            <option value="no_apto">No apto</option>
+            <option value="pendiente">Pendiente</option>
+          </select>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label">Centro</label>
+            <input type="text" name="centro" class="form-control" placeholder="FREMAP, Mutua …">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Médico</label>
+            <input type="text" name="medico" class="form-control">
+          </div>
+        </div>
+        <div class="mb-1">
+          <label class="form-label">Restricciones</label>
+          <textarea name="restricciones" class="form-control" rows="2" placeholder="Ej: No alturas superiores a 3m"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-danger"><i class="bi bi-check-lg me-1"></i>Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

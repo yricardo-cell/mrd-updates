@@ -1,0 +1,873 @@
+{% extends "base.html" %}
+{% block title %}{{ herramienta.nombre }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a>
+<span class="sep">/</span>
+<a href="/herramientas">Herramientas</a>
+<span class="sep">/</span>
+<span class="current">{{ herramienta.codigo }}</span>
+{% endblock %}
+
+{% block content %}
+
+<!-- Ficha Universal (T-004) -->
+<div class="card" style="margin-bottom:16px">
+
+  <!-- Cabecera de ficha -->
+  <div class="detail-header">
+    <!-- Foto -->
+    <div class="detail-photo" id="foto-wrap" style="position:relative;cursor:{% if user.rol in ['admin','almacen','encargado_patio'] %}pointer{% else %}default{% endif %}"
+      {% if user.rol in ['admin','almacen','encargado_patio'] %}onclick="document.getElementById('foto-input').click()" title="Cambiar foto"{% endif %}>
+      {% if herramienta.foto_path %}
+      <img id="foto-preview" src="/static/uploads/herramientas/{{ herramienta.foto_path }}" alt="{{ herramienta.nombre }}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">
+      {% else %}
+      <i class="bi bi-tools" id="foto-icon"></i>
+      {% if user.rol in ['admin','almacen','encargado_patio'] %}
+      <span style="position:absolute;bottom:4px;left:0;right:0;text-align:center;font-size:.6rem;color:var(--text-muted)">Subir foto</span>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% if user.rol in ['admin','almacen','encargado_patio'] %}
+    <input type="file" id="foto-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="subirFoto(this)">
+    {% endif %}
+
+    <!-- Info principal -->
+    <div class="detail-info">
+      <div class="detail-code">{{ herramienta.codigo }}</div>
+      <div class="detail-name">{{ herramienta.nombre }}</div>
+
+      <div class="detail-meta">
+        {% if herramienta.marca %}
+        <span><i class="bi bi-tag"></i> {{ herramienta.marca }}{% if herramienta.modelo %} {{ herramienta.modelo }}{% endif %}</span>
+        {% endif %}
+        {% if herramienta.num_serie %}
+        <span><i class="bi bi-upc"></i> S/N: {{ herramienta.num_serie }}</span>
+        {% endif %}
+        {% if herramienta.categoria %}
+        <span><i class="bi bi-folder"></i> {{ herramienta.categoria }}</span>
+        {% endif %}
+        <span><i class="bi bi-calendar3"></i> Alta: {{ herramienta.created_at | fmt_fecha }}</span>
+      </div>
+
+      <!-- Barra de estado -->
+      <div style="margin-top:10px">
+        {% set estado = herramienta.estado %}
+        {% set einfo = estados_info.get(estado, {'label': estado, 'color': 'secondary'}) %}
+        <span class="badge badge-{{ einfo.color }}" style="font-size:.82rem;padding:5px 12px">
+          {{ einfo.label }}
+        </span>
+
+        {% if herramienta.ubicacion_texto %}
+        <span style="margin-left:10px;font-size:.8rem;color:var(--text-muted)">
+          <i class="bi bi-geo-alt"></i> {{ herramienta.ubicacion_texto }}
+        </span>
+        {% endif %}
+
+        {% if not herramienta.activa %}
+        <span class="badge badge-danger" style="margin-left:6px;font-size:.75rem">
+          <i class="bi bi-slash-circle"></i> Inactiva
+        </span>
+        {% endif %}
+      </div>
+
+      <!-- Acciones rápidas -->
+      <div class="detail-actions">
+        {% if herramienta.activa %}
+        <a href="/herramientas/{{ herramienta.id }}/editar" class="btn btn-outline btn-sm">
+          <i class="bi bi-pencil"></i> Editar
+        </a>
+
+        {% if herramienta.estado == 'disponible' %}
+        <button class="btn btn-primary btn-sm" onclick="abrirModalAccion('entregar')">
+          <i class="bi bi-arrow-up-right"></i> Entregar
+        </button>
+        {% endif %}
+
+        {% if herramienta.estado in ('entregada','en_obra','en_furgoneta','en_almacen') %}
+        <button class="btn btn-success btn-sm" onclick="accionDirecta('devolver')">
+          <i class="bi bi-arrow-down-left"></i> Devolver
+        </button>
+        {% endif %}
+
+        {% if herramienta.estado not in ('en_reparacion','baja','archivada','robada') %}
+        <button class="btn btn-outline btn-sm" onclick="accionDirecta('reparacion')">
+          <i class="bi bi-hammer"></i> Reparación
+        </button>
+        {% endif %}
+
+        <button class="btn btn-outline btn-sm" onclick="abrirModalAccion('mover')">
+          <i class="bi bi-arrow-left-right"></i> Mover
+        </button>
+
+        {% if herramienta.estado not in ('baja','archivada','robada') %}
+        <button class="btn btn-outline btn-sm" onclick="abrirModalAccion('baja')" style="color:var(--danger)">
+          <i class="bi bi-x-circle"></i> Dar de baja
+        </button>
+        {% endif %}
+
+        {% else %}
+        {# Herramienta inactiva: solo acciones admin #}
+        <button class="btn btn-success btn-sm" onclick="accionDirecta('restaurar')" title="Requiere admin">
+          <i class="bi bi-arrow-counterclockwise"></i> Restaurar
+        </button>
+        {% endif %}
+
+        <a href="/etiquetas/imprimir/{{ herramienta.id }}" class="btn btn-outline btn-sm">
+          <i class="bi bi-printer"></i> Etiqueta
+        </a>
+        <a href="/herramientas/{{ herramienta.id }}/pdf" class="btn btn-outline btn-sm">
+          <i class="bi bi-file-pdf"></i> PDF
+        </a>
+
+        {% set sub = (herramienta.subcategoria or '') | lower %}
+        {% set cat = (herramienta.categoria or '') | lower %}
+        {% set nom = (herramienta.nombre or '') | lower %}
+        {% if 'alimak' in sub or 'alimak' in cat or 'alimak' in nom or 'geda' in sub or 'geda' in cat or 'maquinillo' in sub or 'maquinillo' in cat %}
+        <a href="/herramienta/{{ herramienta.id }}/salida/nueva" class="btn btn-warning btn-sm">
+          <i class="bi bi-box-arrow-right"></i> Dar salida a obra
+        </a>
+        <a href="/herramienta/{{ herramienta.id }}/salidas" class="btn btn-outline btn-sm">
+          <i class="bi bi-clock-history"></i> Historial salidas
+        </a>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Miniatura QR (lateral) -->
+    {% if qr_code %}
+    <div style="text-align:center;flex-shrink:0">
+      <img src="data:image/png;base64,{{ qr_code }}" style="width:90px;height:90px;border:1px solid var(--border);border-radius:8px" alt="QR">
+      <div style="font-size:.65rem;color:var(--text-muted);margin-top:4px">Código QR</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Pestañas (T-004) -->
+  <div class="tabs" data-tabs>
+    <button class="tab-btn active" data-tab="info"><i class="bi bi-info-circle"></i> Información</button>
+    <button class="tab-btn" data-tab="movimientos"><i class="bi bi-arrow-left-right"></i> Movimientos
+      {% if movimientos | length > 0 %}<span class="badge badge-gray" style="font-size:.65rem">{{ movimientos | length }}</span>{% endif %}
+    </button>
+    <button class="tab-btn" data-tab="incidencias"><i class="bi bi-exclamation-triangle"></i> Incidencias
+      {% if incidencias | length > 0 %}<span class="badge badge-warning" style="font-size:.65rem">{{ incidencias | length }}</span>{% endif %}
+    </button>
+    <button class="tab-btn" data-tab="reparaciones"><i class="bi bi-hammer"></i> Reparaciones
+      {% if reparaciones | length > 0 %}<span class="badge badge-orange" style="font-size:.65rem">{{ reparaciones | length }}</span>{% endif %}
+    </button>
+    <button class="tab-btn" data-tab="documentos"><i class="bi bi-file-earmark"></i> Documentos</button>
+    <button class="tab-btn" data-tab="auditoria"><i class="bi bi-shield-check"></i> Auditoría</button>
+  </div>
+
+  <!-- Tab: Información -->
+  <div class="tab-content active" data-tab="info">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:18px">
+
+      <!-- Datos generales -->
+      <div>
+        <div class="form-section-title"><i class="bi bi-info-circle"></i> Datos generales</div>
+        <div class="info-grid" style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <div class="info-item">
+            <div class="info-label">Código</div>
+            <div class="info-value" style="font-family:monospace">{{ herramienta.codigo }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Categoría</div>
+            <div class="info-value">{{ herramienta.categoria or '—' }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Subcategoría</div>
+            <div class="info-value {{ 'muted' if not herramienta.subcategoria }}">{{ herramienta.subcategoria or '—' }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Número de serie</div>
+            <div class="info-value {{ 'muted' if not herramienta.num_serie }}">{{ herramienta.num_serie or '—' }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Marca</div>
+            <div class="info-value {{ 'muted' if not herramienta.marca }}">{{ herramienta.marca or '—' }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Modelo</div>
+            <div class="info-value {{ 'muted' if not herramienta.modelo }}">{{ herramienta.modelo or '—' }}</div>
+          </div>
+          {% if herramienta.potencia %}
+          <div class="info-item">
+            <div class="info-label">Potencia</div>
+            <div class="info-value">{{ herramienta.potencia }}</div>
+          </div>
+          {% endif %}
+          {% if herramienta.voltaje %}
+          <div class="info-item">
+            <div class="info-label">Voltaje</div>
+            <div class="info-value">{{ herramienta.voltaje }}</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Adquisición y ubicación -->
+      <div>
+        <div class="form-section-title"><i class="bi bi-bag"></i> Adquisición y ubicación</div>
+        <div class="info-grid" style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <div class="info-item">
+            <div class="info-label">Fecha de compra</div>
+            <div class="info-value {{ 'muted' if not herramienta.fecha_compra }}">{{ herramienta.fecha_compra | fmt_fecha }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Precio de compra</div>
+            <div class="info-value {{ 'muted' if not herramienta.precio_compra }}">{{ herramienta.precio_compra | fmt_precio }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Proveedor</div>
+            <div class="info-value {{ 'muted' if not herramienta.proveedor_texto }}">{{ herramienta.proveedor_texto or '—' }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Garantía hasta</div>
+            <div class="info-value {{ 'muted' if not herramienta.garantia_hasta }}">{{ herramienta.garantia_hasta | fmt_fecha }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Ubicación actual</div>
+            <div class="info-value">{{ herramienta.ubicacion_texto or '—' }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Responsable</div>
+            <div class="info-value {{ 'muted' if not herramienta.responsable }}">
+              {{ herramienta.responsable.nombre_completo if herramienta.responsable else '—' }}
+            </div>
+          </div>
+          {% if herramienta.fecha_proximo_mantenimiento %}
+          <div class="info-item" style="border-top:1px solid var(--warning-light);background:var(--warning-light)">
+            <div class="info-label" style="color:var(--warning)">Próx. mantenimiento</div>
+            <div class="info-value" style="color:var(--warning)">{{ herramienta.fecha_proximo_mantenimiento | fmt_fecha }}</div>
+          </div>
+          {% endif %}
+        </div>
+
+        {% if herramienta.observaciones %}
+        <div style="margin-top:16px">
+          <div class="info-label" style="margin-bottom:6px">Observaciones</div>
+          <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:.84rem;color:var(--text-2)">
+            {{ herramienta.observaciones }}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Tab: Movimientos -->
+  <div class="tab-content" data-tab="movimientos">
+    <!-- Ubicación actual -->
+    <div style="padding:12px 18px 0">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:var(--radius);
+        {% if herramienta.estado == 'disponible' %}background:var(--success-light);border-left:4px solid var(--success)
+        {% elif herramienta.estado in ('en_obra','entregada') %}background:var(--primary-light);border-left:4px solid var(--primary)
+        {% elif herramienta.estado == 'en_reparacion' %}background:var(--orange-light);border-left:4px solid var(--orange)
+        {% elif herramienta.estado == 'perdida' %}background:var(--danger-light);border-left:4px solid var(--danger)
+        {% elif herramienta.estado == 'en_furgoneta' %}background:var(--warning-light);border-left:4px solid var(--warning)
+        {% else %}background:var(--gray-light);border-left:4px solid var(--gray){% endif %}">
+        <i class="bi
+          {% if herramienta.estado == 'disponible' %}bi-house-check
+          {% elif herramienta.estado in ('en_obra','entregada') %}bi-building
+          {% elif herramienta.estado == 'en_reparacion' %}bi-hammer
+          {% elif herramienta.estado == 'perdida' %}bi-exclamation-triangle
+          {% elif herramienta.estado == 'en_furgoneta' %}bi-truck
+          {% else %}bi-geo-alt{% endif %}"
+          style="font-size:1.3rem;
+          {% if herramienta.estado == 'disponible' %}color:var(--success)
+          {% elif herramienta.estado in ('en_obra','entregada') %}color:var(--primary)
+          {% elif herramienta.estado == 'en_reparacion' %}color:var(--orange)
+          {% elif herramienta.estado == 'perdida' %}color:var(--danger)
+          {% elif herramienta.estado == 'en_furgoneta' %}color:var(--warning)
+          {% else %}color:var(--gray){% endif %}"></i>
+        <div>
+          <div style="font-size:.8rem;font-weight:700;
+            {% if herramienta.estado == 'disponible' %}color:var(--success)
+            {% elif herramienta.estado in ('en_obra','entregada') %}color:var(--primary)
+            {% elif herramienta.estado == 'en_reparacion' %}color:var(--orange)
+            {% elif herramienta.estado == 'perdida' %}color:var(--danger)
+            {% else %}color:var(--text-2){% endif %}">
+            Ubicación actual
+          </div>
+          <div style="font-size:.88rem;font-weight:600;color:var(--text)">
+            {% if herramienta.estado == 'disponible' %}En almacén — disponible
+            {% elif herramienta.estado == 'en_reparacion' %}En reparación
+            {% elif herramienta.estado == 'perdida' %}Extraviada
+            {% elif herramienta.estado == 'en_furgoneta' %}En vehículo / furgoneta
+            {% elif movimientos and movimientos[0].destino %}{{ movimientos[0].destino }}
+            {% else %}{{ herramienta.estado | replace('_',' ') | title }}{% endif %}
+          </div>
+          {% if movimientos %}
+          <div style="font-size:.72rem;color:var(--text-muted)">Último movimiento: {{ movimientos[0].fecha | fmt_datetime }}</div>
+          {% endif %}
+        </div>
+        <div style="margin-left:auto;font-size:.78rem;color:var(--text-muted)">{{ movimientos | length }} movimiento{{ 's' if movimientos | length != 1 }}</div>
+      </div>
+    </div>
+
+    {% if movimientos %}
+    <div class="timeline" style="padding:12px 18px 0">
+      {% for mov in movimientos %}
+      <div class="timeline-item">
+        <div class="timeline-dot
+          {% if mov.tipo in ('entrega','alta') %}badge-primary
+          {% elif mov.tipo == 'devolucion' %}badge-success
+          {% elif mov.tipo == 'reparacion' %}badge-orange
+          {% else %}badge-gray{% endif %}" style="font-size:.75rem">
+          {% if mov.tipo == 'entrega' %}<i class="bi bi-arrow-up-right"></i>
+          {% elif mov.tipo == 'devolucion' %}<i class="bi bi-arrow-down-left"></i>
+          {% elif mov.tipo == 'reparacion' %}<i class="bi bi-hammer"></i>
+          {% elif mov.tipo == 'alta' %}<i class="bi bi-plus-circle"></i>
+          {% else %}<i class="bi bi-arrow-left-right"></i>{% endif %}
+        </div>
+        <div class="timeline-content">
+          <div class="timeline-title">
+            {{ mov.tipo | title | replace('_', ' ') }}
+            {% if mov.estado_anterior and mov.estado_nuevo %}
+            <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">
+              {{ mov.estado_anterior | replace('_',' ') }} → {{ mov.estado_nuevo | replace('_',' ') }}
+            </span>
+            {% endif %}
+          </div>
+          <div class="timeline-sub">
+            {% if mov.destino %}<i class="bi bi-geo-alt" style="font-size:.7rem"></i> {{ mov.destino }} · {% endif %}
+            {% if mov.trabajador %}<i class="bi bi-person" style="font-size:.7rem"></i> {{ mov.trabajador.nombre_completo }} · {% endif %}
+            {% if mov.usuario %}Por {{ mov.usuario.nombre }} · {% endif %}
+            {{ mov.fecha | fmt_datetime }}
+          </div>
+          {% if mov.observaciones %}
+          <div style="font-size:.75rem;color:var(--text-muted);margin-top:3px;font-style:italic">{{ mov.observaciones }}</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-arrow-left-right"></i>
+      <h3>Sin movimientos</h3>
+      <p>Los movimientos aparecerán aquí</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Tab: Incidencias -->
+  <div class="tab-content" data-tab="incidencias">
+    <div style="padding:12px 18px;display:flex;justify-content:flex-end">
+      <a href="/incidencias/nueva?herramienta={{ herramienta.id }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg"></i> Nueva incidencia
+      </a>
+    </div>
+    {% if incidencias %}
+    <div style="overflow-x:auto">
+      <table class="smart-table">
+        <thead>
+          <tr>
+            <th>Número</th>
+            <th>Título</th>
+            <th>Tipo</th>
+            <th>Prioridad</th>
+            <th>Estado</th>
+            <th>Fecha</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for inc in incidencias %}
+          <tr>
+            <td><span style="font-family:monospace;font-size:.8rem;color:var(--primary)">{{ inc.numero }}</span></td>
+            <td style="font-weight:600">{{ inc.titulo }}</td>
+            <td><span style="font-size:.78rem;color:var(--text-2)">{{ inc.tipo or '—' }}</span></td>
+            <td>
+              {% if inc.prioridad == 'critica' %}<span class="badge badge-danger">Crítica</span>
+              {% elif inc.prioridad == 'alta' %}<span class="badge badge-warning">Alta</span>
+              {% elif inc.prioridad == 'media' %}<span class="badge badge-info">Media</span>
+              {% else %}<span class="badge badge-gray">Baja</span>{% endif %}
+            </td>
+            <td>
+              {% if inc.estado == 'abierta' %}<span class="badge badge-danger">Abierta</span>
+              {% elif inc.estado == 'en_curso' %}<span class="badge badge-primary">En curso</span>
+              {% elif inc.estado == 'resuelta' %}<span class="badge badge-success">Resuelta</span>
+              {% else %}<span class="badge badge-gray">{{ inc.estado | title }}</span>{% endif %}
+            </td>
+            <td style="font-size:.78rem;color:var(--text-muted)">{{ inc.fecha_apertura | fmt_fecha }}</td>
+            <td>
+              <a href="/incidencias/{{ inc.id }}" class="btn btn-ghost btn-icon btn-sm"><i class="bi bi-eye"></i></a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-exclamation-triangle"></i>
+      <h3>Sin incidencias</h3>
+      <p>Esta herramienta no tiene incidencias registradas</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Tab: Reparaciones -->
+  <div class="tab-content" data-tab="reparaciones">
+    <div style="padding:12px 18px;display:flex;justify-content:flex-end">
+      <a href="/reparaciones/nueva?herramienta={{ herramienta.id }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg"></i> Nueva reparación
+      </a>
+    </div>
+    {% if reparaciones %}
+    <div style="overflow-x:auto">
+      <table class="smart-table">
+        <thead>
+          <tr>
+            <th>Número</th>
+            <th>Estado</th>
+            <th>Proveedor</th>
+            <th>Fecha entrada</th>
+            <th>Fecha prevista</th>
+            <th>Coste</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rep in reparaciones %}
+          <tr>
+            <td><span style="font-family:monospace;font-size:.8rem;color:var(--primary)">{{ rep.numero }}</span></td>
+            <td>
+              {% if rep.estado == 'finalizada' %}<span class="badge badge-success">Finalizada</span>
+              {% elif rep.estado == 'en_reparacion' %}<span class="badge badge-orange">En reparación</span>
+              {% elif rep.estado == 'diagnostico' %}<span class="badge badge-info">Diagnóstico</span>
+              {% else %}<span class="badge badge-gray">{{ rep.estado | replace('_',' ') | title }}</span>{% endif %}
+            </td>
+            <td style="font-size:.8rem">{{ rep.proveedor.nombre if rep.proveedor else '—' }}</td>
+            <td style="font-size:.78rem;color:var(--text-muted)">{{ rep.fecha_entrada | fmt_fecha }}</td>
+            <td style="font-size:.78rem;color:var(--text-muted)">{{ rep.fecha_prevista | fmt_fecha }}</td>
+            <td style="font-size:.8rem">{{ rep.coste_final | fmt_precio if rep.coste_final else rep.coste_estimado | fmt_precio }}</td>
+            <td>
+              <a href="/reparaciones/{{ rep.id }}" class="btn btn-ghost btn-icon btn-sm"><i class="bi bi-eye"></i></a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-hammer"></i>
+      <h3>Sin reparaciones</h3>
+      <p>Esta herramienta no tiene reparaciones registradas</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Tab: Documentos -->
+  <div class="tab-content" data-tab="documentos">
+    <div style="padding:12px 18px;display:flex;justify-content:flex-end">
+      <label class="btn btn-primary btn-sm" style="cursor:pointer">
+        <i class="bi bi-upload"></i> Subir documento
+        <input type="file" style="display:none" onchange="subirDocumento(this, {{ herramienta.id }})">
+      </label>
+    </div>
+    {% if documentos %}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding:0 18px 18px">
+      {% for doc in documentos %}
+      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;display:flex;align-items:center;gap:10px">
+        <i class="bi bi-file-earmark-pdf" style="font-size:1.4rem;color:var(--danger);flex-shrink:0"></i>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.82rem;font-weight:600;color:var(--text);text-overflow:ellipsis;overflow:hidden;white-space:nowrap">{{ doc.nombre }}</div>
+          <div style="font-size:.72rem;color:var(--text-muted)">{{ doc.tipo or '' }}</div>
+        </div>
+        <a href="/documentos/{{ doc.id }}/descargar" class="btn btn-ghost btn-icon btn-sm"><i class="bi bi-download"></i></a>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-file-earmark"></i>
+      <h3>Sin documentos</h3>
+      <p>Sube facturas, garantías o manuales</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Tab: Auditoría -->
+  <div class="tab-content" data-tab="auditoria">
+    <!-- Resumen -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:14px 18px;border-bottom:1px solid var(--border)">
+      <div style="text-align:center">
+        <div style="font-size:1.3rem;font-weight:700">{{ herramienta.created_at | fmt_fecha }}</div>
+        <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase">Alta</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:1.3rem;font-weight:700">{{ herramienta.updated_at | fmt_fecha }}</div>
+        <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase">Últ. modificación</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:1.3rem;font-weight:700">{{ movimientos | length }}</div>
+        <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase">Movimientos</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:1.3rem;font-weight:700">{{ auditoria_logs | length }}</div>
+        <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase">Eventos auditados</div>
+      </div>
+    </div>
+
+    <!-- Log de auditoría -->
+    {% if auditoria_logs %}
+    <div style="overflow-x:auto">
+      <table class="smart-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Acción</th>
+            <th>Resumen</th>
+            <th>Estado ant.</th>
+            <th>Estado nuevo</th>
+            <th>Usuario</th>
+            <th>IP</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in auditoria_logs %}
+          {% set ant = log.datos_anteriores | fromjson if log.datos_anteriores else {} %}
+          {% set nvo = log.datos_nuevos | fromjson if log.datos_nuevos else {} %}
+          <tr>
+            <td style="font-size:.75rem;white-space:nowrap;color:var(--text-muted)">
+              {{ log.fecha | fmt_datetime }}
+            </td>
+            <td>
+              {% if log.accion == 'crear' %}
+                <span class="badge badge-success" style="font-size:.7rem">Alta</span>
+              {% elif log.accion == 'editar' %}
+                <span class="badge badge-primary" style="font-size:.7rem">Edición</span>
+              {% elif log.accion in ('baja','archivar') %}
+                <span class="badge badge-dark" style="font-size:.7rem">{{ log.accion | replace('_',' ') | title }}</span>
+              {% elif log.accion in ('perdida','robada') %}
+                <span class="badge badge-danger" style="font-size:.7rem">{{ log.accion | title }}</span>
+              {% else %}
+                <span class="badge badge-gray" style="font-size:.7rem">{{ log.accion | replace('_',' ') | title }}</span>
+              {% endif %}
+            </td>
+            <td style="font-size:.78rem;color:var(--text-2);max-width:280px">{{ log.resumen or '—' }}</td>
+            <td style="font-size:.75rem">
+              {% if ant.estado %}
+                {% set ei = estados.get(ant.estado, {}) %}
+                <span class="badge badge-{{ ei.get('color','secondary') }}" style="font-size:.65rem">{{ ei.get('label', ant.estado) }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td style="font-size:.75rem">
+              {% if nvo.estado %}
+                {% set ei = estados.get(nvo.estado, {}) %}
+                <span class="badge badge-{{ ei.get('color','secondary') }}" style="font-size:.65rem">{{ ei.get('label', nvo.estado) }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td style="font-size:.75rem;color:var(--text-2)">
+              {{ log.usuario.nombre if log.usuario else 'Sistema' }}
+            </td>
+            <td style="font-size:.72rem;color:var(--text-muted)">{{ log.ip or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-shield-check"></i>
+      <h3>Sin registros de auditoría</h3>
+      <p>Los cambios en esta herramienta aparecerán aquí</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- ── Modales de acción ────────────────────────────────────────────────────── -->
+
+<!-- Modal: Entregar -->
+<div id="modal-entregar" style="display:none;position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:12px;padding:28px;width:420px;max-width:90vw;max-height:90vh;overflow-y:auto">
+    <div style="font-weight:700;font-size:1rem;margin-bottom:16px;display:flex;justify-content:space-between">
+      <span><i class="bi bi-arrow-up-right"></i> Entregar herramienta</span>
+      <button onclick="cerrarModal('modal-entregar')" class="btn btn-ghost btn-icon btn-sm"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Responsable <span class="required">*</span></label>
+      <select id="entregar-trabajador" class="form-control">
+        <option value="">Seleccionar trabajador...</option>
+        {% for t in trabajadores %}
+        <option value="{{ t.id }}">{{ t.nombre_completo }}{% if t.cargo %} — {{ t.cargo }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin-top:10px">
+      <label class="form-label">Obra (opcional)</label>
+      <select id="entregar-obra" class="form-control">
+        <option value="">Sin obra específica</option>
+        {% for o in obras %}
+        <option value="{{ o.id }}">{{ o.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin-top:10px">
+      <label class="form-label">Observaciones</label>
+      <textarea id="entregar-obs" class="form-control" rows="2" placeholder="Notas de la entrega..."></textarea>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="enviarAccion('entregar',{trabajador_id:'entregar-trabajador',obra_id:'entregar-obra'},['entregar-obs'])">
+        <i class="bi bi-check-lg"></i> Confirmar entrega
+      </button>
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-entregar')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Mover -->
+<div id="modal-mover" style="display:none;position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:12px;padding:28px;width:420px;max-width:90vw">
+    <div style="font-weight:700;font-size:1rem;margin-bottom:16px;display:flex;justify-content:space-between">
+      <span><i class="bi bi-arrow-left-right"></i> Mover herramienta</span>
+      <button onclick="cerrarModal('modal-mover')" class="btn btn-ghost btn-icon btn-sm"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Destino</label>
+      <select id="mover-accion" class="form-control" onchange="actualizarMoverUI()">
+        <option value="a_almacen">Almacén</option>
+        <option value="a_obra">Obra</option>
+        <option value="a_furgoneta">Furgoneta</option>
+        <option value="devolver">Disponible (devolver)</option>
+        <option value="revision">Pendiente de revisión</option>
+      </select>
+    </div>
+    <div id="mover-almacen-row" class="form-group" style="margin-top:10px">
+      <label class="form-label">Almacén</label>
+      <select id="mover-almacen" class="form-control">
+        {% for a in almacenes %}
+        <option value="{{ a.id }}">{{ a.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div id="mover-obra-row" class="form-group" style="margin-top:10px;display:none">
+      <label class="form-label">Obra</label>
+      <select id="mover-obra" class="form-control">
+        {% for o in obras %}
+        <option value="{{ o.id }}">{{ o.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div id="mover-vehiculo-row" class="form-group" style="margin-top:10px;display:none">
+      <label class="form-label">Vehículo</label>
+      <select id="mover-vehiculo" class="form-control">
+        {% for v in vehiculos %}
+        <option value="{{ v.id }}">{{ v.matricula }}{% if v.descripcion %} — {{ v.descripcion }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin-top:10px">
+      <label class="form-label">Observaciones</label>
+      <textarea id="mover-obs" class="form-control" rows="2" placeholder="Motivo del traslado..."></textarea>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="enviarMover()"><i class="bi bi-check-lg"></i> Mover</button>
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-mover')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Dar de baja -->
+<div id="modal-baja" style="display:none;position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:12px;padding:28px;width:380px;max-width:90vw">
+    <div style="font-weight:700;font-size:1rem;margin-bottom:8px;color:var(--danger)">
+      <i class="bi bi-x-circle"></i> Dar de baja
+    </div>
+    <p style="font-size:.84rem;color:var(--text-2);margin-bottom:16px">
+      La herramienta quedará inactiva. Esta acción requiere permisos de administrador.
+    </p>
+    <div class="form-group">
+      <label class="form-label">Motivo <span class="required">*</span></label>
+      <textarea id="baja-obs" class="form-control" rows="3" placeholder="Motivo de la baja..."></textarea>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:8px">
+      <button class="btn btn-danger" onclick="enviarAccionSimple('baja','baja-obs')">
+        <i class="bi bi-x-circle"></i> Dar de baja
+      </button>
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-baja')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const HID = {{ herramienta.id }};
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btns = document.querySelectorAll('.tab-btn[data-tab]');
+  const panels = document.querySelectorAll('.tab-content[data-tab]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tab;
+      btns.forEach(b => b.classList.toggle('active', b === btn));
+      panels.forEach(p => p.classList.toggle('active', p.dataset.tab === target));
+    });
+  });
+});
+
+function subirFoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) { Toast.error('La foto no puede superar 10 MB'); return; }
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    // Mostrar preview inmediato
+    let prev = document.getElementById('foto-preview');
+    const icon = document.getElementById('foto-icon');
+    const wrap = document.getElementById('foto-wrap');
+    if (!prev) {
+      prev = document.createElement('img');
+      prev.id = 'foto-preview';
+      prev.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit';
+      if (icon) icon.style.display = 'none';
+      wrap.insertBefore(prev, wrap.firstChild);
+    }
+    prev.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+
+  // Upload
+  const fd = new FormData();
+  fd.append('foto', file);
+  Toast.info('Subiendo foto...');
+  fetch(`/herramientas/${HID}/foto`, { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(d => { if (d.ok) Toast.success('Foto guardada'); else Toast.error('Error al guardar'); })
+    .catch(() => Toast.error('Error de conexión'));
+}
+
+function cerrarModal(id) {
+  document.getElementById(id).style.display = 'none';
+}
+
+function abrirModalAccion(accion) {
+  const id = accion === 'entregar' ? 'modal-entregar'
+           : accion === 'mover'    ? 'modal-mover'
+           : accion === 'baja'     ? 'modal-baja'
+           : null;
+  if (id) document.getElementById(id).style.display = 'flex';
+}
+
+// Acción simple (sin modal extra)
+async function accionDirecta(accion, obs = '') {
+  if (!confirm(`¿Confirmar acción: ${accion.replace(/_/g,' ')}?`)) return;
+  const fd = new FormData();
+  fd.append('accion', accion);
+  fd.append('observaciones', obs);
+  try {
+    const r = await fetch(`/herramientas/${HID}/accion`, {
+      method: 'POST', body: fd, headers: { Accept: 'application/json' }
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) { Toast.success('Acción aplicada'); setTimeout(() => location.reload(), 800); }
+    else Toast.error(d.detail || 'Error');
+  } catch { Toast.error('Error de conexión'); }
+}
+
+// Enviar acción con campos del modal
+async function enviarAccionSimple(accion, obsFieldId) {
+  const obs = document.getElementById(obsFieldId)?.value || '';
+  const fd = new FormData();
+  fd.append('accion', accion);
+  fd.append('observaciones', obs);
+  cerrarModal('modal-' + accion);
+  try {
+    const r = await fetch(`/herramientas/${HID}/accion`, {
+      method: 'POST', body: fd, headers: { Accept: 'application/json' }
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) { Toast.success('Acción aplicada'); setTimeout(() => location.reload(), 800); }
+    else Toast.error(d.detail || 'Error');
+  } catch { Toast.error('Error de conexión'); }
+}
+
+// Entregar: con trabajador + obra + obs
+async function enviarAccion(accion, selectIds, obsIds) {
+  const fd = new FormData();
+  fd.append('accion', accion);
+  for (const [campo, elId] of Object.entries(selectIds)) {
+    const el = document.getElementById(elId);
+    if (el && el.value) fd.append(campo, el.value);
+  }
+  for (const id of obsIds) {
+    const el = document.getElementById(id);
+    if (el) fd.append('observaciones', el.value);
+  }
+  cerrarModal('modal-' + accion);
+  try {
+    const r = await fetch(`/herramientas/${HID}/accion`, {
+      method: 'POST', body: fd, headers: { Accept: 'application/json' }
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) { Toast.success('Acción aplicada'); setTimeout(() => location.reload(), 800); }
+    else Toast.error(d.detail || 'Error');
+  } catch { Toast.error('Error de conexión'); }
+}
+
+// Mover: selección dinámica de destino
+function actualizarMoverUI() {
+  const v = document.getElementById('mover-accion').value;
+  document.getElementById('mover-almacen-row').style.display  = v === 'a_almacen' || v === 'devolver' ? '' : 'none';
+  document.getElementById('mover-obra-row').style.display     = v === 'a_obra'     ? '' : 'none';
+  document.getElementById('mover-vehiculo-row').style.display = v === 'a_furgoneta' ? '' : 'none';
+}
+
+async function enviarMover() {
+  const accion = document.getElementById('mover-accion').value;
+  const obs    = document.getElementById('mover-obs').value;
+  const fd = new FormData();
+  fd.append('accion', accion);
+  fd.append('observaciones', obs);
+  const almId = document.getElementById('mover-almacen').value;
+  const obraId = document.getElementById('mover-obra').value;
+  const vehId  = document.getElementById('mover-vehiculo').value;
+  if (almId)  fd.append('almacen_id', almId);
+  if (obraId) fd.append('obra_id', obraId);
+  if (vehId)  fd.append('vehiculo_id', vehId);
+
+  cerrarModal('modal-mover');
+  try {
+    const r = await fetch(`/herramientas/${HID}/accion`, {
+      method: 'POST', body: fd, headers: { Accept: 'application/json' }
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) { Toast.success('Herramienta movida'); setTimeout(() => location.reload(), 800); }
+    else Toast.error(d.detail || 'Error al mover');
+  } catch { Toast.error('Error de conexión'); }
+}
+
+function subirDocumento(input, herramientaId) {
+  if (!input.files.length) return;
+  Toast.info('Subiendo documento...');
+  const form = new FormData();
+  form.append('archivo', input.files[0]);
+  form.append('herramienta_id', herramientaId);
+  fetch('/documentos/subir', { method: 'POST', body: form })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) { Toast.success('Documento subido'); setTimeout(() => location.reload(), 800); }
+      else Toast.error(data.error || 'Error al subir');
+    })
+    .catch(() => Toast.error('Error de conexión'));
+}
+
+// Cerrar modales al clic fuera
+document.addEventListener('click', function(e) {
+  for (const id of ['modal-entregar','modal-mover','modal-baja']) {
+    const el = document.getElementById(id);
+    if (el && e.target === el) cerrarModal(id);
+  }
+});
+</script>
+{% endblock %}

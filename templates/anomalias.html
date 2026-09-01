@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Anomalías — {{ app_name }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<span class="current">Detección de Anomalías</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title"><i class="bi bi-activity" style="color:var(--danger)"></i> Detección de Anomalías</div>
+    <div class="page-subtitle">Generado {{ resultado.generado_en }} · {{ resultado.resumen.total }} anomalía(s) detectada(s)</div>
+  </div>
+  <form method="post" action="/anomalias/crear-avisos" style="display:inline">
+    <button type="submit" class="btn btn-primary btn-sm"
+            onclick="return confirm('¿Crear avisos para todas las anomalías críticas y altas?')">
+      <i class="bi bi-bell-fill"></i> Crear avisos
+    </button>
+  </form>
+</div>
+
+{% if request.query_params.get('ok') %}
+<div style="background:var(--success-light,#d1e7dd);border:1px solid var(--success);border-radius:8px;padding:10px 16px;margin-bottom:14px;color:var(--success);font-size:.84rem">
+  <i class="bi bi-check-circle-fill"></i> {{ request.query_params.get('ok')|replace('+',' ') }}
+</div>
+{% endif %}
+
+<!-- Resumen por severidad -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">
+  {% set sevs = [
+    ('critica', resultado.resumen.critica, '#dc3545', 'bi-exclamation-octagon-fill'),
+    ('alta',    resultado.resumen.alta,    '#fd7e14', 'bi-exclamation-triangle-fill'),
+    ('media',   resultado.resumen.media,   '#0d6efd', 'bi-info-circle-fill'),
+    ('baja',    resultado.resumen.baja,    '#6c757d', 'bi-dash-circle'),
+  ] %}
+  {% for key, cnt, color, icon in sevs %}
+  <a href="/anomalias{% if filtro_sev == key %}{% else %}?sev={{ key }}{% endif %}"
+     style="text-decoration:none">
+    <div class="card" style="padding:14px;text-align:center;border:2px solid {% if filtro_sev == key %}{{ color }}{% else %}var(--border){% endif %}">
+      <i class="bi {{ icon }}" style="color:{{ color }};font-size:1.3rem"></i>
+      <div style="font-size:1.8rem;font-weight:700;color:{{ color }};line-height:1.2">{{ cnt }}</div>
+      <div style="font-size:.75rem;color:var(--text-muted);text-transform:capitalize">{{ key }}</div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+{% if filtro_sev %}
+<div style="margin-bottom:12px">
+  <a href="/anomalias" class="btn btn-ghost btn-sm"><i class="bi bi-x"></i> Quitar filtro</a>
+  <span style="font-size:.83rem;color:var(--text-muted);margin-left:8px">Mostrando solo: <strong>{{ filtro_sev }}</strong></span>
+</div>
+{% endif %}
+
+<!-- Lista de anomalías -->
+{% if lista %}
+<div style="display:flex;flex-direction:column;gap:10px">
+  {% for a in lista %}
+  {% set sev_color = {
+    'critica': '#dc3545', 'alta': '#fd7e14',
+    'media': '#0d6efd', 'baja': '#6c757d'
+  }.get(a.severidad, '#6c757d') %}
+  {% set sev_bg = {
+    'critica': 'rgba(220,53,69,.08)', 'alta': 'rgba(253,126,20,.08)',
+    'media': 'rgba(13,110,253,.06)', 'baja': 'rgba(108,117,125,.06)'
+  }.get(a.severidad, 'var(--surface-2)') %}
+  <div style="border:1px solid {{ sev_color }}44;border-left:4px solid {{ sev_color }};border-radius:8px;padding:12px 16px;background:{{ sev_bg }}">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="background:{{ sev_color }};color:#fff;border-radius:4px;padding:1px 8px;font-size:.72rem;font-weight:700;text-transform:uppercase">{{ a.severidad }}</span>
+          <span style="font-size:.78rem;color:var(--text-muted);background:var(--surface-2);border-radius:4px;padding:1px 8px">{{ a.tipo.replace('_',' ') }}</span>
+          <span style="font-size:.78rem;color:var(--text-muted)">{{ a.item_tipo }}</span>
+        </div>
+        <div style="font-size:.88rem;color:var(--text-primary);font-weight:500">{{ a.descripcion }}</div>
+        {% if a.valor is not none and a.umbral is not none %}
+        <div style="font-size:.75rem;color:var(--text-muted);margin-top:4px">
+          Valor detectado: <strong>{{ a.valor }}</strong> · Umbral: {{ a.umbral }} · Método: {{ a.metodo }}
+        </div>
+        {% endif %}
+      </div>
+      {% if a.enlace %}
+      <a href="{{ a.enlace }}" class="btn btn-ghost btn-xs" style="white-space:nowrap">
+        <i class="bi bi-arrow-up-right-square"></i> Ver
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card" style="padding:48px;text-align:center;color:var(--text-muted)">
+  <i class="bi bi-shield-check" style="font-size:3rem;color:var(--success);display:block;margin-bottom:12px"></i>
+  <div style="font-size:1rem;font-weight:600;margin-bottom:4px">Sin anomalías detectadas</div>
+  <div style="font-size:.84rem">El sistema no encontró patrones inusuales{% if filtro_sev %} de severidad «{{ filtro_sev }}»{% endif %}.</div>
+</div>
+{% endif %}
+
+{% if resultado.errores_detectores %}
+<div style="margin-top:14px;padding:10px 14px;background:var(--surface-2);border-radius:8px;font-size:.78rem;color:var(--text-muted)">
+  <i class="bi bi-info-circle"></i> Detectores con advertencias: {{ resultado.errores_detectores | join(', ') }}
+</div>
+{% endif %}
+{% endblock %}

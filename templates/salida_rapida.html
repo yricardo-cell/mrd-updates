@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Salida Rapida — MRD</title>
+  <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/css/bootstrap-icons.min.css">
+  <style>
+    body{background:#0f172a;color:#f1f5f9;font-size:16px;}
+    .sr-card{background:#1e293b;border-radius:16px;padding:20px;margin-bottom:16px;}
+    .sr-btn{width:100%;padding:18px;font-size:18px;border-radius:12px;font-weight:700;margin-bottom:10px;}
+    .sr-select{background:#334155;color:#f1f5f9;border:none;border-radius:10px;padding:14px;font-size:16px;width:100%;}
+    .sr-header{background:linear-gradient(135deg,#1E3A5F,#0f172a);padding:20px 16px 14px;margin:-12px -12px 20px;border-radius:0 0 20px 20px;}
+    .item-check{background:#334155;border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;user-select:none;}
+    .item-check.selected{background:#166534;border:2px solid #22c55e;}
+    .item-check input{display:none;}
+    .badge-count{background:#ef4444;color:white;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;}
+    .tab-btn{flex:1;padding:12px;background:#1e293b;border:none;color:#94a3b8;border-radius:10px;font-size:14px;}
+    .tab-btn.active{background:#1E3A5F;color:white;font-weight:700;}
+  </style>
+</head>
+<body class="p-3">
+<div class="sr-header">
+  <div class="d-flex align-items-center justify-content-between">
+    <div>
+      <h5 class="mb-0 fw-bold"><i class="bi bi-lightning-charge-fill me-2 text-warning"></i>Salida Rapida</h5>
+      <small class="text-secondary">Registrar salida de la nave</small>
+    </div>
+    <a href="/" class="btn btn-sm btn-outline-light"><i class="bi bi-house"></i></a>
+  </div>
+</div>
+
+<form method="post" action="/albaranes-salida" id="formSalida">
+<!-- Responsable y Obra -->
+<div class="sr-card">
+  <label class="text-secondary small mb-2 d-block">RESPONSABLE</label>
+  <select name="responsable_id" class="sr-select mb-3">
+    <option value="">-- Seleccionar --</option>
+    {% for t in trabajadores %}<option value="{{ t.id }}">{{ t.nombre_completo }}</option>{% endfor %}
+  </select>
+  <label class="text-secondary small mb-2 d-block">OBRA / DESTINO</label>
+  <select name="obra_id" class="sr-select">
+    <option value="">-- Seleccionar --</option>
+    {% for o in obras %}<option value="{{ o.id }}">{{ o.nombre }}</option>{% endfor %}
+  </select>
+</div>
+
+<!-- Tabs de tipo -->
+<div class="d-flex gap-2 mb-3">
+  <button type="button" class="tab-btn active" onclick="showTab('herr',this)">
+    <i class="bi bi-wrench-adjustable d-block fs-5"></i>Herramientas
+    <span class="badge-count ms-1" id="cnt-herr">0</span>
+  </button>
+  <button type="button" class="tab-btn" onclick="showTab('mat',this)">
+    <i class="bi bi-boxes d-block fs-5"></i>Materiales
+    <span class="badge-count ms-1" id="cnt-mat">0</span>
+  </button>
+  <button type="button" class="tab-btn" onclick="showTab('libre',this)">
+    <i class="bi bi-pencil-square d-block fs-5"></i>Libre
+  </button>
+</div>
+
+<!-- Herramientas -->
+<div id="tab-herr" class="sr-card">
+  <input type="search" id="buscaHerr" placeholder="Buscar herramienta..." class="sr-select mb-3" oninput="filtrar('herr',this.value)">
+  <div id="lista-herr">
+    {% for h in herramientas %}
+    <div class="item-check" data-name="{{ h.nombre|lower }}" onclick="toggle(this,'herramienta_ids','{{ h.id }}')">
+      <input type="checkbox" name="herramienta_ids" value="{{ h.id }}">
+      <i class="bi bi-wrench-adjustable me-2 text-primary"></i>
+      <strong>{{ h.nombre }}</strong>
+      {% if h.num_serie %}<small class="text-secondary ms-2">{{ h.num_serie }}</small>{% endif %}
+    </div>
+    {% else %}<p class="text-secondary text-center">No hay disponibles</p>{% endfor %}
+  </div>
+</div>
+
+<!-- Materiales -->
+<div id="tab-mat" class="sr-card" style="display:none">
+  <input type="search" id="buscaMat" placeholder="Buscar material..." class="sr-select mb-3" oninput="filtrar('mat',this.value)">
+  <div id="lista-mat">
+    {% for m in materiales %}
+    <div class="item-check" data-name="{{ m.nombre|lower }}" onclick="toggleMat(this,'{{ m.id }}','{{ m.unidad }}')">
+      <input type="checkbox" name="material_ids" value="{{ m.id }}">
+      <i class="bi bi-boxes me-2 text-success"></i>
+      <strong>{{ m.nombre }}</strong>
+      <small class="text-secondary ms-2">{{ "%.1f"|format(m.stock_actual) }} {{ m.unidad }}</small>
+      <div class="mt-2 d-none" id="cantMat{{ m.id }}">
+        <input type="number" name="cant_mat_{{ m.id }}" value="1" min="0.01" step="0.01"
+               class="form-control form-control-sm" style="max-width:120px" onclick="event.stopPropagation()">
+        <small class="text-secondary ms-1">{{ m.unidad }}</small>
+      </div>
+    </div>
+    {% else %}<p class="text-secondary text-center">No hay materiales con stock</p>{% endfor %}
+  </div>
+</div>
+
+<!-- Libre -->
+<div id="tab-libre" class="sr-card" style="display:none">
+  <div id="lineasLibres">
+    <input type="text" name="lineas_libres" class="sr-select mb-2" placeholder="Ej: Generador Honda 2kW">
+    <input type="text" name="lineas_libres" class="sr-select mb-2" placeholder="Ej: Andamio 3 tramos">
+  </div>
+  <button type="button" class="btn btn-outline-light w-100 mt-1" onclick="addLinea()">+ Añadir linea</button>
+</div>
+
+<button type="submit" class="sr-btn btn btn-danger mt-2">
+  <i class="bi bi-box-arrow-right me-2"></i>REGISTRAR SALIDA
+</button>
+</form>
+
+<script>
+function showTab(id,btn){
+  ['herr','mat','libre'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display=t===id?'block':'none';
+  });
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+var counts={herr:0,mat:0};
+function toggle(el,name,val){
+  el.classList.toggle('selected');
+  var chk=el.querySelector('input');
+  chk.checked=el.classList.contains('selected');
+  counts.herr=document.querySelectorAll('#lista-herr .item-check.selected').length;
+  document.getElementById('cnt-herr').textContent=counts.herr;
+}
+function toggleMat(el,id,unit){
+  el.classList.toggle('selected');
+  var chk=el.querySelector('input[type=checkbox]');
+  chk.checked=el.classList.contains('selected');
+  document.getElementById('cantMat'+id).classList.toggle('d-none',!chk.checked);
+  counts.mat=document.querySelectorAll('#lista-mat .item-check.selected').length;
+  document.getElementById('cnt-mat').textContent=counts.mat;
+}
+function filtrar(tab,q){
+  var lista=document.getElementById('lista-'+tab);
+  lista.querySelectorAll('.item-check').forEach(function(el){
+    el.style.display=el.dataset.name.includes(q.toLowerCase())?'':'none';
+  });
+}
+function addLinea(){
+  var i=document.createElement('input');
+  i.type='text';i.name='lineas_libres';i.className='sr-select mb-2';i.placeholder='...';
+  document.getElementById('lineasLibres').appendChild(i);
+}
+</script>
+</body>
+</html>

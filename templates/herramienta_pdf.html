@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ficha — {{ h.codigo }}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 20px; }
+  h1 { font-size: 16px; font-weight: 700; }
+  h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #444; margin: 14px 0 6px; border-bottom: 1px solid #ddd; padding-bottom: 3px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid #1d4ed8; }
+  .header-info h1 { color: #1d4ed8; }
+  .header-info p { color: #555; font-size: 10px; margin-top: 2px; }
+  .qr img { width: 80px; height: 80px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .field { margin-bottom: 5px; }
+  .field label { font-size: 9px; text-transform: uppercase; color: #666; display: block; }
+  .field span { font-weight: 600; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+  .badge-success { background: #d1fae5; color: #065f46; }
+  .badge-primary { background: #dbeafe; color: #1e40af; }
+  .badge-warning { background: #fef3c7; color: #92400e; }
+  .badge-danger  { background: #fee2e2; color: #991b1b; }
+  .badge-dark    { background: #e5e7eb; color: #111; }
+  .badge-info    { background: #e0f2fe; color: #0c4a6e; }
+  .badge-orange  { background: #ffedd5; color: #9a3412; }
+  .badge-secondary { background: #f3f4f6; color: #374151; }
+  table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 6px; }
+  th { background: #f3f4f6; padding: 4px 6px; text-align: left; font-size: 9px; text-transform: uppercase; color: #555; }
+  td { padding: 4px 6px; border-bottom: 1px solid #f0f0f0; }
+  .foto { float: right; margin-left: 16px; }
+  .foto img { width: 100px; height: 100px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd; }
+  .footer { margin-top: 20px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 9px; color: #888; display: flex; justify-content: space-between; }
+  @media print { body { padding: 10px; } .no-print { display: none; } }
+</style>
+</head>
+<body>
+
+<div class="no-print" style="margin-bottom:16px">
+  <button onclick="window.print()" style="padding:6px 16px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">
+    🖨️ Imprimir / Guardar PDF
+  </button>
+  <a href="/herramientas/{{ h.id }}" style="margin-left:10px;font-size:12px;color:#1d4ed8">← Volver a la ficha</a>
+</div>
+
+<!-- Cabecera -->
+<div class="header">
+  <div class="header-info">
+    <h1>{{ h.nombre }}</h1>
+    <p><strong>Código:</strong> {{ h.codigo }}{% if h.num_serie %} &nbsp;·&nbsp; <strong>S/N:</strong> {{ h.num_serie }}{% endif %}</p>
+    <p style="margin-top:4px">
+      {% set clr = estado_info.get('color', 'secondary') %}
+      Estado: <span class="badge badge-{{ clr }}">{{ estado_info.get('label', h.estado) }}</span>
+    </p>
+    {% if h.foto %}
+    <div class="foto" style="margin-top:4px">
+      <img src="/uploads/herramientas/{{ h.foto }}" alt="{{ h.nombre }}">
+    </div>
+    {% endif %}
+  </div>
+  <div class="qr">
+    {% if qr_b64 %}
+    <img src="data:image/png;base64,{{ qr_b64 }}" alt="QR {{ h.codigo }}">
+    {% endif %}
+    <div style="font-size:8px;text-align:center;color:#666;margin-top:2px">{{ h.codigo }}</div>
+  </div>
+</div>
+
+<!-- Identificación + Clasificación -->
+<h2>Identificación y clasificación</h2>
+<div class="grid-3">
+  <div class="field"><label>Categoría</label><span>{{ h.categoria or '—' }}</span></div>
+  <div class="field"><label>Subcategoría</label><span>{{ h.subcategoria or '—' }}</span></div>
+  <div class="field"><label>Familia</label><span>{{ h.familia or '—' }}</span></div>
+</div>
+
+<!-- Datos técnicos -->
+<h2>Datos técnicos</h2>
+<div class="grid-3">
+  <div class="field"><label>Marca</label><span>{{ h.marca or '—' }}</span></div>
+  <div class="field"><label>Modelo</label><span>{{ h.modelo or '—' }}</span></div>
+  <div class="field"><label>Fabricante</label><span>{{ h.fabricante or '—' }}</span></div>
+  <div class="field"><label>Potencia</label><span>{{ h.potencia or '—' }}</span></div>
+  <div class="field"><label>Voltaje</label><span>{{ h.voltaje or '—' }}</span></div>
+  <div class="field"><label>Peso</label><span>{{ h.peso ~ ' kg' if h.peso else '—' }}</span></div>
+  <div class="field"><label>Dimensiones</label><span>{{ h.dimensiones or '—' }}</span></div>
+  <div class="field"><label>Color</label><span>{{ h.color or '—' }}</span></div>
+  <div class="field"><label>Activo fijo</label><span>{{ h.activo_fijo or '—' }}</span></div>
+</div>
+
+<!-- Adquisición -->
+<h2>Adquisición</h2>
+<div class="grid-3">
+  <div class="field"><label>Fecha compra</label><span>{{ h.fecha_compra.strftime('%d/%m/%Y') if h.fecha_compra else '—' }}</span></div>
+  <div class="field"><label>Precio</label><span>{{ '%.2f €' % h.precio_compra if h.precio_compra else '—' }}</span></div>
+  <div class="field"><label>Proveedor</label><span>{{ h.proveedor_texto or '—' }}</span></div>
+  <div class="field"><label>Nº factura</label><span>{{ h.numero_factura or '—' }}</span></div>
+  <div class="field"><label>Garantía hasta</label><span>{{ h.garantia_hasta.strftime('%d/%m/%Y') if h.garantia_hasta else '—' }}</span></div>
+  <div class="field"><label>Vida útil</label><span>{{ h.vida_util_anos ~ ' años' if h.vida_util_anos else '—' }}</span></div>
+</div>
+
+<!-- Ubicación actual -->
+<h2>Ubicación actual</h2>
+<div class="grid-2">
+  <div class="field"><label>Ubicación</label><span>{{ h.ubicacion_texto or '—' }}</span></div>
+  {% if h.responsable %}
+  <div class="field"><label>Responsable</label><span>{{ h.responsable.nombre_completo }}</span></div>
+  {% endif %}
+  {% if h.almacen %}
+  <div class="field"><label>Almacén</label><span>{{ h.almacen.nombre }}</span></div>
+  {% endif %}
+  {% if h.obra %}
+  <div class="field"><label>Obra</label><span>{{ h.obra.nombre }}</span></div>
+  {% endif %}
+</div>
+
+{% if h.observaciones %}
+<h2>Observaciones</h2>
+<p style="font-size:10px;color:#444">{{ h.observaciones }}</p>
+{% endif %}
+
+<!-- Historial de movimientos -->
+{% if movimientos %}
+<h2>Historial de movimientos (últimos {{ movimientos|length }})</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Fecha</th>
+      <th>Tipo</th>
+      <th>Estado anterior</th>
+      <th>Estado nuevo</th>
+      <th>Destino</th>
+      <th>Observaciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for m in movimientos %}
+    <tr>
+      <td>{{ m.fecha.strftime('%d/%m/%Y %H:%M') if m.fecha else '—' }}</td>
+      <td>{{ m.tipo | replace('_',' ') | title }}</td>
+      <td>{{ m.estado_anterior or '—' }}</td>
+      <td>{{ m.estado_nuevo }}</td>
+      <td>{{ m.destino or '—' }}</td>
+      <td>{{ m.observaciones or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<div class="footer">
+  <span>MRD TOOL CONTROL · {{ h.codigo }}</span>
+  <span>Impreso el {{ fecha_impresion }}</span>
+</div>
+
+</body>
+</html>

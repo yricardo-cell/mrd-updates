@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>MRD sin conexión</title>
+  <style>
+    :root{color-scheme:dark}body{margin:0;background:#071522;color:#f8fafc;font-family:system-ui,sans-serif;display:grid;min-height:100vh;place-items:center}.box{width:min(92vw,520px);background:#102538;border:1px solid #31506a;border-radius:20px;padding:24px;box-shadow:0 22px 70px #0008}h1{margin-top:0;color:#ffb547}p{color:#cbd5e1;line-height:1.5}input,button{box-sizing:border-box;width:100%;min-height:54px;border-radius:12px;font-size:18px}input{background:#fff;color:#111827;border:3px solid #ffb547;padding:10px 14px}button{margin-top:12px;border:0;background:#f59e0b;color:#111827;font-weight:800}.count{margin-top:16px;padding:12px;background:#071522;border-radius:10px}.safe{font-size:13px;color:#94a3b8}</style>
+</head>
+<body>
+  <main class="box">
+    <h1>MRD sin conexión</h1>
+    <p>Puedes seguir leyendo etiquetas. Se guardarán en este dispositivo y se comprobarán al volver Internet.</p>
+    <form id="capture"><input id="code" autocomplete="off" autofocus placeholder="Escanea o escribe el código"><button>Guardar lectura</button></form>
+    <div class="count" id="count">0 lecturas pendientes</div>
+    <p class="safe">Por seguridad, aquí no se ejecutan entregas ni devoluciones.</p>
+  </main>
+  <script>
+  (()=>{const KEY='mrd.pendingScans.v1',input=document.getElementById('code'),count=document.getElementById('count');
+    function rows(){try{const value=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(value)?value:[]}catch(_){return[]}}
+    function paint(){const total=rows().length;count.textContent=total+' lectura'+(total===1?'':'s')+' pendiente'+(total===1?'':'s')}
+    document.getElementById('capture').addEventListener('submit',event=>{event.preventDefault();const code=input.value.trim();if(code.length<2||code.length>512)return;const list=rows();list.push({code:code,at:Date.now()});localStorage.setItem(KEY,JSON.stringify(list.slice(-100)));input.value='';paint();input.focus()});
+    window.addEventListener('online',()=>location.replace('/scan?reanudar=1'));paint();
+  })();
+  </script>
+</body>
+</html>

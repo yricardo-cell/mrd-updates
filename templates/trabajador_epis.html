@@ -1,0 +1,516 @@
+{% extends "base.html" %}
+{% block title %}EPIs — {{ trabajador.nombre_completo }} — {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .item-row td { vertical-align: middle; }
+  .item-row.desactivado { opacity:.45; }
+  .talla-input { width:75px; }
+  .qty-input   { width:65px; }
+  .extra-row input[type=text] { text-transform:uppercase; }
+
+  /* scroll fix global en mrd.css */
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a> / <a href="/epis">EPIs</a> / {{ trabajador.nombre_completo }}
+{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <div>
+    <h2 class="mrd-page-title mb-0"><i class="bi bi-shield-check me-2"></i>EPIs y Ropa — {{ trabajador.nombre_completo }}</h2>
+    <div class="text-muted small mt-1">{{ trabajador.cargo or '' }}{{ ' · ' + trabajador.dni if trabajador.dni else '' }}</div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if user.rol in ['admin','almacen','encargado_patio'] %}
+    <button class="btn btn-outline-primary mrd-btn" id="btn-asignar-arnes" onclick="abrirModalArnes()">
+      <i class="bi bi-fingerprint me-1"></i>Asignar arnés/absorbedor
+    </button>
+    <button class="btn btn-primary mrd-btn" data-bs-toggle="modal" data-bs-target="#modalEPI">
+      <i class="bi bi-shield-fill me-1"></i>Entregar EPIs
+    </button>
+    <button class="btn btn-warning mrd-btn" data-bs-toggle="modal" data-bs-target="#modalRopa">
+      <i class="bi bi-bag-fill me-1"></i>Entregar Ropa
+    </button>
+    {% endif %}
+    <a href="/epis" class="btn btn-outline-secondary mrd-btn"><i class="bi bi-arrow-left me-1"></i>Volver</a>
+  </div>
+</div>
+
+<!-- Accesos rápidos a módulos del trabajador -->
+<div class="d-flex gap-2 flex-wrap mb-4">
+  <a href="/trabajadores/{{ trabajador.id }}/pdf-ficha" class="btn btn-outline-dark btn-sm">
+    <i class="bi bi-file-pdf me-1"></i>PDF ficha
+  </a>
+  <a href="/trabajadores/{{ trabajador.id }}/portal-qr" class="btn btn-primary btn-sm">
+    <i class="bi bi-person-badge me-1"></i>Portal trabajador y PIN
+  </a>
+</div>
+
+<div class="row g-3 mb-4" id="material-asignado">
+  <div class="col-sm-6 col-xl-3"><div class="mrd-card h-100"><div class="text-muted small">Herramientas asignadas</div><div class="display-6 fw-bold">{{ herramientas_asignadas|length }}</div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="mrd-card h-100"><div class="text-muted small">Maquinaria asignada</div><div class="display-6 fw-bold">{{ maquinaria_asignada|length }}</div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="mrd-card h-100"><div class="text-muted small">EPI individual</div><div class="display-6 fw-bold">{{ epis_individuales|length }}</div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="mrd-card h-100"><div class="text-muted small">Albaranes</div><div class="display-6 fw-bold">{{ albaranes_trabajador|length }}</div></div></div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-7">
+    <div class="mrd-card h-100">
+      <h5><i class="bi bi-tools me-2"></i>Material que tiene ahora</h5>
+      {% if herramientas_asignadas or maquinaria_asignada %}
+      <div class="table-responsive"><table class="mrd-table"><thead><tr><th>Código</th><th>Artículo</th><th>Estado</th><th></th></tr></thead><tbody>
+        {% for h in herramientas_asignadas %}<tr><td><code>{{ h.codigo }}</code></td><td>{{ h.nombre }}</td><td><span class="badge bg-{{ h.estado|estado_color }}">{{ h.estado|estado_label }}</span></td><td><a class="btn btn-sm btn-outline-primary" href="/herramientas/{{ h.id }}">Abrir</a></td></tr>{% endfor %}
+        {% for m in maquinaria_asignada %}<tr><td><code>{{ m.codigo_interno or m.codigo_barras or ('MRD-MAQ-' ~ m.id) }}</code></td><td>{{ m.nombre }}</td><td><span class="badge bg-secondary">{{ m.estado }}</span></td><td><a class="btn btn-sm btn-outline-primary" href="/maquinaria/{{ m.id }}">Abrir</a></td></tr>{% endfor %}
+      </tbody></table></div>
+      {% else %}<p class="text-muted mb-0">No tiene herramientas ni maquinaria asignadas actualmente.</p>{% endif %}
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="mrd-card h-100">
+      <h5><i class="bi bi-file-earmark-text me-2"></i>Últimos albaranes</h5>
+      {% if albaranes_trabajador %}
+        {% for alb in albaranes_trabajador[:8] %}<div class="d-flex justify-content-between align-items-center border-bottom py-2"><div><strong>{{ alb.numero }}</strong><div class="small text-muted">{{ alb.fecha_salida.strftime('%d/%m/%Y %H:%M') if alb.fecha_salida else '' }}</div></div><a class="btn btn-sm btn-outline-primary" href="/albaranes-salida/{{ alb.id }}">Ver</a></div>{% endfor %}
+      {% else %}<p class="text-muted mb-0">Todavía no tiene albaranes asociados.</p>{% endif %}
+    </div>
+  </div>
+</div>
+
+{% if request.query_params.get('err') == 'sin_items' %}
+<div class="alert alert-warning py-2">Selecciona al menos un artículo para registrar la entrega.</div>
+{% endif %}
+
+{% if not entregas %}
+<div class="mrd-card text-center py-5">
+  <i class="bi bi-shield-x" style="font-size:3rem;color:var(--text-muted)"></i>
+  <p class="text-muted mt-3">No hay entregas registradas para este trabajador.</p>
+  {% if user.rol in ['admin','almacen','encargado_patio'] %}
+  <button class="btn btn-primary mrd-btn" data-bs-toggle="modal" data-bs-target="#modalEPI">
+    <i class="bi bi-shield-fill me-1"></i>Registrar primera entrega EPI
+  </button>
+  {% endif %}
+</div>
+{% else %}
+<div class="mrd-card">
+  <h6 class="mb-3"><i class="bi bi-clock-history me-2"></i>Historial de entregas</h6>
+  {% for e in entregas %}
+  <div class="border rounded p-3 mb-3" style="border-color:var(--border)!important">
+    <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
+      <div>
+        <span class="badge {% if e.tipo == 'epi' %}bg-primary{% else %}bg-warning text-dark{% endif %} mb-1">
+          {% if e.tipo == 'epi' %}<i class="bi bi-shield-fill me-1"></i>EPIs
+          {% else %}<i class="bi bi-bag-fill me-1"></i>ROPA{% endif %}
+        </span>
+        <div class="fw-semibold">{{ e.fecha.strftime('%d/%m/%Y %H:%M') }}</div>
+        <div class="small text-muted">
+          Entregado por: <strong>{{ e.entregado_por or '—' }}</strong>
+          {% if e.firmado_por %} · Firmado: <strong>{{ e.firmado_por }}</strong>{% endif %}
+        </div>
+        {% if e.observaciones %}<div class="small text-muted mt-1">{{ e.observaciones }}</div>{% endif %}
+      </div>
+      <a href="/trabajadores/{{ trabajador.id }}/epis/{{ e.id }}/pdf" target="_blank"
+         class="btn btn-sm btn-outline-secondary mrd-btn">
+        <i class="bi bi-file-pdf me-1"></i>Albarán PDF
+      </a>
+    </div>
+    <div class="row g-1 mt-2">
+      {% for item in e._items %}
+      <div class="col-auto">
+        <span class="badge bg-light text-dark border">
+          <span class="badge {% if e.tipo == 'epi' %}bg-primary{% else %}bg-warning text-dark{% endif %} me-1">{{ item.cantidad }}</span>
+          {{ item.nombre }}{% if item.get('talla') %} <span class="text-muted">T.{{ item.talla }}</span>{% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ═══════════ ARNESES Y ABSORBEDORES ═══════════ #}
+{% if epis_individuales %}
+<div class="mrd-card mb-4">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h6 class="mb-0"><i class="bi bi-fingerprint me-2 text-primary"></i>Arneses y absorbedores asignados</h6>
+    <a href="/epis/individuales" class="btn btn-sm btn-outline-primary mrd-btn">
+      <i class="bi bi-fingerprint me-1"></i>Ver todos
+    </a>
+  </div>
+  <div class="row g-2">
+    {% for epi in epis_individuales %}
+    <div class="col-12 col-md-6">
+      <div class="border rounded p-2 d-flex align-items-center justify-content-between gap-2
+        {% if epi.revision_vencida %}border-danger{% elif epi.dias_para_revision is not none and epi.dias_para_revision <= 30 %}border-warning{% endif %}"
+        style="border-color:var(--border)!important">
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge {% if epi.tipo == 'ARNES' %}bg-primary{% else %}bg-info text-dark{% endif %}">
+            {{ epi.tipo }}
+          </span>
+          <div>
+            <div class="fw-semibold font-monospace small">{{ epi.codigo_fabricacion }}</div>
+            {% if epi.marca or epi.modelo %}
+            <div class="text-muted" style="font-size:.75rem">{{ epi.marca or '' }}{% if epi.marca and epi.modelo %} · {% endif %}{{ epi.modelo or '' }}</div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          {% if epi.revision_vencida %}
+          <span class="badge bg-danger" style="font-size:.7rem"><i class="bi bi-exclamation-triangle me-1"></i>Vencida</span>
+          {% elif epi.proxima_revision %}
+          <span class="text-muted" style="font-size:.75rem">Rev. {{ epi.proxima_revision.strftime('%d/%m/%Y') }}</span>
+          {% endif %}
+          <a href="/epis/individuales/{{ epi.id }}" class="btn btn-sm btn-outline-secondary mrd-btn py-0">
+            <i class="bi bi-eye"></i>
+          </a>
+          {% if user.rol in ['admin','almacen','encargado_patio'] %}
+          <form method="post" action="/epis/individuales/{{ epi.id }}/devolver"
+                onsubmit="return confirm('¿Devolver {{ epi.tipo }} {{ epi.codigo_fabricacion }}?')">
+            <button type="submit" class="btn btn-sm btn-outline-warning mrd-btn py-0" title="Devolver equipo">
+              <i class="bi bi-arrow-counterclockwise"></i>
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ═══════════════ MODAL EPI ═══════════════ #}
+<div class="modal fade" id="modalEPI" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-shield-fill me-2 text-primary"></i>Entregar EPIs</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="/trabajadores/{{ trabajador.id }}/epis/entregar">
+        <input type="hidden" name="tipo" value="epi">
+        <input type="hidden" name="n_items" value="{{ kit_epi | length }}">
+        <input type="hidden" name="n_extra" value="8">
+        <div class="modal-body" style="overflow-y:auto;max-height:65vh;">
+          <p class="text-muted small mb-2">
+            Marca los artículos a entregar y ajusta la cantidad. Añade artículos extra al final si lo necesitas.
+          </p>
+          <table class="table table-sm align-middle mb-3">
+            <thead class="table-light">
+              <tr>
+                <th style="width:36px">
+                  <input type="checkbox" checked title="Marcar/desmarcar todos"
+                    onclick="document.querySelectorAll('#modalEPI .chk-item').forEach(c=>{c.checked=this.checked;c.closest('tr').classList.toggle('desactivado',!this.checked)})">
+                </th>
+                <th>Artículo</th>
+                <th class="text-center" style="width:80px">Cantidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for i in range(kit_epi | length) %}
+              {% set item = kit_epi[i] %}
+              <input type="hidden" name="item_{{ i }}_nombre" value="{{ item.nombre }}">
+              <tr class="item-row">
+                <td><input type="checkbox" class="chk-item" name="item_{{ i }}_checked" value="1" checked
+                    onchange="this.closest('tr').classList.toggle('desactivado',!this.checked)"></td>
+                <td class="fw-semibold">{{ item.nombre }}</td>
+                <td><input type="number" name="item_{{ i }}_cantidad" value="{{ item.cantidad }}"
+                           min="1" max="99" class="form-control form-control-sm mrd-input text-center qty-input"></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+
+          <div class="border-top pt-3">
+            <div class="fw-semibold small mb-2 text-muted"><i class="bi bi-plus-circle me-1"></i>Artículos adicionales (escribe lo que quieras)</div>
+            <table class="table table-sm align-middle mb-0">
+              <thead class="table-light">
+                <tr><th>Nombre del artículo</th><th class="text-center" style="width:80px">Cant.</th></tr>
+              </thead>
+              <tbody>
+                {% for i in range(8) %}
+                <tr>
+                  <td><input type="text" name="extra_{{ i }}_nombre" maxlength="100"
+                             class="form-control form-control-sm mrd-input"
+                             style="text-transform:uppercase"
+                             placeholder="Ej: CASCO ROJO, LINTERNA, GUANTES..."></td>
+                  <td><input type="number" name="extra_{{ i }}_cantidad" value="1" min="1" max="99"
+                             class="form-control form-control-sm mrd-input text-center qty-input"></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="row g-3 mt-2">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">Firmado por</label>
+              <input type="text" name="firmado_por" class="form-control mrd-input"
+                     value="{{ trabajador.nombre_completo }}">
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">Observaciones</label>
+              <input type="text" name="observaciones" class="form-control mrd-input" placeholder="Notas...">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Firma digital <span class="text-muted fw-normal">(opcional)</span></label>
+              <div class="firma-canvas-wrap">
+                <canvas id="firma-canvas-epi" class="firma-canvas" width="600" height="140"></canvas>
+                <div class="firma-canvas-placeholder" id="firma-ph-epi">Firmar aquí</div>
+                <button type="button" class="firma-clear-btn" onclick="clearFirmaCanvas('firma-canvas-epi','firma-data-epi','firma-ph-epi')"><i class="bi bi-eraser"></i></button>
+              </div>
+              <input type="hidden" name="firma_base64" id="firma-data-epi">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary mrd-btn" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary mrd-btn"><i class="bi bi-check-lg me-1"></i>Registrar entrega</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# ═══════════════ MODAL ROPA ═══════════════ #}
+<div class="modal fade" id="modalRopa" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-bag-fill me-2 text-warning"></i>Entregar Ropa</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="/trabajadores/{{ trabajador.id }}/epis/entregar">
+        <input type="hidden" name="tipo" value="ropa">
+        <input type="hidden" name="n_items" value="{{ kit_ropa | length }}">
+        <input type="hidden" name="n_extra" value="6">
+        <div class="modal-body" style="overflow-y:auto;max-height:65vh;">
+          <p class="text-muted small mb-2">Marca las prendas a entregar, ajusta cantidad e indica la talla.</p>
+          <table class="table table-sm align-middle mb-3">
+            <thead class="table-light">
+              <tr>
+                <th style="width:36px">
+                  <input type="checkbox" checked title="Marcar/desmarcar todas"
+                    onclick="document.querySelectorAll('#modalRopa .chk-item').forEach(c=>{c.checked=this.checked;c.closest('tr').classList.toggle('desactivado',!this.checked)})">
+                </th>
+                <th>Prenda</th>
+                <th class="text-center" style="width:70px">Uds.</th>
+                <th style="width:115px">Talla / Nº</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for i in range(kit_ropa | length) %}
+              {% set item = kit_ropa[i] %}
+              <input type="hidden" name="item_{{ i }}_nombre" value="{{ item.nombre }}">
+              <tr class="item-row">
+                <td><input type="checkbox" class="chk-item" name="item_{{ i }}_checked" value="1" checked
+                    onchange="this.closest('tr').classList.toggle('desactivado',!this.checked)"></td>
+                <td class="fw-semibold">{{ item.nombre }}</td>
+                <td><input type="number" name="item_{{ i }}_cantidad" value="{{ item.cantidad }}"
+                           min="1" max="99" class="form-control form-control-sm mrd-input text-center qty-input"></td>
+                <td>
+                  {% if item.nombre in ['BOTAS','PANTALON','PANTALON VERANO','PANTALON INVIERNO','ZAPATOS'] %}
+                  <input type="text" name="item_{{ i }}_talla"
+                         class="form-control form-control-sm mrd-input text-center talla-input" placeholder="42">
+                  {% else %}
+                  <select name="item_{{ i }}_talla" class="form-select form-select-sm mrd-input talla-input">
+                    <option value="">--</option>
+                    <option>XS</option><option>S</option><option>M</option>
+                    <option>L</option><option>XL</option><option>XXL</option><option>XXXL</option>
+                  </select>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+
+          <div class="border-top pt-3">
+            <div class="fw-semibold small mb-2 text-muted"><i class="bi bi-plus-circle me-1"></i>Prendas adicionales</div>
+            <table class="table table-sm align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Prenda</th>
+                  <th class="text-center" style="width:70px">Uds.</th>
+                  <th style="width:115px">Talla / Nº</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for i in range(6) %}
+                <tr>
+                  <td><input type="text" name="extra_{{ i }}_nombre" maxlength="100"
+                             class="form-control form-control-sm mrd-input"
+                             style="text-transform:uppercase"
+                             placeholder="Ej: IMPERMEABLE, POLAR..."></td>
+                  <td><input type="number" name="extra_{{ i }}_cantidad" value="1" min="1" max="99"
+                             class="form-control form-control-sm mrd-input text-center qty-input"></td>
+                  <td><input type="text" name="extra_{{ i }}_talla"
+                             class="form-control form-control-sm mrd-input text-center talla-input"
+                             placeholder="M, 42..."></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="row g-3 mt-2">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">Firmado por</label>
+              <input type="text" name="firmado_por" class="form-control mrd-input"
+                                 value="{{ trabajador.nombre_completo }}">
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">Observaciones</label>
+              <input type="text" name="observaciones" class="form-control mrd-input" placeholder="Notas...">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Firma digital <span class="text-muted fw-normal">(opcional)</span></label>
+              <div class="firma-canvas-wrap">
+                <canvas id="firma-canvas-ropa" class="firma-canvas" width="600" height="140"></canvas>
+                <div class="firma-canvas-placeholder" id="firma-ph-ropa">Firmar aquí</div>
+                <button type="button" class="firma-clear-btn" onclick="clearFirmaCanvas('firma-canvas-ropa','firma-data-ropa','firma-ph-ropa')"><i class="bi bi-eraser"></i></button>
+              </div>
+              <input type="hidden" name="firma_base64" id="firma-data-ropa">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary mrd-btn" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-warning mrd-btn"><i class="bi bi-check-lg me-1"></i>Registrar entrega</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal asignar arnés/absorbedor desde ficha del trabajador -->
+{% if user.rol in ['admin','almacen','encargado_patio'] %}
+<div class="modal fade" id="modalAsignarArnes" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-fingerprint me-2"></i>Asignar arnés / absorbedor</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3 d-flex gap-2 flex-wrap">
+          <button class="btn btn-sm btn-outline-secondary mrd-btn filtro-arnes-tipo active" data-tipo="">Todos</button>
+          <button class="btn btn-sm btn-outline-primary mrd-btn filtro-arnes-tipo" data-tipo="ARNES">ARNES</button>
+          <button class="btn btn-sm btn-outline-info mrd-btn filtro-arnes-tipo" data-tipo="ABSORBEDOR">ABSORBEDOR</button>
+        </div>
+        <div id="lista-arneses-disponibles" class="d-flex flex-wrap gap-2">
+          <div class="text-muted small">Cargando EPIs disponibles...</div>
+        </div>
+      </div>
+      <form method="post" action="/epis/individuales/asignar-lote-v2" id="form-asignar-arnes-trabajador">
+        <input type="hidden" name="trabajador_id" value="{{ trabajador.id }}">
+        <div id="hidden-arnes-ids"></div>
+        <div class="modal-footer">
+          <div class="text-muted small me-auto" id="cnt-arneses-sel">0 equipos seleccionados</div>
+          <button type="button" class="btn btn-outline-secondary mrd-btn" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary mrd-btn" id="btn-confirmar-arnes" disabled>
+            <i class="bi bi-file-earmark-pdf me-1"></i>Asignar y generar albarán
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  initFirmaCanvas('firma-canvas-epi',  'firma-data-epi',  'firma-ph-epi');
+  initFirmaCanvas('firma-canvas-ropa', 'firma-data-ropa', 'firma-ph-ropa');
+});
+
+let _arnesData = [];
+let _arnesSeleccionados = new Set();
+let _arnesFiltroTipo = '';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function abrirModalArnes() {
+  _arnesSeleccionados.clear();
+  var modal = new bootstrap.Modal(document.getElementById('modalAsignarArnes'));
+  modal.show();
+  cargarArnesDisponibles();
+}
+
+function cargarArnesDisponibles() {
+  const url = '/api/epis/individuales/disponibles' + (_arnesFiltroTipo ? '?tipo=' + _arnesFiltroTipo : '');
+  fetch(url, {credentials:'same-origin'})
+    .then(r => r.json())
+    .then(data => {
+      _arnesData = data;
+      renderArnes(data);
+    })
+    .catch(() => {
+      document.getElementById('lista-arneses-disponibles').innerHTML =
+        '<div class="text-danger small">Error cargando EPIs disponibles.</div>';
+    });
+}
+
+function renderArnes(items) {
+  const cont = document.getElementById('lista-arneses-disponibles');
+  if (!items.length) {
+    cont.innerHTML = '<div class="alert alert-warning py-2 w-100">No hay equipos disponibles para asignar.</div>';
+    return;
+  }
+  cont.innerHTML = items.map(e => {
+    const sel = _arnesSeleccionados.has(e.id);
+    const vencida = e.revision_vencida;
+    const clsBadge = e.tipo === 'ARNES' ? 'bg-primary' : 'bg-info text-dark';
+    return `<div class="border rounded p-2 arnes-card" style="cursor:pointer;min-width:160px;max-width:200px;
+              background:${sel ? 'var(--bs-primary-bg-subtle)' : 'var(--bs-body-bg)'};
+              border-color:${sel ? 'var(--bs-primary)!important' : 'var(--bs-border-color)!important'}"
+              onclick="toggleArnes(${e.id})" id="arnes-card-${e.id}">
+      <div class="d-flex justify-content-between mb-1">
+        <span class="badge ${clsBadge} small">${esc(e.tipo)}</span>
+        ${sel ? '<i class="bi bi-check-circle-fill text-primary"></i>' : ''}
+        ${vencida ? '<i class="bi bi-exclamation-triangle-fill text-danger"></i>' : ''}
+      </div>
+      <div class="font-monospace small fw-semibold">${esc(e.codigo)}</div>
+      ${e.marca ? `<div class="text-muted" style="font-size:.75rem">${esc(e.marca)} ${esc(e.modelo)}</div>` : ''}
+      ${e.proxima_revision ? `<div class="text-muted" style="font-size:.72rem">Rev: ${esc(e.proxima_revision)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function toggleArnes(id) {
+  if (_arnesSeleccionados.has(id)) _arnesSeleccionados.delete(id);
+  else _arnesSeleccionados.add(id);
+  renderArnes(_arnesData);
+  actualizarArnesForm();
+}
+
+function actualizarArnesForm() {
+  const n = _arnesSeleccionados.size;
+  document.getElementById('cnt-arneses-sel').textContent = n + ' equipo' + (n===1?'':'s') + ' seleccionado' + (n===1?'':'s');
+  const btn = document.getElementById('btn-confirmar-arnes');
+  if (btn) btn.disabled = n === 0;
+  const hid = document.getElementById('hidden-arnes-ids');
+  hid.innerHTML = '';
+  _arnesSeleccionados.forEach(id => {
+    const inp = document.createElement('input');
+    inp.type='hidden'; inp.name='epi_ids'; inp.value=id;
+    hid.appendChild(inp);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.filtro-arnes-tipo').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filtro-arnes-tipo').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _arnesFiltroTipo = btn.dataset.tipo;
+      cargarArnesDisponibles();
+    });
+  });
+});
+</script>
+{% endblock %}

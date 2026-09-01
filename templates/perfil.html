@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Mi perfil — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header">
+  <h2 class="mrd-page-title"><i class="bi bi-person-circle me-2"></i>Mi perfil</h2>
+</div>
+
+{% if request.query_params.get('ok') == '1' %}
+<div class="alert alert-success alert-dismissible">
+  <i class="bi bi-check-circle me-2"></i>Contraseña cambiada correctamente.
+  <button class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="mrd-card p-4">
+      <h5 class="mb-4"><i class="bi bi-shield-lock me-2"></i>Cambiar contraseña</h5>
+
+      {% if error %}
+      <div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>{{ error }}</div>
+      {% endif %}
+
+      <form method="post" action="/perfil">
+        <div class="mb-3">
+          <label class="form-label">Contraseña actual <span class="text-danger">*</span></label>
+          <input type="password" name="password_actual" class="form-control mrd-input" required autofocus>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Nueva contraseña <span class="text-danger">*</span></label>
+          <input type="password" name="password_nuevo" class="form-control mrd-input" required minlength="4">
+        </div>
+        <div class="mb-4">
+          <label class="form-label">Confirmar nueva contraseña <span class="text-danger">*</span></label>
+          <input type="password" name="password_confirm" class="form-control mrd-input" required>
+        </div>
+        <button type="submit" class="btn btn-warning w-100">
+          <i class="bi bi-lock me-2"></i>Cambiar contraseña
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="mrd-card p-4">
+      <h5 class="mb-3"><i class="bi bi-info-circle me-2"></i>Tu cuenta</h5>
+      <table class="table table-sm table-borderless text-muted">
+        <tr><td>Usuario</td><td class="fw-semibold">{{ user.username }}</td></tr>
+        <tr><td>Nombre</td><td class="fw-semibold">{{ user.nombre }}</td></tr>
+        <tr><td>Rol</td>
+          <td><span class="badge bg-{% if user.rol == 'admin' %}danger{% elif user.rol == 'almacen' %}warning text-dark{% elif user.rol == 'encargado' %}info{% else %}secondary{% endif %}">{{ user.rol }}</span></td>
+        </tr>
+      </table>
+      {% if user.rol == 'admin' %}
+      <a href="/perfil/2fa" class="btn btn-outline-primary w-100 mt-2">
+        <i class="bi bi-shield-lock me-2"></i>Verificación en dos pasos
+        {% if user.totp_habilitado %}<span class="badge bg-success ms-1">activada</span>{% endif %}
+      </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

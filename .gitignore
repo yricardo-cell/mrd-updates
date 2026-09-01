@@ -1,0 +1,61 @@
+# MRD TOOL CONTROL - .gitignore
+
+# Datos y backups
+data/
+backups/
+uploads/
+logs/
+exports/
+
+# Entorno virtual
+venv/
+.venv/
+env/
+
+# Configuración con secretos
+.env
+config/production.env
+config/*.env
+config/*.token
+config/vapid_keys.json
+*.token
+
+# Actualizaciones
+releases/
+updates/
+actulizaciones/
+0nuevo/
+*.zip
+*.bak_*
+.service_restart
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyc
+.pytest_cache/
+.pytest_tmp_*/
+*.egg-info/
+
+# Directorios de trabajo (conservar solo su marcador)
+temp/*
+!temp/.gitkeep
+cache/*
+!cache/.gitkeep
+
+# Base de datos
+*.db
+*.sqlite
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user

@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Importar herramientas{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/herramientas">Herramientas</a><span class="sep">/</span>
+<span class="current">Importar</span>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">Importar herramientas desde Excel</div>
+    <div class="page-subtitle">Carga masiva de herramientas usando la plantilla oficial</div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/herramientas/importar/plantilla" class="btn btn-outline btn-sm">
+      <i class="bi bi-download"></i> Descargar plantilla
+    </a>
+    <a href="/herramientas" class="btn btn-ghost btn-sm">
+      <i class="bi bi-arrow-left"></i> Volver
+    </a>
+  </div>
+</div>
+
+{% if error %}
+<div style="background:var(--danger-light);border:1px solid var(--danger);border-radius:8px;padding:14px 16px;margin-bottom:20px;color:var(--danger);display:flex;align-items:center;gap:10px">
+  <i class="bi bi-exclamation-triangle-fill" style="font-size:1.2rem"></i>
+  <div>{{ error }}</div>
+</div>
+{% endif %}
+
+{% if resultado %}
+<!-- Resultado de la importación -->
+<div style="background:{% if resultado.creadas > 0 %}var(--success-light){% else %}var(--surface-2){% endif %};border:1px solid {% if resultado.creadas > 0 %}var(--success){% else %}var(--border){% endif %};border-radius:12px;padding:24px;margin-bottom:24px">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+    <div style="width:44px;height:44px;background:{% if resultado.creadas > 0 %}var(--success){% else %}var(--text-muted){% endif %};border-radius:50%;display:flex;align-items:center;justify-content:center">
+      <i class="bi bi-{% if resultado.creadas > 0 %}check-lg{% else %}info{% endif %}" style="color:#fff;font-size:1.3rem"></i>
+    </div>
+    <div>
+      <div style="font-size:1.1rem;font-weight:700;color:{% if resultado.creadas > 0 %}var(--success){% else %}var(--text-secondary){% endif %}">
+        Importación completada
+      </div>
+      <div style="font-size:.85rem;color:var(--text-muted)">{{ resultado.total_procesadas }} filas procesadas en total</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+    <div style="background:var(--surface);border-radius:8px;padding:14px;text-align:center;border:1px solid var(--border)">
+      <div style="font-size:2rem;font-weight:800;color:var(--success)">{{ resultado.creadas }}</div>
+      <div style="font-size:.8rem;color:var(--text-muted);margin-top:2px">Herramientas creadas</div>
+    </div>
+    <div style="background:var(--surface);border-radius:8px;padding:14px;text-align:center;border:1px solid var(--border)">
+      <div style="font-size:2rem;font-weight:800;color:var(--warning)">{{ resultado.omitidas }}</div>
+      <div style="font-size:.8rem;color:var(--text-muted);margin-top:2px">Filas omitidas</div>
+    </div>
+    <div style="background:var(--surface);border-radius:8px;padding:14px;text-align:center;border:1px solid var(--border)">
+      <div style="font-size:2rem;font-weight:800;color:{% if resultado.errores %}var(--danger){% else %}var(--text-muted){% endif %}">{{ resultado.errores|length }}</div>
+      <div style="font-size:.8rem;color:var(--text-muted);margin-top:2px">Errores</div>
+    </div>
+  </div>
+
+  {% if resultado.errores %}
+  <div style="margin-top:14px;background:var(--danger-light);border:1px solid var(--danger);border-radius:8px;padding:12px">
+    <div style="font-weight:600;color:var(--danger);margin-bottom:6px;font-size:.85rem">
+      <i class="bi bi-exclamation-circle"></i> Detalles de errores:
+    </div>
+    <ul style="margin:0;padding-left:18px;font-size:.82rem;color:var(--text-secondary)">
+      {% for e in resultado.errores %}
+      <li>{{ e }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if resultado.creadas > 0 %}
+  <div style="margin-top:16px">
+    <a href="/herramientas" class="btn btn-primary btn-sm">
+      <i class="bi bi-list-ul"></i> Ver inventario actualizado
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start">
+
+  <!-- Formulario de carga -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="bi bi-upload"></i> Subir archivo Excel</div>
+      </div>
+      <div class="card-body">
+
+        <form method="post" action="/herramientas/importar" enctype="multipart/form-data" id="form-importar">
+          <div id="drop-zone"
+               style="border:2px dashed var(--border);border-radius:12px;padding:40px;text-align:center;cursor:pointer;transition:.2s;background:var(--surface-2)"
+               onclick="document.getElementById('archivo-input').click()"
+               ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+            <i class="bi bi-file-earmark-spreadsheet" style="font-size:3rem;color:var(--text-muted);display:block;margin-bottom:10px"></i>
+            <div style="font-size:1rem;font-weight:600;color:var(--text-secondary);margin-bottom:4px">
+              Arrastra el archivo aquí o haz clic para seleccionar
+            </div>
+            <div style="font-size:.8rem;color:var(--text-muted)">Solo archivos .xlsx — máx. 10 MB</div>
+          </div>
+          <input type="file" id="archivo-input" name="archivo" accept=".xlsx" style="display:none" onchange="archivoSeleccionado(this)">
+
+          <div id="archivo-info" style="display:none;margin-top:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px;display:none;align-items:center;gap:10px">
+            <i class="bi bi-file-earmark-excel" style="font-size:1.5rem;color:var(--success)"></i>
+            <div style="flex:1">
+              <div id="archivo-nombre" style="font-weight:600;font-size:.88rem"></div>
+              <div id="archivo-tamaño" style="font-size:.78rem;color:var(--text-muted)"></div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="limpiarArchivo()">
+              <i class="bi bi-x"></i>
+            </button>
+          </div>
+
+          <div style="margin-top:16px;display:flex;gap:10px">
+            <button type="submit" class="btn btn-primary" id="btn-importar" disabled>
+              <i class="bi bi-cloud-upload"></i> Importar herramientas
+            </button>
+            <a href="/herramientas" class="btn btn-ghost">Cancelar</a>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel de instrucciones -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="bi bi-info-circle"></i> Instrucciones</div>
+      </div>
+      <div class="card-body" style="font-size:.84rem;color:var(--text-secondary);line-height:1.6">
+        <ol style="padding-left:18px;margin:0">
+          <li>Descarga la <strong>plantilla oficial</strong> usando el botón de arriba.</li>
+          <li>Rellena los datos en la hoja <em>Herramientas</em>. Las columnas en <span style="color:var(--warning);font-weight:600">naranja</span> son obligatorias.</li>
+          <li>No modifiques los encabezados ni el formato de las celdas.</li>
+          <li>El campo <strong>Estado</strong> acepta: disponible, nueva, reservada, en_almacen (por defecto: disponible).</li>
+          <li>Las fechas deben estar en formato <code>AAAA-MM-DD</code>.</li>
+          <li>Si un código ya existe en el sistema, esa fila se omite sin error.</li>
+          <li>Sube el archivo rellenado aquí y haz clic en <em>Importar</em>.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="bi bi-download"></i> Plantilla</div>
+      </div>
+      <div class="card-body">
+        <a href="/herramientas/importar/plantilla" class="btn btn-primary w-100">
+          <i class="bi bi-file-earmark-arrow-down"></i> Descargar plantilla Excel
+        </a>
+        <div style="font-size:.78rem;color:var(--text-muted);margin-top:8px;text-align:center">
+          Incluye 23 columnas y una fila de ejemplo
+        </div>
+      </div>
+    </div>
+
+    <div style="background:var(--warning-light);border:1px solid var(--warning);border-radius:8px;padding:12px;font-size:.8rem;color:var(--text-secondary)">
+      <i class="bi bi-exclamation-triangle" style="color:var(--warning)"></i>
+      <strong> Nota:</strong> La importación no puede deshacerse. Verifica el archivo antes de subirlo.
+    </div>
+
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function archivoSeleccionado(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const info = document.getElementById('archivo-info');
+  info.style.display = 'flex';
+  document.getElementById('archivo-nombre').textContent = file.name;
+  document.getElementById('archivo-tamaño').textContent = (file.size / 1024).toFixed(1) + ' KB';
+  document.getElementById('btn-importar').disabled = false;
+  document.getElementById('drop-zone').style.borderColor = 'var(--success)';
+  document.getElementById('drop-zone').style.background = 'var(--success-light)';
+}
+
+function limpiarArchivo() {
+  document.getElementById('archivo-input').value = '';
+  document.getElementById('archivo-info').style.display = 'none';
+  document.getElementById('btn-importar').disabled = true;
+  document.getElementById('drop-zone').style.borderColor = 'var(--border)';
+  document.getElementById('drop-zone').style.background = 'var(--surface-2)';
+}
+
+function dragOver(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').style.borderColor = 'var(--primary)';
+  document.getElementById('drop-zone').style.background = 'var(--primary-light, #dbeafe)';
+}
+
+function dragLeave(e) {
+  document.getElementById('drop-zone').style.borderColor = 'var(--border)';
+  document.getElementById('drop-zone').style.background = 'var(--surface-2)';
+}
+
+function dropFile(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.name.endsWith('.xlsx')) {
+    alert('Solo se aceptan archivos .xlsx');
+    return;
+  }
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  const input = document.getElementById('archivo-input');
+  input.files = dt.files;
+  archivoSeleccionado(input);
+}
+
+document.getElementById('form-importar').addEventListener('submit', function() {
+  const btn = document.getElementById('btn-importar');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Importando...';
+});
+</script>
+{% endblock %}

@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block title %}Trabajadores — {{ app_name }}{% endblock %}
+
+{% block content %}
+{% set trabajadores_activos = trabajadores | selectattr('activo') | list | length %}
+<section class="people-hero" aria-labelledby="people-title">
+  <div>
+    <div class="people-eyebrow">Personas y asignaciones</div>
+    <h1 id="people-title"><i class="bi bi-people"></i>Trabajadores</h1>
+    <p>Directorio operativo, estado laboral y herramientas asignadas.</p>
+  </div>
+  {% if user.rol in ['admin','almacen','encargado_patio'] %}
+  <div class="people-header-actions">
+    <a href="/accesos-portal-trabajadores" class="btn btn-outline-primary mrd-btn">
+      <i class="bi bi-phone me-1"></i>Enviar accesos
+    </a>
+    {% if user.rol == 'admin' %}
+    <a href="/buzon-trabajadores" class="btn btn-primary mrd-btn">
+      <i class="bi bi-chat-heart me-1"></i>Buzón privado
+    </a>
+    {% endif %}
+    <button class="btn btn-warning mrd-btn" data-bs-toggle="modal" data-bs-target="#nuevoTrabajadorModal">
+      <i class="bi bi-plus-lg me-1"></i>Nuevo trabajador
+    </button>
+    <a href="/trabajadores/importar" class="btn btn-outline-primary mrd-btn">
+      <i class="bi bi-upload me-1"></i>Importar Excel
+    </a>
+    <a href="/informes/trabajadores/excel" class="btn btn-outline-secondary mrd-btn" title="Exportar a Excel">
+      <i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel
+    </a>
+  </div>
+  {% endif %}
+</section>
+
+{% if request.query_params.get('ok') == 'editado' %}
+<div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+  <i class="bi bi-check-circle me-2"></i>Trabajador actualizado correctamente.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<section class="people-summary" aria-label="Resumen de trabajadores">
+  <div class="people-summary-card"><span class="people-summary-icon is-primary"><i class="bi bi-people"></i></span><div><strong>{{ trabajadores | length }}</strong><small>Total</small></div></div>
+  <div class="people-summary-card"><span class="people-summary-icon is-success"><i class="bi bi-person-check"></i></span><div><strong>{{ trabajadores_activos }}</strong><small>Activos</small></div></div>
+  <div class="people-summary-card"><span class="people-summary-icon is-muted"><i class="bi bi-person-dash"></i></span><div><strong>{{ (trabajadores | length) - trabajadores_activos }}</strong><small>Inactivos</small></div></div>
+</section>
+
+<section class="mrd-card people-directory" aria-labelledby="people-directory-title">
+  <div class="mrd-card-header people-directory-header">
+    <div><span id="people-directory-title">Directorio</span><small id="people-result-count">{{ trabajadores | length }} personas</small></div>
+    <div class="people-toolbar">
+      <div class="people-search"><i class="bi bi-search"></i><input type="search" id="people-search" placeholder="Buscar nombre, cargo, DNI…" autocomplete="off" aria-label="Buscar trabajadores"></div>
+      <div class="people-filters" role="group" aria-label="Filtrar por estado">
+        <button type="button" class="people-filter is-active" data-people-filter="todos">Todos</button>
+        <button type="button" class="people-filter" data-people-filter="activo">Activos</button>
+        <button type="button" class="people-filter" data-people-filter="inactivo">Inactivos</button>
+      </div>
+    </div>
+  </div>
+  <div class="people-grid" id="people-grid">
+  {% for t in trabajadores %}
+  <article class="people-card {% if not t.activo %}is-inactive{% endif %}" data-people-item data-status="{% if t.activo %}activo{% else %}inactivo{% endif %}" data-search="{{ (t.nombre_completo ~ ' ' ~ (t.cargo or '') ~ ' ' ~ (t.dni or '') ~ ' ' ~ (t.telefono or '')) | lower | e }}">
+    <div class="people-card-top">
+      <div class="people-avatar">{{ t.nombre[0] | upper }}{% if t.apellidos %}{{ t.apellidos[0] | upper }}{% endif %}</div>
+      <span class="people-status {% if t.activo %}is-active{% else %}is-inactive{% endif %}">{% if t.activo %}Activo{% else %}Inactivo{% endif %}</span>
+    </div>
+    <div class="people-card-body">
+      <h2>{{ t.nombre_completo }}</h2>
+      <p class="people-role">{{ t.cargo or 'Sin cargo' }}</p>
+      <div class="people-contact-list">
+      {% if t.telefono %}
+      <span><i class="bi bi-phone"></i>{{ t.telefono }}</span>
+      {% endif %}
+      {% if t.dni %}
+      <span><i class="bi bi-person-vcard"></i>{{ t.dni }}</span>
+      {% endif %}
+      </div>
+      <div class="people-assignment">
+        {% set cnt = t.herramientas | length %}
+        {% if cnt > 0 %}
+        <span><i class="bi bi-tools"></i>{{ cnt }} herramienta{% if cnt > 1 %}s{% endif %} asignada{% if cnt > 1 %}s{% endif %}</span>
+        {% else %}
+        <span class="is-empty"><i class="bi bi-check2-circle"></i>Sin herramientas asignadas</span>
+        {% endif %}
+      </div>
+    </div>
+      {% if user.rol in ['admin','almacen','encargado_patio'] %}
+      <div class="people-card-actions">
+        <a href="/trabajadores/{{ t.id }}/epis" class="btn btn-sm btn-primary flex-fill">
+          <i class="bi bi-person-vcard me-1"></i>Ficha y portal
+        </a>
+        <a href="/trabajadores/{{ t.id }}/portal-qr" class="btn btn-sm btn-outline-primary flex-fill">
+          <i class="bi bi-phone me-1"></i>Acceso móvil
+        </a>
+        <button class="btn btn-sm btn-outline-warning flex-fill"
+                data-tid="{{ t.id }}"
+                data-nombre="{{ t.nombre }}"
+                data-apellidos="{{ t.apellidos or '' }}"
+                data-dni="{{ t.dni or '' }}"
+                data-telefono="{{ t.telefono or '' }}"
+                data-email="{{ t.email or '' }}"
+                data-cargo="{{ t.cargo or '' }}"
+                data-empresa="{{ t.empresa or 'MRD Estructuras' }}"
+                data-departamento="{{ t.departamento or '' }}"
+                data-talla-ropa="{{ t.talla_ropa or '' }}"
+                data-talla-calzado="{{ t.talla_calzado or '' }}"
+                data-obs="{{ (t.observaciones or '')|replace('"','') }}"
+                onclick="editarTrabajador(this)">
+          <i class="bi bi-pencil me-1"></i>Editar
+        </button>
+        <form method="post" action="/trabajadores/{{ t.id }}/toggle" class="flex-fill m-0">
+          <button type="submit" class="btn btn-sm {% if t.activo %}btn-outline-danger{% else %}btn-outline-success{% endif %} w-100">
+            {% if t.activo %}<i class="bi bi-person-x me-1"></i>Baja{% else %}<i class="bi bi-person-check me-1"></i>Alta{% endif %}
+          </button>
+        </form>
+      </div>
+      {% endif %}
+  </article>
+  {% else %}
+  <div class="people-empty">
+    <i class="bi bi-people"></i><strong>No hay trabajadores registrados</strong><span>Las nuevas altas aparecerán en este directorio.</span>
+  </div>
+  {% endfor %}
+  </div>
+  <div class="people-empty people-filter-empty" id="people-filter-empty" hidden><i class="bi bi-search"></i><strong>Sin resultados</strong><span>Prueba otra búsqueda o cambia el filtro.</span></div>
+</section>
+
+<!-- Modal nuevo trabajador -->
+<div class="modal fade" id="nuevoTrabajadorModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content mrd-modal-dark">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="bi bi-person-plus me-2"></i>Nuevo trabajador</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="/trabajadores/nuevo">
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label class="form-label">Nombre <span class="text-danger">*</span></label>
+              <input type="text" name="nombre" class="form-control mrd-input" required>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Apellidos</label>
+              <input type="text" name="apellidos" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">DNI / NIE</label>
+              <input type="text" name="dni" class="form-control mrd-input" placeholder="12345678A">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Teléfono</label>
+              <input type="tel" name="telefono" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Email</label>
+              <input type="email" name="email" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Cargo</label>
+              <input type="text" name="cargo" class="form-control mrd-input" placeholder="Ej: Oficial 1ª">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Empresa</label>
+              <input type="text" name="empresa" class="form-control mrd-input" value="MRD Estructuras">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Talla de ropa</label>
+              <input type="text" name="talla_ropa" class="form-control mrd-input" placeholder="Ej: L">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Talla de calzado</label>
+              <input type="text" name="talla_calzado" class="form-control mrd-input" placeholder="Ej: 43">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">PIN del portal</label>
+              <input type="password" name="portal_pin" class="form-control mrd-input" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" placeholder="4 a 6 números">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-warning">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal editar trabajador -->
+<div class="modal fade" id="editarTrabajadorModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content mrd-modal-dark">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Editar trabajador</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" id="form-editar-trabajador" action="">
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label class="form-label">Nombre <span class="text-danger">*</span></label>
+              <input type="text" id="et-nombre" name="nombre" class="form-control mrd-input" required>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Apellidos</label>
+              <input type="text" id="et-apellidos" name="apellidos" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">DNI / NIE</label>
+              <input type="text" id="et-dni" name="dni" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Teléfono</label>
+              <input type="tel" id="et-telefono" name="telefono" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Email</label>
+              <input type="email" id="et-email" name="email" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Cargo</label>
+              <input type="text" id="et-cargo" name="cargo" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Empresa</label>
+              <input type="text" id="et-empresa" name="empresa" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Departamento</label>
+              <input type="text" id="et-departamento" name="departamento" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Talla de ropa</label>
+              <input type="text" id="et-talla-ropa" name="talla_ropa" class="form-control mrd-input">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Talla de calzado</label>
+              <input type="text" id="et-talla-calzado" name="talla_calzado" class="form-control mrd-input">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Observaciones</label>
+              <textarea id="et-obs" name="observaciones" class="form-control mrd-input" rows="2"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-warning"><i class="bi bi-floppy me-1"></i>Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function editarTrabajador(btn) {
+  const d = btn.dataset;
+  document.getElementById('form-editar-trabajador').action = `/trabajadores/${d.tid}/editar`;
+  document.getElementById('et-nombre').value = d.nombre;
+  document.getElementById('et-apellidos').value = d.apellidos;
+  document.getElementById('et-dni').value = d.dni;
+  document.getElementById('et-telefono').value = d.telefono;
+  document.getElementById('et-email').value = d.email;
+  document.getElementById('et-cargo').value = d.cargo;
+  document.getElementById('et-empresa').value = d.empresa;
+  document.getElementById('et-departamento').value = d.departamento;
+  document.getElementById('et-talla-ropa').value = d.tallaRopa;
+  document.getElementById('et-talla-calzado').value = d.tallaCalzado;
+  document.getElementById('et-obs').value = d.obs;
+  new bootstrap.Modal(document.getElementById('editarTrabajadorModal')).show();
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const search = document.getElementById('people-search');
+  const items = Array.from(document.querySelectorAll('[data-people-item]'));
+  const filters = Array.from(document.querySelectorAll('[data-people-filter]'));
+  const count = document.getElementById('people-result-count');
+  const empty = document.getElementById('people-filter-empty');
+  let currentFilter = 'todos';
+
+  function applyPeopleFilters() {
+    const query = (search.value || '').trim().toLocaleLowerCase('es');
+    let visible = 0;
+    items.forEach(function (item) {
+      const matchesText = !query || (item.dataset.search || '').includes(query);
+      const matchesStatus = currentFilter === 'todos' || item.dataset.status === currentFilter;
+      item.hidden = !(matchesText && matchesStatus);
+      if (!item.hidden) visible += 1;
+    });
+    count.textContent = visible + (visible === 1 ? ' persona' : ' personas');
+    empty.hidden = visible !== 0;
+  }
+
+  search.addEventListener('input', applyPeopleFilters);
+  filters.forEach(function (button) {
+    button.addEventListener('click', function () {
+      currentFilter = button.dataset.peopleFilter;
+      filters.forEach(function (item) { item.classList.toggle('is-active', item === button); });
+      applyPeopleFilters();
+    });
+  });
+});
+</script>
+{% endblock %}

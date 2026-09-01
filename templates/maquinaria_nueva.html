@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Nueva maquinaria{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Inicio</a><span class="sep">/</span>
+<a href="/maquinaria">Maquinaria</a><span class="sep">/</span>
+<span class="current">Nueva</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header-row" style="margin-bottom:20px">
+  <div class="page-header">
+    <div class="page-title">Registrar nueva maquinaria</div>
+    <div class="page-subtitle">Vehículo, máquina pesada o equipo de gran valor</div>
+  </div>
+  <a href="/maquinaria" class="btn btn-outline btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
+</div>
+
+{% if scan_origen %}
+<div style="background:var(--success-light);border:1px solid var(--success);border-radius:8px;padding:12px 16px;margin-bottom:16px;color:var(--success);font-size:.84rem;display:flex;align-items:center;gap:8px">
+  <i class="bi bi-upc-scan"></i>
+  <span>Código escaneado con Zebra DS3678-SR. Completa los datos del activo.</span>
+</div>
+{% endif %}
+
+{% if error %}
+<div style="background:var(--danger-light);border:1px solid var(--danger);border-radius:8px;padding:12px 16px;margin-bottom:16px;color:var(--danger);font-size:.84rem;display:flex;align-items:center;gap:8px">
+  <i class="bi bi-exclamation-circle-fill"></i> {{ error }}
+</div>
+{% endif %}
+
+<form method="post" action="/maquinaria/nueva">
+  <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start">
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <!-- Identificación -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-upc"></i> Identificación</div></div>
+        <div class="card-body">
+          <div class="form-row form-row-2">
+            <div class="form-group">
+              <label class="form-label">Código de barras <span style="color:var(--text-muted);font-size:.78rem">(escaneado)</span></label>
+              <input type="text" name="codigo_barras" class="form-control" id="input-cb"
+                     value="{{ prefill_codigo_barras or '' }}"
+                     placeholder="Escanea o escribe el código...">
+              <div class="form-hint">Campo leído automáticamente por el lector Zebra</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Código interno MRD</label>
+              <input type="text" class="form-control" value="Automático al guardar" readonly disabled>
+              <div class="form-hint">Referencia única e inmutable generada por MRD.</div>
+            </div>
+          </div>
+          <div class="form-row form-row-2">
+            <div class="form-group">
+              <label class="form-label">Matrícula</label>
+              <input type="text" name="matricula" class="form-control" placeholder="1234-ABC" style="text-transform:uppercase">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Número de serie / Bastidor</label>
+              <input type="text" name="num_serie" class="form-control">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Datos principales -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-truck"></i> Datos del activo</div></div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Nombre <span class="required">*</span></label>
+            <input type="text" name="nombre" class="form-control" required autofocus
+                   placeholder="Ej: Excavadora Caterpillar 320D">
+          </div>
+          <div class="form-row form-row-3">
+            <div class="form-group">
+              <label class="form-label">Tipo</label>
+              <select name="tipo" class="form-control">
+                <option value="">Seleccionar...</option>
+                {% for t in tipos %}
+                <option value="{{ t }}">{{ t }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Marca</label>
+              <input type="text" name="marca" class="form-control" placeholder="Caterpillar, Volvo...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Modelo</label>
+              <input type="text" name="modelo" class="form-control">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Estado y ubicación -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-geo-alt"></i> Estado y ubicación</div></div>
+        <div class="card-body">
+          <div class="form-row form-row-3">
+            <div class="form-group">
+              <label class="form-label">Estado inicial</label>
+              <select name="estado" class="form-control">
+                {% for key, label in estados.items() %}
+                <option value="{{ key }}" {% if key == 'disponible' %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Ubicación</label>
+              <input type="text" name="ubicacion" class="form-control" placeholder="Almacén principal, Obra Sur...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Responsable</label>
+              <input type="text" name="responsable" class="form-control">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Notas</label>
+            <textarea name="notas" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Panel lateral -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="card">
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="bi bi-plus-circle"></i> Registrar maquinaria
+          </button>
+          <a href="/maquinaria" class="btn btn-ghost w-100">Cancelar</a>
+        </div>
+      </div>
+      <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:.8rem;color:var(--text-muted)">
+        <i class="bi bi-info-circle" style="color:var(--primary)"></i>
+        <strong> Zebra DS3678-SR:</strong> En modo HID Bluetooth, el escáner escribe el código automáticamente en el campo "Código de barras" al escanear. Solo conecta por Bluetooth y apunta al código.
+      </div>
+    </div>
+
+  </div>
+</form>
+{% endblock %}

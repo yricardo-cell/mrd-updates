@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block title %}Instalar App — {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .install-step {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    padding: 16px;
+    background: var(--card-bg);
+    border-radius: 10px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+  }
+  .step-num {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 700;
+    font-size: 1rem;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-num.orange { background: #E07B00; }
+  .step-img {
+    width: 100%;
+    max-width: 260px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    display: block;
+    margin: 10px auto 0;
+  }
+  .platform-tabs .nav-link {
+    color: var(--text-muted);
+    border-radius: 8px 8px 0 0;
+    padding: 10px 20px;
+    font-weight: 600;
+  }
+  .platform-tabs .nav-link.active {
+    background: var(--card-bg);
+    color: var(--text);
+    border-color: var(--border) var(--border) var(--card-bg);
+  }
+  .qr-install-box {
+    background: #fff;
+    padding: 16px;
+    border-radius: 12px;
+    display: inline-block;
+  }
+  .feature-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: .85rem;
+    margin: 4px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mrd-page-header">
+  <h2 class="mrd-page-title"><i class="bi bi-grid-fill me-2"></i>Instalar MRD Tool como aplicación</h2>
+  <p class="text-muted small mb-0">En Windows, Android, iPhone o iPad. Se abrirá en su propia ventana, sin la barra de Chrome.</p>
+</div>
+
+<!-- Características -->
+<div class="mrd-card mb-4">
+  <div class="d-flex flex-wrap gap-1">
+    <span class="feature-pill"><i class="bi bi-camera text-warning"></i>Escáner QR</span>
+    <span class="feature-pill"><i class="bi bi-window text-primary"></i>Ventana propia en el ordenador</span>
+    <span class="feature-pill"><i class="bi bi-house text-success"></i>Icono en pantalla inicio</span>
+    <span class="feature-pill"><i class="bi bi-fullscreen text-info"></i>Pantalla completa</span>
+    <span class="feature-pill"><i class="bi bi-arrow-repeat text-secondary"></i>Actualizaciones automáticas</span>
+    <span class="feature-pill"><i class="bi bi-shield-check text-success"></i>Sin permisos extra</span>
+  </div>
+</div>
+
+<!-- QR de acceso -->
+<div class="mrd-card mb-4 text-center">
+  <h6 class="mb-3"><i class="bi bi-qr-code me-2"></i>Escanea este QR con tu móvil</h6>
+  <div class="qr-install-box mx-auto mb-2" id="qr-install-box">
+    <div class="d-flex align-items-center justify-content-center" style="width:160px;height:160px">
+      <div class="spinner-border text-secondary" role="status"></div>
+    </div>
+  </div>
+  <code class="mrd-code d-block mt-2" id="url-publica" style="font-size:.85rem">Cargando...</code>
+  <p class="text-muted small mt-1 mb-0">Apunta la cámara del móvil al código QR</p>
+</div>
+
+<!-- Tabs ordenador / iPhone / Android -->
+<ul class="nav platform-tabs border-bottom mb-0" id="platformTabs">
+  <li class="nav-item"><button class="nav-link active" onclick="showTab('desktop', this)"><i class="bi bi-windows me-1"></i>Ordenador</button></li>
+  <li class="nav-item">
+    <button class="nav-link" onclick="showTab('ios', this)">
+      <i class="bi bi-apple me-1"></i>iPhone / iPad
+    </button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" onclick="showTab('android', this)">
+      <i class="bi bi-android2 me-1"></i>Android
+    </button>
+  </li>
+</ul>
+
+<div id="tab-desktop" class="mrd-card" style="border-radius:0 8px 8px 8px">
+  <div class="text-center py-3"><i class="bi bi-window-stack text-primary" style="font-size:3rem"></i><h4 class="mt-2">MRD Tool en una ventana independiente</h4><p class="text-muted">Instálala una vez y ábrela desde Inicio o desde el escritorio como cualquier programa.</p><button id="install-desktop-button" class="btn btn-primary btn-lg" type="button" onclick="installDesktop()"><i class="bi bi-download me-2"></i>Instalar aplicación</button><div id="install-desktop-status" class="small text-muted mt-3">Pulsa el botón y confirma “Instalar”.</div></div>
+  <div class="install-step"><div class="step-num">1</div><div><div class="fw-semibold">Usa Chrome o Edge en https://app.iasmrd.com</div><div class="text-muted small">La instalación solo se ofrece desde la dirección segura.</div></div></div>
+  <div class="install-step"><div class="step-num">2</div><div><div class="fw-semibold">Pulsa “Instalar aplicación”</div><div class="text-muted small">Si el botón no aparece, abre el menú de Chrome → Guardar y compartir → Instalar MRD Tool Control.</div></div></div>
+  <div class="install-step"><div class="step-num orange">3</div><div><div class="fw-semibold">Abre MRD Tool desde su icono</div><div class="text-muted small">No abras el marcador antiguo: el icono instalado es el que elimina la barra de Chrome.</div></div></div>
+</div>
+
+<!-- iOS -->
+<div id="tab-ios" class="mrd-card" style="border-radius:0 8px 8px 8px;display:none">
+  <p class="text-muted small mb-3">Funciona en iPhone y iPad con iOS 14 o superior. Usa <strong>Safari</strong> (no Chrome ni Firefox).</p>
+
+  <div class="install-step">
+    <div class="step-num">1</div>
+    <div>
+      <div class="fw-semibold">Abre Safari en tu iPhone</div>
+      <div class="text-muted small">Importante: debe ser Safari, no Chrome ni otro navegador.</div>
+    </div>
+  </div>
+
+  <div class="install-step">
+    <div class="step-num">2</div>
+    <div>
+      <div class="fw-semibold">Ve a la dirección de la app</div>
+      <div class="text-muted small">Escribe o escanea el QR de arriba:</div>
+      <code class="mrd-code d-block mt-1" id="url-ios" style="font-size:.82rem">app.iasmrd.com</code>
+    </div>
+  </div>
+
+  <div class="install-step">
+    <div class="step-num">3</div>
+    <div>
+      <div class="fw-semibold">Pulsa el botón Compartir <i class="bi bi-box-arrow-up"></i></div>
+      <div class="text-muted small">Es el icono de la flecha hacia arriba en la barra inferior de Safari.</div>
+    </div>
+  </div>
+
+  <div class="install-step">
+    <div class="step-num orange">4</div>
+    <div>
+      <div class="fw-semibold">Toca "Añadir a pantalla de inicio"</div>
+      <div class="text-muted small">Desplázate por el menú hasta encontrar esta opción. Pulsa <strong>Añadir</strong> para confirmar.</div>
+    </div>
+  </div>
+
+  <div class="install-step">
+    <div class="step-num orange">5</div>
+    <div>
+      <div class="fw-semibold">¡Listo! Abre la app desde tu pantalla de inicio</div>
+      <div class="text-muted small">Aparecerá el icono de MRD Tool. Al abrirla, se inicia en pantalla completa sin barra del navegador.</div>
+    </div>
+  </div>
+
+  <div class="alert alert-info mt-3 mb-0" style="font-size:.85rem">
+    <i class="bi bi-info-circle me-2"></i>
+    <strong>Primera vez:</strong> la app pedirá tu usuario y contraseña. Después quedará la sesión guardada.
+    Para el escáner QR, acepta el permiso de cámara cuando lo solicite.
+  </div>
+</div>
+
+<!-- Android -->
+<div id="tab-android" class="mrd-card" style="border-radius:0 8px 8px 8px;display:none">
+  <p class="text-muted small mb-3">Funciona en Android con Chrome, Edge o Samsung Internet.</p>
+
+  <div class="install-step">
+    <div class="step-num">1</div>
+    <div>
+      <div class="fw-semibold">Abre Chrome en tu Android</div>
+      <div class="text-muted small">También funciona con Edge o Samsung Internet.</div>
+    </div>
+  </div>
+
+  <div class="install-step">
+    <div class="step-num">2</div>
+    <div>
+      <div class="fw-semibold">Ve a la dirección de la app</div>
+      <code class="mrd-code d-block mt-1" id="url-android" style="font-size:.82rem">app.iasmrd.com</code>
+    </div>
+  </div>
+
+  <div class="install-step">
+    <div class="step-num">3</div>
+    <div>
+      <div class="fw-semibold">Aparecerá un banner "Añadir a pantalla de inicio"</div>
+      <div class="text-muted small">Chrome lo muestra automáticamente en la parte inferior. Si no aparece, toca los tres puntos <i class="bi bi-three-dots-vertical"></i> → "Añadir a pantalla de inicio".</div>
+    </div>
+  </div>
+
+  <div class="install-step">
+    <div class="step-num orange">4</div>
+    <div>
+      <div class="fw-semibold">Pulsa "Instalar" o "Añadir"</div>
+      <div class="text-muted small">El icono aparece en tu pantalla de inicio como cualquier app.</div>
+    </div>
+  </div>
+
+  <div class="alert alert-success mt-3 mb-0" style="font-size:.85rem">
+    <i class="bi bi-check-circle me-2"></i>
+    En Android el escáner QR funciona directamente con la cámara trasera. Acepta el permiso de cámara la primera vez.
+  </div>
+</div>
+
+<script>
+function showTab(tab, btn) {
+  document.getElementById('tab-desktop').style.display = tab === 'desktop' ? '' : 'none';
+  document.getElementById('tab-ios').style.display = tab === 'ios' ? '' : 'none';
+  document.getElementById('tab-android').style.display = tab === 'android' ? '' : 'none';
+  document.querySelectorAll('#platformTabs .nav-link').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+}
+
+var deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', function(event) {
+  event.preventDefault(); deferredInstallPrompt = event;
+  document.getElementById('install-desktop-button').disabled = false;
+});
+window.addEventListener('appinstalled', function() {
+  document.getElementById('install-desktop-status').textContent = '✓ MRD Tool instalada. Ábrela desde su icono.';
+  document.getElementById('install-desktop-button').style.display = 'none';
+});
+async function installDesktop() {
+  var status = document.getElementById('install-desktop-status');
+  if (window.matchMedia('(display-mode: standalone)').matches) { status.textContent='✓ Ya estás usando la aplicación instalada.'; return; }
+  if (!deferredInstallPrompt) { status.textContent='Abre el menú de Chrome → Guardar y compartir → Instalar MRD Tool Control. Si tienes un acceso antiguo, elimínalo primero.'; return; }
+  deferredInstallPrompt.prompt();
+  var choice = await deferredInstallPrompt.userChoice;
+  status.textContent = choice.outcome === 'accepted' ? 'Instalación aceptada. Abre el nuevo icono de MRD Tool.' : 'Instalación cancelada.';
+  deferredInstallPrompt = null;
+}
+
+// Cargar URL pública
+document.addEventListener('DOMContentLoaded', async function() {
+  var url = 'https://app.iasmrd.com';
+  try {
+    var r = await fetch('/scan/ip');
+    var d = await r.json();
+    if (d.url_https) url = d.url_https.replace('/scan', '');
+  } catch(_) {}
+
+  document.getElementById('url-publica').textContent = url;
+  document.getElementById('url-ios').textContent = url;
+  document.getElementById('url-android').textContent = url;
+
+  // QR servido por MRD, sin depender de servicios externos.
+  var qrDiv = document.getElementById('qr-install-box');
+  qrDiv.innerHTML = d && d.qr ? '<img src="data:image/png;base64,'+d.qr+'" width="160" height="160" alt="QR de instalación">' : '<span class="text-muted">QR no disponible</span>';
+  if (window.matchMedia('(display-mode: standalone)').matches) {
+    document.getElementById('install-desktop-status').textContent='✓ Estás usando MRD Tool como aplicación.';
+    document.getElementById('install-desktop-button').style.display='none';
+  }
+});
+</script>
+{% endblock %}
