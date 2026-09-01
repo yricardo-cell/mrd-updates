@@ -1,11 +1,11 @@
 {
-  "version_actual": "2.7.4",
-  "nombre": "MRD TOOL CONTROL -- Corrige definitivamente el error 409 de solicitudes del portal y migra de forma segura las bases antiguas",
+  "version_actual": "2.7.5",
+  "nombre": "MRD TOOL CONTROL -- Repara solicitudes del portal, filtros de Movimientos y compatibilidad de actualizacion en Windows",
   "fecha": "2026-09-01",
   "cambios": [
-    "Corrige definitivamente el error 409 de solicitudes del portal y migra de forma segura las bases antiguas"
+    "Repara solicitudes del portal, filtros de Movimientos y compatibilidad de actualizacion en Windows"
   ],
   "notas": "Instala desde Configuracion > Actualizaciones.",
-  "download_url": "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.4.zip",
-  "sha256": "f0e0620ca2385cc640de2840ab446625ea85bf0af0105dbac2a87826d37f3125"
+  "download_url": "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.5.zip",
+  "sha256": "d4f983e07407272cf4a1468d3e5b3144be527725cbf901b31a9f0cdcf6b598cd"
 }
