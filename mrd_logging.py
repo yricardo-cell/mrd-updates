@@ -10,8 +10,13 @@ import os
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
-# Directorio de logs
-_LOG_DIR = Path(__file__).parent / "logs"
+# Directorio de logs. En tests (MRD_TESTING=1) se aísla en una carpeta temporal
+# por proceso para no mezclar mensajes simulados con los logs reales de producción.
+if os.getenv("MRD_TESTING") == "1":
+    import tempfile
+    _LOG_DIR = Path(tempfile.gettempdir()) / f"mrd_tool_test_logs_{os.getpid()}"
+else:
+    _LOG_DIR = Path(__file__).parent / "logs"
 _LOG_DIR.mkdir(exist_ok=True)
 
 # Nivel de log desde entorno

@@ -173,11 +173,24 @@ def create_worker_request(
             raise WorkerPortalError(400, "La cantidad debe estar entre 1 y 1000")
         clean_items.append((item_type, description, size, quantity))
 
+    numero = _public_number("SOL")
+    motivo_limpio = (reason or "").strip()[:2000] or None
+    # tipo/categoria/asunto/mensaje son columnas heredadas del buzón anterior a
+    # 2.6 (ver comentario en models.py). Ningún código actual las vuelve a leer
+    # en SolicitudTrabajador, pero instalaciones antiguas conservan un esquema
+    # SQLite donde siguen siendo NOT NULL: hay que rellenarlas siempre para que
+    # el INSERT no falle con IntegrityError en esas instalaciones.
     request = SolicitudTrabajador(
-        numero=_public_number("SOL"), submission_id=submission_id,
+        numero=numero, submission_id=submission_id,
         trabajador_id=worker.id, almacen_id=worker.almacen_id,
         prioridad=priority, obra_destino=" ".join((destination or "").split())[:200] or None,
-        motivo=(reason or "").strip()[:2000] or None,
+        motivo=motivo_limpio,
+        # ``tipo`` pertenece al buzón antiguo, no al artículo solicitado.
+        # Mantener "solicitud" también protege instalaciones que todavía no
+        # hayan ejecutado la migración del esquema heredado.
+        tipo="solicitud", categoria=clean_items[0][0],
+        asunto=f"Solicitud {numero}"[:200],
+        mensaje=motivo_limpio or "Solicitud creada desde el portal del trabajador.",
     )
     for item_type, description, size, quantity in clean_items:
         request.lineas.append(LineaSolicitudTrabajador(

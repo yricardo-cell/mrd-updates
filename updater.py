@@ -103,7 +103,7 @@ def check_update() -> dict:
     # Versión actual
     try:
         vfile = BASE_DIR / "version.json"
-        current = json.loads(vfile.read_text()).get("version_actual", "0.0.0")
+        current = json.loads(vfile.read_text(encoding="utf-8-sig")).get("version_actual", "0.0.0")
     except Exception:
         current = "0.0.0"
 

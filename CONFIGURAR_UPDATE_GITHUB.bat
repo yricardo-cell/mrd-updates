@@ -11,7 +11,7 @@ echo.
 echo  Repo: https://github.com/yricardo-cell/mrd-updates
 echo.
 
-cd /d "C:\mrd tool\mrd_tool_control"
+cd /d "%~dp0"
 
 set ENV_FILE=config\local.env
 

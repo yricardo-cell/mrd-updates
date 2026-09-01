@@ -166,7 +166,7 @@ def leer_version_actual() -> dict:
     try:
         vf = Path("version.json")
         if vf.exists():
-            return _json.loads(vf.read_text(encoding="utf-8"))
+            return _json.loads(vf.read_text(encoding="utf-8-sig"))
     except Exception:
         pass
     return {"version_actual": VERSION, "cambios": [], "historial": []}
@@ -191,7 +191,7 @@ def leer_historial() -> list:
     try:
         vf = Path("version.json")
         if vf.exists():
-            d = _json.loads(vf.read_text(encoding="utf-8"))
+            d = _json.loads(vf.read_text(encoding="utf-8-sig"))
             return d.get("historial", d.get("cambios", []))
     except Exception:
         pass
@@ -289,6 +289,37 @@ if MRD_ALLOWED_HOSTS:
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+
+
+@app.get("/media/herramientas/thumb/{filename}", include_in_schema=False)
+def miniatura_herramienta(filename: str):
+    """Entrega una miniatura ligera sin modificar la fotografía original."""
+    safe_name = Path(filename).name
+    if safe_name != filename or not safe_name:
+        raise HTTPException(404, "Imagen no encontrada")
+    source = UPLOADS_DIR / "herramientas" / safe_name
+    if not source.is_file():
+        raise HTTPException(404, "Imagen no encontrada")
+
+    thumb_dir = UPLOADS_DIR / "herramientas" / ".thumbs"
+    thumb_dir.mkdir(parents=True, exist_ok=True)
+    target = thumb_dir / f"{source.stem}.webp"
+    if not target.exists() or target.stat().st_mtime < source.stat().st_mtime:
+        try:
+            from PIL import Image, ImageOps
+            with Image.open(source) as image:
+                image = ImageOps.exif_transpose(image)
+                image.thumbnail((320, 320), Image.Resampling.LANCZOS)
+                if image.mode not in ("RGB", "RGBA"):
+                    image = image.convert("RGB")
+                image.save(target, "WEBP", quality=76, method=4)
+        except Exception:
+            return FileResponse(source, headers={"Cache-Control": "public, max-age=86400"})
+    return FileResponse(
+        target,
+        media_type="image/webp",
+        headers={"Cache-Control": "public, max-age=2592000, immutable"},
+    )
 
 
 @app.get("/sw.js", include_in_schema=False)
@@ -2450,13 +2481,24 @@ def movimientos_list(
     db: Session = Depends(get_db),
     q: str = "",
     tipo: str = "",
-    trabajador_id: int | None = None,
-    usuario_id: int | None = None,
-    fecha_desde: date | None = None,
-    fecha_hasta: date | None = None,
+    trabajador_id: str = "",
+    usuario_id: str = "",
+    fecha_desde: str = "",
+    fecha_hasta: str = "",
     page: int = 1,
 ):
     PER_PAGE = 30
+    try:
+        trabajador_id = int(trabajador_id) if trabajador_id.strip() else None
+        usuario_id = int(usuario_id) if usuario_id.strip() else None
+        fecha_desde = date.fromisoformat(fecha_desde) if fecha_desde.strip() else None
+        fecha_hasta = date.fromisoformat(fecha_hasta) if fecha_hasta.strip() else None
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Los filtros de movimientos no son válidos")
+    if (trabajador_id is not None and trabajador_id <= 0) or (
+        usuario_id is not None and usuario_id <= 0
+    ):
+        raise HTTPException(400, "Los filtros de movimientos no son válidos")
     active_warehouse = _active_warehouse(db, user, request)
     query = db.query(Movimiento).join(Herramienta).filter(
         Herramienta.almacen_id == (active_warehouse.id if active_warehouse else -1),
@@ -12801,9 +12843,15 @@ def _svc_windows_state() -> str:
 # ─── Reinicio del servidor ────────────────────────────────────────────────────
 def _restart_exec_target(argv: list[str], python_executable: str, os_name: str):
     """Devuelve el ejecutable correcto sin intentar abrir un launcher .exe con Python."""
-    launcher = Path(argv[0]).resolve()
-    if os_name == "nt" and launcher.is_file() and launcher.suffix.lower() == ".exe":
-        return str(launcher), [str(launcher)] + argv[1:]
+    launcher = Path(argv[0])
+    if os_name == "nt":
+        # En servicios de Windows argv[0] puede llegar relativo a otra carpeta.
+        # El uvicorn fiable está junto al python.exe del entorno virtual.
+        sibling_launcher = Path(python_executable).resolve().with_name(launcher.name)
+        if launcher.suffix.lower() == ".exe" and sibling_launcher.is_file():
+            return str(sibling_launcher), [str(sibling_launcher)] + argv[1:]
+        if launcher.is_absolute() and launcher.is_file() and launcher.suffix.lower() == ".exe":
+            return str(launcher), [str(launcher)] + argv[1:]
     return python_executable, [python_executable] + argv
 
 
@@ -16190,7 +16238,7 @@ def serve_version_json():
     import json as _json
     try:
         vpath = BASE_DIR / "version.json"
-        data  = _json.loads(vpath.read_text(encoding="utf-8"))
+        data  = _json.loads(vpath.read_text(encoding="utf-8-sig"))
         return data
     except Exception as exc:
         return {"error": str(exc), "version_actual": "0.0.0"}

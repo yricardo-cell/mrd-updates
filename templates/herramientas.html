@@ -160,7 +160,7 @@
 
           <td class="inventory-col-photo">
             {% if h.foto %}
-            <div class="thumb"><img src="/uploads/herramientas/{{ h.foto }}" alt=""></div>
+            <div class="thumb"><img src="/media/herramientas/thumb/{{ h.foto }}?v={{ version }}" alt="" loading="lazy" decoding="async" fetchpriority="low"></div>
             {% else %}
             <div class="thumb"><i class="bi bi-tools"></i></div>
             {% endif %}

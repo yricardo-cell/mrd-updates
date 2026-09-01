@@ -1,11 +1,18 @@
 {
-  "version_actual": "2.7.1",
-  "version_anterior": "2.7.0",
+  "version_actual": "2.7.5",
+  "version_anterior": "2.7.4",
   "nombre": "MRD TOOL CONTROL",
   "edicion": "Centro operativo avanzado de almacenes",
   "fecha": "2026-09-01",
-  "estado": "en_desarrollo",
+  "estado": "estable",
   "cambios": [
+    "Corregidos los filtros vacíos de Movimientos para que buscar sin seleccionar trabajador, usuario o fechas no produzca un error de validación.",
+    "Corregido definitivamente el error 409 al pedir material desde el portal: las bases antiguas se actualizan de forma segura al flujo actual, conservando solicitudes y permitiendo todos los estados hasta la entrega.",
+    "Reparadas las solicitudes del portal del trabajador en instalaciones antiguas: los campos heredados obligatorios se completan de forma compatible y la petición aparece correctamente en la bandeja del almacén y en el estado del trabajador.",
+    "Reparada la lectura de versión en Windows para evitar que la aplicación vuelva silenciosamente a 1.9.2-alpha y mezcle recursos antiguos.",
+    "Corregido el publicador de GitHub para escribir JSON UTF-8 sin BOM y conservar correctamente acentos y versión anterior.",
+    "Listado de herramientas acelerado con miniaturas WebP y carga diferida, evitando descargar fotografías originales de hasta 10 MB cada una.",
+    "Reinicio administrativo corregido para localizar correctamente uvicorn dentro del entorno virtual cuando MRD está instalado en una ruta con espacios.",
     "Añadida prueba automatizada end-to-end del portal del trabajador que simula el flujo real completo (login con PIN, creación de una solicitud, aprobación por un administrador) y verifica que lo pedido y su estado se muestran correctamente en pantalla en cada paso, confirmando que la corrección del error crítico anterior (columnas faltantes en lineas_solicitud_trabajador) funciona de extremo a extremo y no solo a nivel de base de datos.",
     "Corregido error crítico que rompía por completo el portal del trabajador (HTTP 500 en /portal/{token}): faltaban en la base de datos las columnas 'cantidad_aprobada' y 'observaciones' de la tabla lineas_solicitud_trabajador, presentes en el modelo pero no en instalaciones existentes. Añadidas ambas columnas a la migración automática de arranque (database.py) para que se autorreparen en cualquier base de datos afectada, sin intervención manual.",
     "Añadido registro de log (mrd_logging) en la creación de solicitudes del trabajador cuando falla por un error inesperado (HTTP 409 en /portal/{token}/solicitudes): antes ese fallo quedaba sin ningún rastro en los logs, ahora se registra el motivo real para poder diagnosticar recurrencias.",
@@ -225,4 +232,3 @@
     "templates/trabajador_portal_qr.html"
   ]
 }
-

@@ -264,10 +264,10 @@ def test_pwa_publica_detector_y_version_candidata_real():
     sw = (ROOT / "static/js/sw.js").read_text(encoding="utf-8")
     base = (ROOT / "templates/base.html").read_text(encoding="utf-8")
     version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
-    assert version["version_actual"] == "2.7.0"
-    assert version["estado"] == "en_desarrollo"
+    assert version["version_actual"] == "2.7.5"
+    assert version["estado"] == "estable"
     assert "/static/js/scanner_hid.js" in sw
-    assert "mrd-static-v2.7.0" in sw
+    assert "mrd-static-v2.7.5" in sw
     assert 'scanner_hid.js?v={{ version }}"></script>' in base
 
 

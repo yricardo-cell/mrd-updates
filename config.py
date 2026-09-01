@@ -101,7 +101,9 @@ DATABASE_URL = os.getenv(
 # ─── Versión — leer siempre de version.json ──────────────────────────────────
 _version_file = BASE_DIR / "version.json"
 try:
-    _vdata = json.loads(_version_file.read_text(encoding="utf-8"))
+    # utf-8-sig acepta tanto UTF-8 normal como archivos escritos por
+    # Windows PowerShell con BOM. Así una publicación no degrada VERSION.
+    _vdata = json.loads(_version_file.read_text(encoding="utf-8-sig"))
     VERSION = _vdata.get("version_actual", "1.9.2-alpha")
 except Exception:
     VERSION = "1.9.2-alpha"

@@ -226,6 +226,129 @@ def reset_stats():
 
 
 # ─── Migraciones incrementales (SQLite) ───────────────────────────────────────
+def _rebuild_legacy_worker_requests(migration_engine) -> int:
+    """Retira las restricciones del buzón antiguo sin perder solicitudes."""
+    with migration_engine.connect() as conn:
+        table_sql = conn.execute(text(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'solicitudes_trabajador'"
+        )).scalar_one_or_none()
+        if not table_sql:
+            return 0
+        normalized_sql = " ".join(table_sql.lower().split())
+        if not (
+            "ck_solicitud_trabajador_tipo" in normalized_sql
+            or "tipo in ('solicitud','sugerencia','queja')" in normalized_sql
+        ):
+            return 0
+        old_columns = {
+            row[1] for row in conn.execute(text(
+                'PRAGMA table_info("solicitudes_trabajador")'
+            ))
+        }
+
+    destination_columns = [
+        "id", "numero", "submission_id", "trabajador_id", "almacen_id",
+        "estado", "prioridad", "tipo", "categoria", "asunto", "mensaje",
+        "cantidad", "respuesta", "respondido_por_id", "respondido_en",
+        "obra_destino", "motivo", "notas_gestion", "revisado_por_id",
+        "creado_en", "actualizado_en", "entregado_en", "fecha_estimada",
+        "cancelada_por_trabajador_en", "recogida_confirmada_en",
+    ]
+    defaults = {
+        "numero": "'SOL-LEGACY-' || printf('%08d', id)",
+        "submission_id": "'legacy-' || printf('%08d', id)",
+        "almacen_id": "NULL", "estado": "'pendiente'", "prioridad": "'normal'",
+        "tipo": "NULL", "categoria": "NULL", "asunto": "NULL", "mensaje": "NULL",
+        "cantidad": "NULL", "respuesta": "NULL", "respondido_por_id": "NULL",
+        "respondido_en": "NULL", "obra_destino": "NULL", "motivo": "NULL",
+        "notas_gestion": "NULL", "revisado_por_id": "NULL",
+        "creado_en": "CURRENT_TIMESTAMP", "actualizado_en": "CURRENT_TIMESTAMP",
+        "entregado_en": "NULL", "fecha_estimada": "NULL",
+        "cancelada_por_trabajador_en": "NULL", "recogida_confirmada_en": "NULL",
+    }
+
+    def source_expression(column):
+        if column == "numero" and column in old_columns:
+            return "COALESCE(NULLIF(trim(numero), ''), 'SOL-LEGACY-' || printf('%08d', id))"
+        if column == "submission_id" and column in old_columns:
+            return "COALESCE(NULLIF(trim(submission_id), ''), 'legacy-' || printf('%08d', id))"
+        if column == "estado" and column in old_columns:
+            return (
+                "CASE estado WHEN 'en_revision' THEN 'revision' "
+                "WHEN 'preparada' THEN 'preparando' "
+                "WHEN 'respondida' THEN 'revision' ELSE estado END"
+            )
+        if column == "actualizado_en" and column in old_columns:
+            created = "creado_en" if "creado_en" in old_columns else "CURRENT_TIMESTAMP"
+            return f"COALESCE(actualizado_en, {created}, CURRENT_TIMESTAMP)"
+        if column in old_columns:
+            return f'"{column}"'
+        return defaults[column]
+
+    insert_columns = ", ".join(f'"{column}"' for column in destination_columns)
+    select_columns = ", ".join(source_expression(column) for column in destination_columns)
+    raw = migration_engine.raw_connection()
+    cursor = raw.cursor()
+    try:
+        cursor.execute("PRAGMA foreign_keys=OFF")
+        cursor.execute("BEGIN IMMEDIATE")
+        cursor.execute("DROP TABLE IF EXISTS solicitudes_trabajador_migrada")
+        cursor.execute("""
+            CREATE TABLE solicitudes_trabajador_migrada (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                numero VARCHAR(40) NOT NULL UNIQUE,
+                submission_id VARCHAR(64) NOT NULL UNIQUE,
+                trabajador_id INTEGER NOT NULL REFERENCES trabajadores(id),
+                almacen_id INTEGER REFERENCES almacenes(id),
+                estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+                prioridad VARCHAR(20) NOT NULL DEFAULT 'normal',
+                tipo VARCHAR(20), categoria VARCHAR(50), asunto VARCHAR(200),
+                mensaje TEXT, cantidad INTEGER, respuesta TEXT,
+                respondido_por_id INTEGER REFERENCES usuarios(id),
+                respondido_en DATETIME, obra_destino VARCHAR(200), motivo TEXT,
+                notas_gestion TEXT, revisado_por_id INTEGER REFERENCES usuarios(id),
+                creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                entregado_en DATETIME, fecha_estimada DATETIME,
+                cancelada_por_trabajador_en DATETIME,
+                recogida_confirmada_en DATETIME,
+                CONSTRAINT ck_solicitud_trabajador_estado CHECK (
+                    estado IN ('pendiente','revision','aprobada','preparando',
+                    'lista','entregada','rechazada','cancelada')
+                )
+            )
+        """)
+        cursor.execute(
+            f"INSERT INTO solicitudes_trabajador_migrada ({insert_columns}) "
+            f"SELECT {select_columns} FROM solicitudes_trabajador"
+        )
+        migrated_rows = max(cursor.rowcount, 0)
+        cursor.execute("DROP TABLE solicitudes_trabajador")
+        cursor.execute(
+            "ALTER TABLE solicitudes_trabajador_migrada "
+            "RENAME TO solicitudes_trabajador"
+        )
+        raw.commit()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        violations = cursor.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise RuntimeError(
+                f"La migración de solicitudes dejó {len(violations)} referencias inválidas"
+            )
+        logger.info(
+            "Esquema antiguo de solicitudes actualizado: %s filas conservadas",
+            migrated_rows,
+        )
+        return migrated_rows
+    except Exception:
+        raw.rollback()
+        raise
+    finally:
+        cursor.close()
+        raw.close()
+
+
 def apply_migrations(target_engine=None):
     """
     Migraciones incrementales y no destructivas para SQLite.
@@ -667,6 +790,7 @@ def apply_migrations(target_engine=None):
         return '"' + value.replace('"', '""') + '"'
 
     summary = {"columns_added": 0, "indexes_created": 0, "rows_updated": 0}
+    summary["rows_updated"] += _rebuild_legacy_worker_requests(migration_engine)
     added_columns = set()
     with migration_engine.begin() as conn:
         tables = {

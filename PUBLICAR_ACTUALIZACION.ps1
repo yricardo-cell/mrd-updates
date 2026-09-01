@@ -16,6 +16,11 @@ function Pausar($msg) {
     exit 1
 }
 
+function Write-Utf8NoBom($Path, $Text) {
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [IO.File]::WriteAllText($Path, $Text, $utf8NoBom)
+}
+
 function Get-GitHubToken {
     $tokenFile = "$raiz\config\github.token"
     if (Test-Path $tokenFile) {
@@ -57,8 +62,11 @@ function Subir-Archivo($token, $rutaLocal, $nombreRemoto, $mensajeCommit) {
         "User-Agent"  = "MRD-TOOL"
         Accept        = "application/vnd.github.v3+json"
     }
+    # Windows PowerShell 5 puede enviar los strings como ANSI y romper el JSON
+    # cuando el mensaje contiene acentos. Forzar bytes UTF-8 evita el HTTP 400.
+    $jsonBytes = [Text.Encoding]::UTF8.GetBytes(($body | ConvertTo-Json -Compress))
     $r = Invoke-RestMethod -Uri $url -Method Put -Headers $h `
-         -Body ($body | ConvertTo-Json -Compress) -ContentType "application/json"
+         -Body $jsonBytes -ContentType "application/json; charset=utf-8"
     return $r.content.name
 }
 
@@ -76,7 +84,7 @@ Write-Host ""
 $versionActual = "desconocida"
 $localJson = $null
 try {
-    $localJson = Get-Content "$raiz\version.json" -Raw | ConvertFrom-Json
+    $localJson = Get-Content "$raiz\version.json" -Raw -Encoding UTF8 | ConvertFrom-Json
     $versionActual = $localJson.version_actual
 } catch { }
 Write-Host "  Version actual: $versionActual" -ForegroundColor Yellow
@@ -103,12 +111,13 @@ if (Test-Path $zipTmp)  { Remove-Item $zipTmp  -Force }
 
 $robocopyArgs = @(
     $raiz, $destino, "/E",
-    "/XD", "venv", "__pycache__", ".git", "logs", "temp",
+    "/XD", "venv", "__pycache__", ".git", ".claude", ".agents", "logs", "temp",
            "cache", "releases", "backups", "updates", ".mypy_cache",
            ".pytest_cache", "para_subir_github", "data", "uploads",
+           "private_config", "graphify-out", "repair_stage",
     "/XF", "*.log", "*.bak", "*.bak_edit", "desktop.ini", "*.pyc",
            "*.exe", "*.db", "*.db-wal", "*.db-shm",
-           "local.env", "github.token", ".service_restart",
+           "local.env", "github.token", "vapid_keys.json", ".service_restart",
     "/NFL", "/NDL", "/NJH", "/NJS"
 )
 & robocopy @robocopyArgs | Out-Null
@@ -150,7 +159,7 @@ $obj = [ordered]@{
     sha256         = $sha256
 }
 $versionJsonPath = "$carpeta\version.json"
-$obj | ConvertTo-Json -Depth 3 | Set-Content $versionJsonPath -Encoding UTF8
+Write-Utf8NoBom $versionJsonPath ($obj | ConvertTo-Json -Depth 3)
 Write-Host "  version.json OK" -ForegroundColor Gray
 
 # 5. Subir a GitHub
@@ -172,10 +181,12 @@ Write-Host "  GitHub OK" -ForegroundColor Green
 Write-Host ""
 Write-Host "  [6/6] Actualizando version local..." -ForegroundColor Green
 if ($localJson) {
-    $localJson.version_anterior = $localJson.version_actual
+    if ($versionNueva -ne $localJson.version_actual) {
+        $localJson.version_anterior = $localJson.version_actual
+    }
     $localJson.version_actual   = $versionNueva
     $localJson.fecha            = (Get-Date -Format "yyyy-MM-dd")
-    $localJson | ConvertTo-Json -Depth 5 | Set-Content "$raiz\version.json" -Encoding UTF8
+    Write-Utf8NoBom "$raiz\version.json" ($localJson | ConvertTo-Json -Depth 8)
 }
 Write-Host "  version.json local -> $versionNueva" -ForegroundColor Gray
 

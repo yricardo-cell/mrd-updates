@@ -214,7 +214,15 @@ def test_pwa_se_sirve_desde_raiz_y_puede_controlar_toda_la_app(client):
     response = client.get("/sw.js")
     assert response.status_code == 200
     assert response.headers["service-worker-allowed"] == "/"
-    assert "mrd-static-v2.7.0" in response.text
+    assert "mrd-static-v2.7.5" in response.text
+
+
+def test_listado_herramientas_usa_miniaturas_y_carga_diferida():
+    root = Path(__file__).resolve().parents[1]
+    template = (root / "templates" / "herramientas.html").read_text(encoding="utf-8")
+    assert "/media/herramientas/thumb/{{ h.foto }}" in template
+    assert 'loading="lazy"' in template
+    assert 'decoding="async"' in template
 
 
 def test_tallas_manual_normaliza_y_respeta_exactamente_la_eleccion():
