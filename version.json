@@ -1,11 +1,11 @@
 {
-  "version_actual": "2.7.5",
-  "nombre": "MRD TOOL CONTROL -- Repara solicitudes del portal, filtros de Movimientos y compatibilidad de actualizacion en Windows",
-  "fecha": "2026-09-01",
-  "cambios": [
-    "Repara solicitudes del portal, filtros de Movimientos y compatibilidad de actualizacion en Windows"
-  ],
-  "notas": "Instala desde Configuracion > Actualizaciones.",
-  "download_url": "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.5.zip",
-  "sha256": "d4f983e07407272cf4a1468d3e5b3144be527725cbf901b31a9f0cdcf6b598cd"
+    "version_actual":  "2.7.6",
+    "nombre":  "MRD TOOL CONTROL -- Publicador de actualizaciones controlado por parametros (-Version/-Descripcion/-NoPause)",
+    "fecha":  "2026-09-01",
+    "cambios":  [
+                    "Publicador de actualizaciones controlado por parametros (-Version/-Descripcion/-NoPause)"
+                ],
+    "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.6.zip",
+    "sha256":  "6611fd7566d6f7bca6375da3ea3a04622450e4210b403a485a002e69deafe107"
 }
