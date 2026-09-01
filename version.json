@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.3",
-    "nombre":  "MRD TOOL CONTROL -- Solicitudes del portal compatibles y visibles en almacén",
-    "fecha":  "2026-09-01",
-    "cambios":  [
-                    "Solicitudes del portal compatibles y visibles en almacén"
-                ],
-    "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.3.zip",
-    "sha256":  "17b8e0afbafe051637bc1cfe0542f2f43b4847264e4123a8cd66992d3c14fbae"
+  "version_actual": "2.7.4",
+  "nombre": "MRD TOOL CONTROL -- Corrige definitivamente el error 409 de solicitudes del portal y migra de forma segura las bases antiguas",
+  "fecha": "2026-09-01",
+  "cambios": [
+    "Corrige definitivamente el error 409 de solicitudes del portal y migra de forma segura las bases antiguas"
+  ],
+  "notas": "Instala desde Configuracion > Actualizaciones.",
+  "download_url": "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.4.zip",
+  "sha256": "f0e0620ca2385cc640de2840ab446625ea85bf0af0105dbac2a87826d37f3125"
 }
