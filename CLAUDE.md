@@ -42,3 +42,32 @@ web-animation-design vs. Baoyu Design), no elegir unilateralmente. Explicar
 brevemente el conflicto y las opciones disponibles, y preguntar al usuario cuál
 prefiere antes de aplicar nada. Nunca mezclar recomendaciones a medias de varias
 skills sin verificar que son coherentes entre sí.
+
+## 7. Commit y publicación en GitHub
+Claude tiene permiso local permanente para ejecutar `git status`, `git diff`,
+`git add`, `git commit` y el publicador controlado de MRD. No debe afirmar que el
+usuario tiene que ejecutar esos comandos manualmente.
+
+La frase del usuario `AUTORIZO PUBLICAR ESTA ACTUALIZACIÓN` (o una petición
+inequívoca equivalente) autoriza esa publicación concreta y no requiere pedir una
+segunda confirmación. La capacidad de publicar no es autorización para publicar
+automáticamente cambios futuros sin que el usuario lo solicite.
+
+Antes de publicar:
+1. Revisar `git status` y `git diff` y excluir bases de datos, `data/`, `logs/`,
+   `uploads/`, `backups/`, tokens, archivos `.env` y cualquier secreto.
+2. Crear copia de seguridad y ejecutar las pruebas relacionadas; no publicar con
+   pruebas fallidas.
+3. Incrementar `version.json` a una versión nueva y actualizar `CACHE_NAME` en
+   `static/js/sw.js` y las pruebas que comprueban la versión.
+4. Crear un commit descriptivo.
+5. Ejecutar sin diálogos:
+
+       powershell.exe -ExecutionPolicy Bypass -File PUBLICAR_ACTUALIZACION.ps1 -Version VERSION_NUEVA -Descripcion "DESCRIPCION" -NoPause
+
+6. Verificar la versión remota, SHA-256, contenido seguro del ZIP y `/health`.
+7. Reiniciar MRD solo si cambió código que el proceso Python deba recargar; una
+   modificación exclusiva de documentación o metadatos no requiere reinicio.
+
+El token de GitHub ya se gestiona localmente. Nunca mostrarlo, copiarlo al chat,
+incluirlo en Git ni introducirlo en el paquete de actualización.
