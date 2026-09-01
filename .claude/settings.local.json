@@ -1,7 +1,11 @@
-﻿{
+{
   "permissions": {
     "allow": [
-      "Bash(powershell.exe -File ""PUBLICAR_ACTUALIZACION.ps1"":*)"
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File PUBLICAR_ACTUALIZACION.ps1:*)"
     ]
   }
 }

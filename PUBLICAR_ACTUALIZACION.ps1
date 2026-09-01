@@ -1,6 +1,12 @@
 # MRD TOOL - Publicar actualizacion via GitHub (subida automatica)
 # Funciona desde cualquier PC - usa rutas relativas al script
 
+param(
+    [string]$Version = "",
+    [string]$Descripcion = "",
+    [switch]$NoPause
+)
+
 $host.UI.RawUI.WindowTitle = "MRD TOOL - Publicar actualizacion"
 
 $raiz   = $PSScriptRoot
@@ -12,7 +18,7 @@ function Pausar($msg) {
     Write-Host ""
     Write-Host "  $msg" -ForegroundColor Red
     Write-Host ""
-    Read-Host "  Pulsa Enter para cerrar"
+    if (-not $NoPause) { Read-Host "  Pulsa Enter para cerrar" }
     exit 1
 }
 
@@ -90,12 +96,16 @@ try {
 Write-Host "  Version actual: $versionActual" -ForegroundColor Yellow
 Write-Host ""
 
-$versionNueva = Read-Host "  Nueva version (ej: 2.1.2)"
+$versionNueva = if ($Version) { $Version } else { Read-Host "  Nueva version (ej: 2.1.2)" }
 $versionNueva = $versionNueva.Trim()
 if (-not $versionNueva) { Pausar "ERROR: la version no puede estar vacia." }
 
 Write-Host ""
-$cambiosDesc = (Read-Host "  Descripcion del cambio (Enter = Mejoras y correcciones)").Trim()
+$cambiosDesc = if ($Descripcion) {
+    $Descripcion.Trim()
+} else {
+    (Read-Host "  Descripcion del cambio (Enter = Mejoras y correcciones)").Trim()
+}
 if (-not $cambiosDesc) { $cambiosDesc = "Mejoras y correcciones" }
 
 # 1. Empaquetar
@@ -207,4 +217,4 @@ Write-Host ""
 }
 
 Write-Host ""
-Read-Host "  Pulsa Enter para cerrar"
+if (-not $NoPause) { Read-Host "  Pulsa Enter para cerrar" }
