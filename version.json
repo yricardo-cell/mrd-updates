@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.2",
-    "nombre":  "MRD TOOL CONTROL -- Reparación de carga, caché, miniaturas y actualización segura",
+    "version_actual":  "2.7.3",
+    "nombre":  "MRD TOOL CONTROL -- Solicitudes del portal compatibles y visibles en almacén",
     "fecha":  "2026-09-01",
     "cambios":  [
-                    "Reparación de carga, caché, miniaturas y actualización segura"
+                    "Solicitudes del portal compatibles y visibles en almacén"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.2.zip",
-    "sha256":  "1406868c791274cbbe0f8a127387f3054fb49613d8b80e1c2f089ee17fece2ea"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.3.zip",
+    "sha256":  "17b8e0afbafe051637bc1cfe0542f2f43b4847264e4123a8cd66992d3c14fbae"
 }
