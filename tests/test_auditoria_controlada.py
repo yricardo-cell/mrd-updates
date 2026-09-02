@@ -113,7 +113,7 @@ def test_pistola_se_queda_en_flujos_locales_y_mostrador_limpia_lectura():
     assert "#counter-scan,#inventory-scan-input,#line-filter,#receipt-code" in common
     assert "!scanEvent.defaultPrevented && !localWorkflow" in common
     add_start = counter.index("async function add(rawCode)")
-    fetch_start = counter.index("fetch('/api/mostrador/resolver", add_start)
+    fetch_start = counter.index("fetchAuthSafe('/api/mostrador/resolver", add_start)
     assert counter.index("scan.value=''", add_start) < fetch_start
     assert "await searchByName(code)" in counter
 
@@ -291,10 +291,10 @@ def test_pwa_publica_detector_y_version_candidata_real():
     sw = (ROOT / "static/js/sw.js").read_text(encoding="utf-8")
     base = (ROOT / "templates/base.html").read_text(encoding="utf-8")
     version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
-    assert version["version_actual"] == "2.7.7"
+    assert version["version_actual"] == "2.7.16"
     assert version["estado"] == "estable"
     assert "/static/js/scanner_hid.js" in sw
-    assert "mrd-static-v2.7.7" in sw
+    assert "mrd-static-v2.7.16" in sw
     assert 'scanner_hid.js?v={{ version }}"></script>' in base
 
 
