@@ -14,9 +14,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from sentinel import auth
-from sentinel.config import SentinelConfig
+from sentinel.config import DEFAULT_CONFIG_PATH, SentinelConfig
+from sentinel.config_store import add_app
 from sentinel.health_monitor import HealthMonitor
 from sentinel.history_reader import read_history, read_state
+from sentinel.system_monitor import snapshot as system_snapshot
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -36,7 +38,7 @@ def _is_local_request(request: Request) -> bool:
     return bool(request.client and request.client.host in {"127.0.0.1", "::1", "testclient"})
 
 
-def build_panel_router(config: SentinelConfig, health_monitor: HealthMonitor) -> APIRouter:
+def build_panel_router(config: SentinelConfig, health_monitor: HealthMonitor, config_path: Path | None = None) -> APIRouter:
     router = APIRouter()
 
     @router.get("/login", response_class=HTMLResponse)
@@ -157,7 +159,42 @@ def build_panel_router(config: SentinelConfig, health_monitor: HealthMonitor) ->
         return templates.TemplateResponse(
             request, "dashboard.html",
             {"request": request, "app_name": "MRD Sentinel", "user": user,
-             "apps": apps_view, "now": time.strftime("%Y-%m-%d %H:%M:%S")},
+             "apps": apps_view, "system": system_snapshot(),
+             "add_error": None, "now": time.strftime("%Y-%m-%d %H:%M:%S")},
         )
+
+    @router.post("/apps")
+    def add_application(
+        request: Request,
+        id: str = Form(...),
+        display_name: str = Form(...),
+        local_url: str = Form(...),
+        health_path: str = Form("/health"),
+        public_hostname: str = Form(...),
+        user: str = Depends(auth.require_login),
+    ):
+        try:
+            updated = add_app({
+                "id": id, "display_name": display_name, "local_url": local_url,
+                "health_path": health_path, "public_hostname": public_hostname,
+            }, path=config_path or DEFAULT_CONFIG_PATH)
+            config.replace_from(updated)
+            health_monitor.refresh_config(config)
+            return RedirectResponse("/?added=1", status_code=303)
+        except Exception as exc:
+            apps_view = [{
+                "id": app.id, "display_name": app.display_name,
+                "public_hostname": app.public_hostname,
+                "local_url": app.local_url,
+                "healthy": health_monitor.is_healthy(app.id),
+                "state": read_state(app), "history": read_history(app, limit=20),
+            } for app in config.apps]
+            return templates.TemplateResponse(
+                request, "dashboard.html",
+                {"request": request, "app_name": "MRD Sentinel", "user": user,
+                 "apps": apps_view, "system": system_snapshot(),
+                 "add_error": str(exc), "now": time.strftime("%Y-%m-%d %H:%M:%S")},
+                status_code=400,
+            )
 
     return router

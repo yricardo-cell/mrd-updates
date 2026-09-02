@@ -41,7 +41,7 @@ class WatchedApp:
         return self.failover_state_root / "history.jsonl"
 
 
-@dataclass(frozen=True)
+@dataclass
 class SentinelConfig:
     host: str
     port: int
@@ -60,6 +60,12 @@ class SentinelConfig:
             if app.public_hostname.lower() == host:
                 return app
         return None
+
+    def replace_from(self, other: "SentinelConfig") -> None:
+        """Actualiza la configuracion en caliente manteniendo la misma referencia."""
+        self.host = other.host
+        self.port = other.port
+        self.apps = other.apps
 
 
 REQUIRED_APP_FIELDS = (

@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from sentinel import auth
 from sentinel.app import create_app
+from sentinel.config import load_config
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -98,3 +99,48 @@ def test_configuracion_inicial_remota_esta_bloqueada(monkeypatch, tmp_path):
     monkeypatch.setattr(auth, "SECRET_KEY_PATH", tmp_path / "secret.key")
     with TestClient(create_app(), client=("192.0.2.10", 50000)) as client:
         assert client.get("/setup").status_code == 403
+
+
+def test_metricas_se_muestran_en_el_panel(monkeypatch, tmp_path):
+    monkeypatch.setattr(auth, "USERS_PATH", tmp_path / "users.json")
+    monkeypatch.setattr(auth, "SECRET_KEY_PATH", tmp_path / "secret.key")
+    auth.create_user("admin", "ClaveSegura123")
+    config_path = tmp_path / "apps.yaml"
+    config_path.write_text(
+        "sentinel:\n  host: 127.0.0.1\n  port: 9100\napps:\n"
+        "  - id: demo\n    display_name: Demo\n    local_url: http://127.0.0.1:9999\n"
+        "    health_path: /health\n    public_hostname: demo.local\n"
+        "    failover_state_root: C:\\\\ProgramData\\\\Demo\\\\failover\n",
+        encoding="utf-8",
+    )
+    with TestClient(create_app(config_path)) as client:
+        client.cookies.set(auth.COOKIE_NAME, auth.create_token("admin"))
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "CPU" in response.text
+        assert "Memoria" in response.text
+        assert "Equipo encendido" in response.text
+
+
+def test_se_puede_anadir_aplicacion_y_se_recarga_sin_reinicio(monkeypatch, tmp_path):
+    monkeypatch.setattr(auth, "USERS_PATH", tmp_path / "users.json")
+    monkeypatch.setattr(auth, "SECRET_KEY_PATH", tmp_path / "secret.key")
+    auth.create_user("admin", "ClaveSegura123")
+    config_path = tmp_path / "apps.yaml"
+    config_path.write_text(
+        "sentinel:\n  host: 127.0.0.1\n  port: 9100\napps:\n"
+        "  - id: demo\n    display_name: Demo\n    local_url: http://127.0.0.1:9999\n"
+        "    health_path: /health\n    public_hostname: demo.local\n"
+        "    failover_state_root: C:\\\\ProgramData\\\\Demo\\\\failover\n",
+        encoding="utf-8",
+    )
+    with TestClient(create_app(config_path)) as client:
+        client.cookies.set(auth.COOKIE_NAME, auth.create_token("admin"))
+        response = client.post("/apps", data={
+            "id": "otra_app", "display_name": "Otra app",
+            "local_url": "http://127.0.0.1:8100", "health_path": "/health",
+            "public_hostname": "otra.local",
+        }, follow_redirects=False)
+        assert response.status_code == 303
+        assert "otra_app" in response.headers["location"] or response.headers["location"] == "/?added=1"
+        assert load_config(config_path).get_app("otra_app") is not None

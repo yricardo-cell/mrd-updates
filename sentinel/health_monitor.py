@@ -74,6 +74,14 @@ class HealthMonitor:
         if self._thread is not None:
             self._thread.join(timeout=5)
 
+    def refresh_config(self, config: SentinelConfig) -> None:
+        with self._lock:
+            self._config = config
+            self._results = {
+                app.id: self._results.get(app.id, AppHealth(healthy=False, checked_at=""))
+                for app in config.apps
+            }
+
     def is_healthy(self, app_id: str) -> bool:
         with self._lock:
             result = self._results.get(app_id)

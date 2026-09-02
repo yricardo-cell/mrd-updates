@@ -43,7 +43,7 @@ def create_app(config_path: Optional[Path] = None) -> FastAPI:
     def healthz():
         return {"status": "ok", "service": "mrd-sentinel"}
 
-    app.include_router(build_panel_router(config, health_monitor))
+    app.include_router(build_panel_router(config, health_monitor, config_path))
 
     @app.api_route(
         "/{full_path:path}",

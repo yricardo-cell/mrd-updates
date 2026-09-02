@@ -1,13 +1,33 @@
 {% extends "base.html" %}
 {% block title %}{{ app_name }} — Panel{% endblock %}
 {% block content %}
-<h1>{{ app_name }}</h1>
-<p>Sesión: {{ user }} — <a href="/logout">Salir</a></p>
+<header><h1>{{ app_name }}</h1><p>Sesión: {{ user }} — <a href="/logout">Salir</a></p></header>
 <p>Actualizado: {{ now }}</p>
+
+<div class="metrics">
+  <div class="metric">CPU<strong>{{ system.cpu_percent }}%</strong></div>
+  <div class="metric">Memoria<strong>{{ system.memory_percent }}%</strong><small>{{ system.memory_used_gb }} / {{ system.memory_total_gb }} GB</small></div>
+  <div class="metric">Disco<strong>{{ system.disk_percent }}%</strong><small>{{ system.disk_free_gb }} GB libres</small></div>
+  <div class="metric">Equipo encendido<strong>{{ system.uptime }}</strong></div>
+</div>
+
+<section>
+  <h2>Añadir aplicación vigilada</h2>
+  <p>Se guardará en la configuración y comenzará a comprobarse sin reiniciar Sentinel.</p>
+  {% if add_error %}<p class="bad">{{ add_error }}</p>{% endif %}
+  <form method="post" action="/apps">
+    <label>ID<br><input name="id" placeholder="mi_aplicacion" pattern="[a-z0-9][a-z0-9_-]{1,48}" required></label>
+    <label>Nombre<br><input name="display_name" placeholder="Mi aplicación" maxlength="120" required></label>
+    <label>URL local<br><input name="local_url" placeholder="http://127.0.0.1:8100" required></label>
+    <label>Ruta de salud<br><input name="health_path" value="/health" required></label>
+    <label>Dominio público<br><input name="public_hostname" placeholder="mi-app.ejemplo.com" required></label>
+    <br><button type="submit">Añadir aplicación</button>
+  </form>
+</section>
 
 {% for app in apps %}
 <section>
-  <h2>{{ app.display_name }} — {{ "SANO" if app.healthy else "NO RESPONDE" }}</h2>
+  <h2>{{ app.display_name }} — <span class="{{ 'ok' if app.healthy else 'bad' }}">{{ "SANO" if app.healthy else "NO RESPONDE" }}</span></h2>
   <p>Local: {{ app.local_url }} — Público: {{ app.public_hostname }}</p>
 
   {% if app.state %}
