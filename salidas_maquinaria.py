@@ -12,6 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -238,6 +239,7 @@ async def salida_crear(
     n_tramos: int = Form(None),
     cable_diametro: str = Form(None),
     observaciones: str = Form(""),
+    event_id: str = Form(""),
     db: Session = Depends(get_db),
     user=Depends(requiere_login),
 ):
@@ -245,6 +247,12 @@ async def salida_crear(
     if not maquina:
         raise HTTPException(404)
     _require_operar(user)
+
+    event_id = event_id.strip() or None
+    if event_id:
+        previa = db.query(SalidaObra).filter(SalidaObra.event_id == event_id).first()
+        if previa:
+            return RedirectResponse(f"/maquinaria/{mid}/salida/{previa.id}", status_code=303)
 
     tipo_check = _tipo_checklist(maquina, subtipo)
     if not tipo_check:
@@ -269,9 +277,18 @@ async def salida_crear(
         observaciones=observaciones or None,
         usuario_id=user.id,
         estado="en_proceso",
+        event_id=event_id,
     )
     db.add(salida)
-    db.flush()  # obtener salida.id
+    try:
+        db.flush()  # obtener salida.id
+    except IntegrityError:
+        db.rollback()
+        if event_id:
+            previa = db.query(SalidaObra).filter(SalidaObra.event_id == event_id).first()
+            if previa:
+                return RedirectResponse(f"/maquinaria/{mid}/salida/{previa.id}", status_code=303)
+        raise
 
     # Crear ítems del checklist (todos desmarcados)
     for item in _todos_items(tipo_check):
@@ -543,6 +560,7 @@ async def herr_salida_crear(
     n_tramos: int = Form(None),
     cable_diametro: str = Form(None),
     observaciones: str = Form(""),
+    event_id: str = Form(""),
     db: Session = Depends(get_db),
     user=Depends(requiere_login),
 ):
@@ -550,6 +568,12 @@ async def herr_salida_crear(
     if not herr:
         raise HTTPException(404)
     _require_operar(user)
+
+    event_id = event_id.strip() or None
+    if event_id:
+        previa = db.query(SalidaObra).filter(SalidaObra.event_id == event_id).first()
+        if previa:
+            return RedirectResponse(f"/herramienta/{hid}/salida/{previa.id}", status_code=303)
 
     tipo_check = _tipo_checklist_herr(herr, subtipo)
     if not tipo_check:
@@ -573,9 +597,18 @@ async def herr_salida_crear(
         observaciones=observaciones or None,
         usuario_id=user.id,
         estado="en_proceso",
+        event_id=event_id,
     )
     db.add(salida)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        if event_id:
+            previa = db.query(SalidaObra).filter(SalidaObra.event_id == event_id).first()
+            if previa:
+                return RedirectResponse(f"/herramienta/{hid}/salida/{previa.id}", status_code=303)
+        raise
 
     for item in _todos_items(tipo_check):
         db.add(SalidaItem(salida_id=salida.id, item_key=item["key"], checked=False))

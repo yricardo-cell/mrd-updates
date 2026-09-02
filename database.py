@@ -731,6 +731,11 @@ def apply_migrations(target_engine=None):
         ("solicitudes_trabajador", "respondido_en", "DATETIME"),
         ("lineas_solicitud_trabajador", "cantidad_aprobada", "INTEGER"),
         ("lineas_solicitud_trabajador", "observaciones", "TEXT"),
+        # Idempotencia de formularios: evita duplicados por doble clic o
+        # reintento del mismo envío (alta de maquinaria, salidas, albaranes).
+        ("maquinaria", "event_id", "VARCHAR(64)"),
+        ("salidas_obra", "event_id", "VARCHAR(64)"),
+        ("albaranes_salida", "event_id", "VARCHAR(64)"),
     ]
 
     indexes = [
@@ -780,6 +785,9 @@ def apply_migrations(target_engine=None):
         ("ix_sesiones_portal_trabajador", "sesiones_portal_trabajador", ("trabajador_id", "revocado_en")),
         ("ux_preparaciones_entrega_qr_token", "preparaciones_entrega", ("qr_token",)),
         ("ix_variantes_epi_referencia_proveedor", "variantes_epi", ("referencia_proveedor",)),
+        ("ux_maquinaria_event_id", "maquinaria", ("event_id",)),
+        ("ux_salidas_obra_event_id", "salidas_obra", ("event_id",)),
+        ("ux_albaranes_salida_event_id", "albaranes_salida", ("event_id",)),
     ]
     legacy_copies = [
         ("herramientas", "ubicacion", "ubicacion_texto"),

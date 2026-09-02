@@ -956,6 +956,10 @@ class Maquinaria(Base):
     creado_en       = Column(DateTime, server_default=func.now())
     actualizado_en  = Column(DateTime, onupdate=func.now())
 
+    # Clave de idempotencia del formulario de alta: evita duplicados por
+    # doble clic o reintento con el mismo envío.
+    event_id        = Column(String(64), unique=True, nullable=True, index=True)
+
     # Documentación legal
     fecha_seguro    = Column(Date, nullable=True)
     vencimiento_seguro = Column(Date, nullable=True)
@@ -1775,6 +1779,7 @@ class AlbaranSalida(Base):
     portal_firmado_en     = Column(DateTime, nullable=True)
     usuario_id            = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
     created_at            = Column(DateTime, default=datetime.utcnow)
+    event_id              = Column(String(64), unique=True, nullable=True, index=True)
 
     items       = relationship('ItemAlbaranSalida', back_populates='albaran',
                                cascade='all, delete-orphan')
@@ -2576,6 +2581,7 @@ class SalidaObra(Base):
     observaciones     = Column(Text, nullable=True)
     usuario_id        = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
     created_at        = Column(DateTime, server_default=func.now())
+    event_id          = Column(String(64), unique=True, nullable=True, index=True)
 
     maquinaria  = relationship("Maquinaria", backref="salidas_obra", foreign_keys="[SalidaObra.maquinaria_id]")
     herramienta = relationship("Herramienta", backref="salidas_obra", foreign_keys="[SalidaObra.herramienta_id]")

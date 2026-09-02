@@ -11034,9 +11034,15 @@ def maquinaria_nueva_post(
     ubicacion: str = Form(""),
     responsable: str = Form(""),
     notas: str = Form(""),
+    event_id: str = Form(""),
 ):
     if not tiene_permiso(user, "crear"):
         raise HTTPException(403, "Sin permiso")
+    event_id = event_id.strip() or None
+    if event_id:
+        previa = db.query(Maquinaria).filter(Maquinaria.event_id == event_id).first()
+        if previa:
+            return RedirectResponse(f"/maquinaria/{previa.id}", status_code=303)
     # Validar codigo_barras único
     if codigo_barras:
         existe = db.query(Maquinaria).filter(Maquinaria.codigo_barras == codigo_barras.strip()).first()
@@ -11062,9 +11068,18 @@ def maquinaria_nueva_post(
         almacen_id=almacen_predeterminado.id if almacen_predeterminado else None,
         responsable=responsable or None,
         notas=notas or None,
+        event_id=event_id,
     )
     db.add(m)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        if event_id:
+            previa = db.query(Maquinaria).filter(Maquinaria.event_id == event_id).first()
+            if previa:
+                return RedirectResponse(f"/maquinaria/{previa.id}", status_code=303)
+        raise
     db.refresh(m)
     registrar_auditoria(db, user, "maquinaria", m.id, "crear", None,
                         {"nombre": m.nombre, "codigo_barras": m.codigo_barras})
@@ -15939,6 +15954,11 @@ async def albaranes_lista(request: Request, db: Session = Depends(get_db),
 async def albaran_crear(request: Request, db: Session = Depends(get_db),
                          usuario=Depends(requiere_login)):
     form = await request.form()
+    event_id = str(form.get("event_id") or "").strip() or None
+    if event_id:
+        previa = db.query(AlbaranSalida).filter(AlbaranSalida.event_id == event_id).first()
+        if previa:
+            return RedirectResponse(f"/albaranes-salida/{previa.id}", status_code=303)
     warehouse = _active_warehouse(db, usuario, request)
     if not warehouse:
         raise HTTPException(409, "No hay un almacén activo configurado")
@@ -15982,6 +16002,7 @@ async def albaran_crear(request: Request, db: Session = Depends(get_db),
         alb = create_delivery_note(
             db, user_id=actor.id, worker_id=worker_id, work_id=work_id,
             warehouse_id=warehouse.id, notes=notes, lines=lines,
+            event_id=event_id,
         )
         db.commit()
     except MovementError as exc:

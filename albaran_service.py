@@ -27,11 +27,15 @@ def create_delivery_note(
     work_id: int | None = None, expected_return: datetime | None = None,
     notes: str = "", signature_data: str = "", signature_name: str = "",
     document_type: str = "salida", warehouse_id: int | None = None,
-    origin_destination: str = "",
+    origin_destination: str = "", event_id: str | None = None,
 ) -> AlbaranSalida:
     """Crea un único justificante para una operación ya validada."""
     if document_type not in {"salida", "entrada"}:
         raise ValueError("Tipo de documento no válido")
+    if event_id:
+        previa = db.query(AlbaranSalida).filter(AlbaranSalida.event_id == event_id).first()
+        if previa:
+            return previa
     movement_tokens = [
         f"movimiento:{int(line['movimiento_id'])}" for line in lines if line.get("movimiento_id")
     ]
@@ -51,7 +55,7 @@ def create_delivery_note(
         estado="cerrado" if document_type == "entrada" else "abierto",
         notas=(notes or "").strip() or None,
         firma_datos=signature_data or None, firma_nombre=signature_name or None,
-        usuario_id=user_id,
+        usuario_id=user_id, event_id=event_id,
     )
     db.add(note)
     db.flush()

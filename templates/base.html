@@ -92,7 +92,30 @@
   // fuerza al middleware a emitir cookie nueva) y se reintenta una vez sin
   // perder los datos ya escritos. Si el reintento también falla, se muestra
   // un aviso con botón "Reintentar" en vez de expulsar al usuario a la home.
+  // Clave de idempotencia: una por formulario/carga de página, reutilizada en
+  // todos los reintentos (CSRF o manuales) para que el servidor pueda
+  // detectar un envío duplicado por doble clic y no crear el registro dos
+  // veces, en vez de depender solo del bloqueo del botón en el navegador.
+  function _csrfEnsureEventId(form){
+    var input=form.querySelector('input[name="event_id"]');
+    if(!input){
+      input=document.createElement('input');
+      input.type='hidden';
+      input.name='event_id';
+      form.appendChild(input);
+    }
+    if(!input.value){
+      input.value=(window.crypto&&crypto.randomUUID)
+        ?crypto.randomUUID()
+        :('evt-'+Date.now()+'-'+Math.random().toString(36).slice(2));
+    }
+  }
+  function _csrfSetBusy(form,busy){
+    var btns=form.querySelectorAll('button[type="submit"],input[type="submit"]');
+    for(var i=0;i<btns.length;i++){btns[i].disabled=busy;}
+  }
   function _csrfSafeBanner(form,onRetry){
+    _csrfSetBusy(form,false);
     var old=form.querySelector('.mrd-csrf-retry-banner');
     if(old)old.remove();
     var div=document.createElement('div');
@@ -102,6 +125,7 @@
       +'<button type="button" class="btn btn-sm btn-warning">Reintentar</button>';
     div.querySelector('button').addEventListener('click',function(){
       div.remove();
+      _csrfSetBusy(form,true);
       onRetry();
     });
     form.insertBefore(div,form.firstChild);
@@ -139,6 +163,8 @@
     var form=e.target;
     if(form&&form.tagName==='FORM'&&form.getAttribute('data-csrf-safe')==='1'){
       e.preventDefault();
+      _csrfEnsureEventId(form);
+      _csrfSetBusy(form,true);
       _csrfSafeSubmit(form,false);
     }
   },true);
