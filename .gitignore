@@ -28,6 +28,7 @@ actulizaciones/
 *.zip
 *.bak_*
 .service_restart
+.recovery_history.json
 
 # Python
 __pycache__/

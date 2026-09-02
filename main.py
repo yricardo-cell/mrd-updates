@@ -660,6 +660,8 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException):
         return RedirectResponse("/login", status_code=303)
     detail = str(exc.detail) if exc.detail else ""
     mrd_logging.log_error(f"HTTP {exc.status_code} en {request.url.path} — {detail}")
+    if request.url.path == "/admin/reiniciar":
+        return JSONResponse({"detail": detail}, status_code=exc.status_code)
     return _render_error(request, exc.status_code, detail)
 
 
@@ -12947,6 +12949,7 @@ def api_panel_ia_estado(db: Session = Depends(get_db),
 
 import json as _json_mod
 import subprocess as _subprocess
+import sys as _sys
 from pathlib import Path as _Path
 import cloudflare_tunnel as _cf_tunnel
 
@@ -12955,6 +12958,14 @@ _SVC_STATUS_FILE = _SVC_BASE / ".service_status"
 _SVC_RESTART_FLAG = _SVC_BASE / ".service_restart"
 _SERVICE_NAME = "MRDToolControl"
 
+# ── Centro de recuperación: bloqueo anti-doble-pulsación y auditoría corta ────
+_RESTART_LOCK = threading.Lock()
+_RESTART_STATE: dict = {"in_progress": False, "started_at": None}
+_RECOVERY_LOCK = threading.Lock()
+_RECOVERY_STATE: dict = {"in_progress": False, "started_at": None}
+_RECOVERY_HISTORY_FILE = _SVC_BASE / ".recovery_history.json"
+_RECOVERY_HISTORY_MAX = 20
+
 
 def _svc_requiere_admin(user: Usuario):
     """Lanza 403 si el usuario no es administrador."""
@@ -12962,10 +12973,19 @@ def _svc_requiere_admin(user: Usuario):
         raise HTTPException(status_code=403, detail="Solo administradores pueden gestionar el servicio.")
 
 
-def _svc_log_audit(user: Usuario, action: str, detail: str = ""):
-    """Registra acción de servicio en el log de seguridad."""
+def _svc_client_ip(request: Request | None) -> str:
+    if request is None or request.client is None:
+        return "?"
+    return request.client.host
+
+
+def _svc_log_audit(user: Usuario, action: str, detail: str = "", request: Request | None = None):
+    """Registra acción de servicio en el log de seguridad (usuario + IP)."""
     try:
-        mrd_logging.log_security(f"SERVICE_ACTION action={action} user={user.username} detail={detail}")
+        ip = _svc_client_ip(request)
+        mrd_logging.log_security(
+            f"SERVICE_ACTION action={action} user={user.username} ip={ip} detail={detail}"
+        )
     except Exception:
         pass
 
@@ -12987,6 +13007,50 @@ def _svc_get_metrics() -> dict:
         return get_system_metrics()
     except Exception:
         return {}
+
+
+# ─── Historial corto del Centro de recuperación ───────────────────────────────
+
+def _recovery_history_read() -> list:
+    """Lee el historial de acciones de recuperación (más reciente al final)."""
+    try:
+        if _RECOVERY_HISTORY_FILE.exists():
+            data = _json_mod.loads(_RECOVERY_HISTORY_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return data
+    except Exception:
+        pass
+    return []
+
+
+def _recovery_history_append(entry: dict):
+    """Añade una entrada al historial (máx. _RECOVERY_HISTORY_MAX), escritura atómica."""
+    try:
+        history = _recovery_history_read()
+        history.append(entry)
+        history = history[-_RECOVERY_HISTORY_MAX:]
+        tmp = _RECOVERY_HISTORY_FILE.with_suffix(".tmp")
+        tmp.write_text(_json_mod.dumps(history, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(_RECOVERY_HISTORY_FILE)
+    except Exception:
+        pass
+
+
+def _recovery_log_event(
+    action: str, user: Usuario, result: str, duration_s: float,
+    detail: str = "", request: Request | None = None,
+):
+    """Registra una acción del Centro de recuperación en auditoría + historial corto."""
+    _svc_log_audit(user, action, f"result={result} duration_s={duration_s:.2f} {detail}".strip(), request)
+    _recovery_history_append({
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "action": action,
+        "user": user.username,
+        "ip": _svc_client_ip(request),
+        "result": result,
+        "duration_s": round(duration_s, 2),
+        "detail": detail,
+    })
 
 
 def _svc_windows_state() -> str:
@@ -13011,7 +13075,14 @@ def _svc_windows_state() -> str:
 
 # ─── Reinicio del servidor ────────────────────────────────────────────────────
 def _restart_exec_target(argv: list[str], python_executable: str, os_name: str):
-    """Devuelve el ejecutable correcto sin intentar abrir un launcher .exe con Python."""
+    """Devuelve (ejecutable, args) para reiniciar el proceso actual.
+
+    Nunca reutiliza argv completo (incluido argv[0]) como argumento extra: eso
+    provocaba que python.exe recibiera el lanzador original como si fuera un
+    script a ejecutar, generando rutas absolutas duplicadas del tipo
+    "...\\mrd-tool-control-2.5.0\\tool\\mrd-tool-control-2.5.0\\venv\\Scripts\\python.exe"
+    (incidente del 01/09/2026 22:50). El fallback usa siempre argv[1:].
+    """
     launcher = Path(argv[0])
     if os_name == "nt":
         # En servicios de Windows argv[0] puede llegar relativo a otra carpeta.
@@ -13021,7 +13092,17 @@ def _restart_exec_target(argv: list[str], python_executable: str, os_name: str):
             return str(sibling_launcher), [str(sibling_launcher)] + argv[1:]
         if launcher.is_absolute() and launcher.is_file() and launcher.suffix.lower() == ".exe":
             return str(launcher), [str(launcher)] + argv[1:]
-    return python_executable, [python_executable] + argv
+    return python_executable, [python_executable] + argv[1:]
+
+
+def _restart_target_is_valid(executable: str) -> bool:
+    """Verifica que el ejecutable de destino exista como fichero real antes de
+    detener el proceso actual. Si no existe, el reinicio debe cancelarse y
+    MRD debe seguir funcionando con el proceso actual."""
+    try:
+        return Path(executable).is_file()
+    except Exception:
+        return False
 
 
 @app.post("/admin/recuperar-sistema")
@@ -13072,19 +13153,71 @@ def reiniciar_servidor(
     request: Request,
     user: Usuario = Depends(requiere_login),
 ):
+    """Reinicio directo (Nivel 1) del proceso Uvicorn actual.
+
+    Antes de tocar el proceso en marcha: resuelve el ejecutable de destino con
+    rutas absolutas verificadas y comprueba que existe. Si la validación
+    falla, cancela el reinicio y MRD sigue funcionando. Un bloqueo evita dos
+    reinicios simultáneos (doble pulsación).
+    """
     if user.rol != "admin":
         raise HTTPException(403, "Solo administradores pueden reiniciar el servidor")
-    import threading, time, os, sys as _sys
-    mrd_logging.log_app(f"Reinicio del servidor solicitado por {user.username}", level="warning")
-    def _do_restart():
-        time.sleep(1.2)
-        # Uvicorn se instala como lanzador .exe en Windows. Ejecutarlo con
-        # python.exe como si fuera un script deja NSSM activo pero sin servidor.
-        # Reemplazamos el proceso por el mismo lanzador y los mismos argumentos.
+
+    t0 = time.time()
+    acquired = _RESTART_LOCK.acquire(blocking=False)
+    if not acquired:
+        _recovery_log_event(
+            "restart_direct", user, "rechazado", time.time() - t0,
+            "ya hay un reinicio en curso", request,
+        )
+        raise HTTPException(409, "Ya hay un reinicio en curso. Espera a que termine.")
+
+    try:
         executable, args = _restart_exec_target(_sys.argv, _sys.executable, os.name)
-        os.execv(executable, args)
-    threading.Thread(target=_do_restart, daemon=True).start()
-    return JSONResponse({"ok": True, "msg": "Reiniciando en 1 segundo..."})
+        if not _restart_target_is_valid(executable):
+            _RESTART_LOCK.release()
+            acquired = False
+            _recovery_log_event(
+                "restart_direct", user, "cancelado", time.time() - t0,
+                f"ejecutable de destino no encontrado: {executable}", request,
+            )
+            raise HTTPException(
+                409,
+                f"Reinicio cancelado: no se encontró el ejecutable de destino "
+                f"({executable}). El servidor actual sigue funcionando.",
+            )
+
+        _RESTART_STATE["in_progress"] = True
+        _RESTART_STATE["started_at"] = datetime.now().isoformat(timespec="seconds")
+        mrd_logging.log_app(f"Reinicio del servidor solicitado por {user.username}", level="warning")
+        _recovery_log_event(
+            "restart_direct", user, "iniciado", time.time() - t0,
+            f"ejecutable validado: {executable}", request,
+        )
+
+        def _do_restart():
+            try:
+                time.sleep(1.2)
+                # Uvicorn se instala como lanzador .exe en Windows. Ejecutarlo con
+                # python.exe como si fuera un script deja NSSM activo pero sin servidor.
+                # Reemplazamos el proceso por el mismo lanzador y los mismos argumentos,
+                # ya validados y absolutos — nunca se vuelve a recalcular aquí.
+                os.execv(executable, args)
+            finally:
+                # Solo se alcanza si os.execv falla (el proceso normalmente se reemplaza).
+                _RESTART_STATE["in_progress"] = False
+                if _RESTART_LOCK.locked():
+                    _RESTART_LOCK.release()
+
+        threading.Thread(target=_do_restart, daemon=True).start()
+        return JSONResponse({"ok": True, "msg": "Reiniciando en 1 segundo...", "executable": executable})
+    except HTTPException:
+        raise
+    except Exception:
+        if _RESTART_LOCK.locked():
+            _RESTART_LOCK.release()
+        _RESTART_STATE["in_progress"] = False
+        raise
 
 
 # ─── GET /servicio (Panel admin) ──────────────────────────────────────────────
@@ -13265,6 +13398,137 @@ def api_service_start(
         return {"ok": True, "message": "Señal de inicio enviada al servicio."}
     except Exception as exc:
         raise HTTPException(500, f"Error al iniciar el servicio: {exc}")
+
+
+# ─── Centro de recuperación (admin) ───────────────────────────────────────────
+# Panel unificado: estado de MRD/puerto/health + Cloudflare + acciones de
+# reinicio y recuperación combinada, con bloqueo anti-doble-pulsación,
+# auditoría de usuario/IP e historial corto.
+
+def _recovery_watchdog_state() -> dict | None:
+    """Lee (solo lectura) el estado del vigilante externo (Nivel 2) si está
+    instalado, sin ejecutar ni modificar nada."""
+    try:
+        state_path = Path(os.environ.get("ProgramData", r"C:\ProgramData")) / "MRDToolControl" / "watchdog" / "state.json"
+        if state_path.exists():
+            return _json_mod.loads(state_path.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return None
+
+
+@app.get("/api/service/recovery/status")
+def api_recovery_status(
+    user: Usuario = Depends(requiere_login),
+    _db: Session = Depends(get_db),
+):
+    """Estado consolidado para el Centro de recuperación."""
+    _svc_requiere_admin(user)
+    file_status = _svc_read_status()
+    win_state = _svc_windows_state()
+
+    from service_health import check_port
+    port_result = check_port(8000).to_dict()
+    try:
+        from service_health import run_all_checks
+        health = run_all_checks(port=8000)
+    except Exception as exc:
+        health = {"healthy": False, "error": str(exc), "checks": {}}
+
+    cf_status = _cf_tunnel.get_service_status(
+        remote_access.load_config().get("cloudflared_service", "cloudflared")
+    )
+    version_info = leer_version_actual()
+
+    return {
+        "mrd": {
+            "windows_state": win_state,
+            "pid": file_status.get("pid"),
+            "port": file_status.get("port", 8000),
+            "port_status": port_result,
+            "health": health,
+            "restart_count": file_status.get("restart_count", 0),
+            "restart_in_progress": _RESTART_STATE.get("in_progress", False),
+            "last_restart_started_at": _RESTART_STATE.get("started_at"),
+        },
+        "cloudflare": cf_status,
+        "version_activa": version_info.get("version_actual", VERSION),
+        "recovery_in_progress": _RECOVERY_STATE.get("in_progress", False),
+        "watchdog_externo": _recovery_watchdog_state(),
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
+@app.get("/api/service/recovery/history")
+def api_recovery_history(
+    user: Usuario = Depends(requiere_login),
+    _db: Session = Depends(get_db),
+):
+    """Historial corto de acciones del Centro de recuperación (más reciente al final)."""
+    _svc_requiere_admin(user)
+    return {"history": _recovery_history_read()}
+
+
+@app.post("/api/service/recovery/full")
+def api_recovery_full(
+    request: Request,
+    user: Usuario = Depends(requiere_login),
+    _db: Session = Depends(get_db),
+):
+    """Recuperar acceso completo (Nivel 2 manual, desde la app).
+
+    Orden seguro: primero señal de reinicio suave de MRD, después Cloudflare.
+    Bloqueo anti-doble-pulsación; nunca detiene procesos ajenos: solo usa el
+    archivo de señal de reinicio suave de MRD y el servicio Windows de
+    Cloudflare identificado por nombre en configuración.
+    """
+    _svc_requiere_admin(user)
+    t0 = time.time()
+
+    if not _RECOVERY_LOCK.acquire(blocking=False):
+        _recovery_log_event(
+            "recovery_full", user, "rechazado", time.time() - t0,
+            "ya hay una recuperación en curso", request,
+        )
+        raise HTTPException(409, "Ya hay una recuperación en curso. Espera a que termine.")
+
+    try:
+        _RECOVERY_STATE["in_progress"] = True
+        _RECOVERY_STATE["started_at"] = datetime.now().isoformat(timespec="seconds")
+        pasos = []
+
+        # 1) MRD primero: señal de reinicio suave (no mata el proceso actual a la fuerza).
+        try:
+            _SVC_RESTART_FLAG.write_text(
+                f"restart_requested_by={user.username}_at={datetime.now().isoformat()}_reason=recovery_full",
+                encoding="utf-8",
+            )
+            pasos.append({"paso": "mrd", "ok": True, "message": "Señal de reinicio suave enviada."})
+        except Exception as exc:
+            pasos.append({"paso": "mrd", "ok": False, "message": f"No se pudo señalizar reinicio: {exc}"})
+
+        # 2) Cloudflare después, solo el servicio identificado por su nombre configurado.
+        cf_service_name = remote_access.load_config().get("cloudflared_service", "cloudflared")
+        cf_before = _cf_tunnel.get_service_status(cf_service_name)
+        if cf_before.get("running"):
+            pasos.append({"paso": "cloudflare", "ok": True, "message": "Cloudflare ya estaba activo; sin cambios."})
+        elif not cf_before.get("installed"):
+            pasos.append({"paso": "cloudflare", "ok": False, "message": "Servicio Cloudflare no instalado."})
+        else:
+            cf_result = _cf_tunnel.restart_service(cf_service_name)
+            pasos.append({"paso": "cloudflare", **cf_result})
+
+        ok_general = all(p.get("ok") for p in pasos)
+        duration = time.time() - t0
+        _recovery_log_event(
+            "recovery_full", user, "ok" if ok_general else "parcial", duration,
+            "; ".join(f"{p['paso']}={p.get('message','')}" for p in pasos), request,
+        )
+        return {"ok": ok_general, "pasos": pasos, "duration_s": round(duration, 2)}
+    finally:
+        _RECOVERY_STATE["in_progress"] = False
+        _RECOVERY_LOCK.release()
+
 
 # ─── FIN SPRINT 5.3 ───────────────────────────────────────────────────────────
 

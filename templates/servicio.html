@@ -132,6 +132,70 @@
   </div>
 </div>
 
+<!-- ═══ CENTRO DE RECUPERACIÓN ═════════════════════════════════════════════ -->
+<div class="row g-3 mb-3">
+
+  <!-- Estado consolidado + acciones -->
+  <div class="col-12 col-xl-7">
+    <div class="mrd-card h-100">
+      <div class="mrd-card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-life-preserver me-2"></i>Centro de recuperación</span>
+        <span id="rec-badge-general" class="badge bg-secondary">—</span>
+      </div>
+      <div class="p-3">
+        <div class="row g-3 mb-3">
+          <div class="col-6 col-lg-3">
+            <div class="text-muted small">MRD</div>
+            <div class="fw-semibold" id="rec-mrd-state">—</div>
+          </div>
+          <div class="col-6 col-lg-3">
+            <div class="text-muted small">Puerto 8000</div>
+            <div class="fw-semibold" id="rec-port-state">—</div>
+          </div>
+          <div class="col-6 col-lg-3">
+            <div class="text-muted small">/health</div>
+            <div class="fw-semibold" id="rec-health-state">—</div>
+          </div>
+          <div class="col-6 col-lg-3">
+            <div class="text-muted small">Cloudflare</div>
+            <div class="fw-semibold" id="rec-cf-state">—</div>
+          </div>
+        </div>
+        <table class="table table-sm table-borderless mb-3" style="font-size:.82rem">
+          <tbody>
+            <tr><td class="text-muted">Versión activa</td><td class="fw-semibold" id="rec-version">—</td></tr>
+            <tr><td class="text-muted">PID</td><td id="rec-pid">—</td></tr>
+            <tr><td class="text-muted">Último reinicio (Nivel 1)</td><td id="rec-last-restart">—</td></tr>
+            <tr><td class="text-muted">Última recuperación automática (Nivel 2)</td><td id="rec-last-auto">—</td></tr>
+            <tr><td class="text-muted">Último resultado / duración</td><td id="rec-last-result">—</td></tr>
+          </tbody>
+        </table>
+        <div id="rec-alert" class="alert py-2 mb-3 d-none" role="alert"></div>
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-sm btn-warning" id="btn-rec-restart" onclick="confirmRecoveryAction('restart')">
+            <i class="bi bi-arrow-clockwise me-1"></i>Reiniciar MRD
+          </button>
+          <button class="btn btn-sm btn-danger" id="btn-rec-full" onclick="confirmRecoveryAction('full')">
+            <i class="bi bi-life-preserver me-1"></i>Recuperar acceso completo
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Historial corto -->
+  <div class="col-12 col-xl-5">
+    <div class="mrd-card h-100">
+      <div class="mrd-card-header"><i class="bi bi-clock-history me-2"></i>Historial de recuperación</div>
+      <div class="p-2" id="rec-history-list" style="max-height:280px;overflow-y:auto">
+        <div class="text-center text-muted py-3 small">
+          <span class="spinner-border spinner-border-sm me-2"></span>Comprobando…
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ LOGS RECIENTES ════════════════════════════════════════════════════ -->
 <div class="mrd-card">
   <div class="mrd-card-header d-flex align-items-center justify-content-between">
@@ -184,7 +248,7 @@ async function svcRefresh() {
   const icon = document.getElementById('icon-refresh');
   icon.classList.add('spin-anim');
   try {
-    await Promise.all([loadStatus(), loadHealth()]);
+    await Promise.all([loadStatus(), loadHealth(), loadRecoveryStatus(), loadRecoveryHistory()]);
     loadLog();
   } finally {
     icon.classList.remove('spin-anim');
@@ -286,6 +350,139 @@ async function loadLog() {
   } catch(e) {
     pre.textContent = 'Error al cargar log.';
   }
+}
+
+// ──── Centro de recuperación ───────────────────────────────────────────────────
+function _badge(el, ok, textOk, textBad) {
+  el.textContent = ok ? textOk : textBad;
+  el.className = 'fw-semibold ' + (ok ? 'text-success' : 'text-danger');
+}
+
+async function loadRecoveryStatus() {
+  try {
+    const r = await fetch('/api/service/recovery/status');
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    const mrd = d.mrd || {};
+
+    const mrdOk = mrd.windows_state === 'RUNNING';
+    _badge(document.getElementById('rec-mrd-state'), mrdOk, 'Activo', mrd.windows_state || 'Desconocido');
+
+    const portOk = mrd.port_status?.status === 'ok';
+    _badge(document.getElementById('rec-port-state'), portOk, 'Escuchando', 'No disponible');
+
+    const healthOk = !!mrd.health?.healthy;
+    _badge(document.getElementById('rec-health-state'), healthOk, 'OK', 'Con problemas');
+
+    const cf = d.cloudflare || {};
+    const cfOk = !!cf.running;
+    _badge(document.getElementById('rec-cf-state'), cfOk, 'Activo', cf.installed ? 'Detenido' : 'No instalado');
+
+    const badgeGeneral = document.getElementById('rec-badge-general');
+    if (d.recovery_in_progress || mrd.restart_in_progress) {
+      badgeGeneral.textContent = 'EN CURSO';
+      badgeGeneral.className = 'badge bg-warning text-dark';
+    } else if (mrdOk && portOk && healthOk && cfOk) {
+      badgeGeneral.textContent = 'TODO OK';
+      badgeGeneral.className = 'badge bg-success';
+    } else {
+      badgeGeneral.textContent = 'REVISAR';
+      badgeGeneral.className = 'badge bg-danger';
+    }
+
+    document.getElementById('rec-version').textContent = d.version_activa || '—';
+    document.getElementById('rec-pid').textContent = mrd.pid || '—';
+    document.getElementById('rec-last-restart').textContent = _fmt_dt(mrd.last_restart_started_at);
+    document.getElementById('rec-last-auto').textContent = _fmt_dt(d.watchdog_externo?.last_restart);
+
+    // Botones bloqueados mientras haya una operación en curso en el servidor.
+    document.getElementById('btn-rec-restart').disabled = !!mrd.restart_in_progress;
+    document.getElementById('btn-rec-full').disabled = !!d.recovery_in_progress;
+  } catch (e) {
+    console.warn('Error cargando estado de recuperación:', e);
+  }
+}
+
+function _escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+async function loadRecoveryHistory() {
+  const list = document.getElementById('rec-history-list');
+  try {
+    const r = await fetch('/api/service/recovery/history');
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    const items = (d.history || []).slice().reverse();
+    if (!items.length) {
+      list.innerHTML = '<div class="text-center text-muted py-3 small">Sin acciones registradas todavía.</div>';
+      return;
+    }
+    const resultClass = { ok: 'text-success', iniciado: 'text-primary', cancelado: 'text-warning',
+      rechazado: 'text-danger', parcial: 'text-warning' };
+    list.innerHTML = items.map(h => `
+      <div class="px-2 py-1 border-bottom" style="font-size:.78rem">
+        <div class="d-flex justify-content-between">
+          <span class="fw-semibold">${_escHtml(h.action)}</span>
+          <span class="${resultClass[h.result] || 'text-muted'}">${_escHtml(h.result)}</span>
+        </div>
+        <div class="text-muted">${_fmt_dt(h.timestamp)} · ${_escHtml(h.user)} (${_escHtml(h.ip)}) · ${_escHtml(h.duration_s)}s</div>
+        ${h.detail ? `<div class="text-muted" style="font-size:.72rem">${_escHtml(h.detail)}</div>` : ''}
+      </div>
+    `).join('');
+    document.getElementById('rec-last-result').textContent =
+      `${items[0].result} (${items[0].duration_s}s)`;
+  } catch (e) {
+    list.innerHTML = '<div class="text-danger small p-2">Error al cargar historial</div>';
+  }
+}
+
+const RECOVERY_LOCKOUT_MS = 10000;
+
+function confirmRecoveryAction(kind) {
+  const messages = {
+    restart: '¿Reiniciar MRD ahora? El servicio se detendrá y volverá a arrancar en unos segundos.',
+    full: '¿Recuperar acceso completo? Esto reiniciará MRD y, si es necesario, el túnel de Cloudflare, en ese orden.',
+  };
+  if (window.confirm(messages[kind] || '¿Confirmar acción?')) {
+    recoveryAction(kind);
+  }
+}
+
+async function recoveryAction(kind) {
+  const endpoints = { restart: '/admin/reiniciar', full: '/api/service/recovery/full' };
+  const labels = { restart: 'Reiniciar MRD', full: 'Recuperar acceso completo' };
+  const btnId = kind === 'restart' ? 'btn-rec-restart' : 'btn-rec-full';
+  const btn = document.getElementById(btnId);
+  const alertEl = document.getElementById('rec-alert');
+
+  // Bloqueo temporal anti-doble-pulsación en el propio botón, además del
+  // bloqueo del servidor (evita ráfagas de clics mientras llega la respuesta).
+  btn.disabled = true;
+  alertEl.className = 'alert alert-info py-2 mb-3';
+  alertEl.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${labels[kind]}…`;
+  alertEl.classList.remove('d-none');
+
+  try {
+    const resp = await fetch(endpoints[kind], { method: 'POST' });
+    const data = await resp.json().catch(() => ({}));
+    if (resp.ok) {
+      alertEl.className = 'alert alert-success py-2 mb-3';
+      alertEl.textContent = data.msg || data.message || `${labels[kind]}: hecho.`;
+    } else {
+      alertEl.className = 'alert alert-danger py-2 mb-3';
+      alertEl.textContent = data.detail || `Error al ejecutar '${labels[kind]}' (${resp.status}).`;
+    }
+  } catch (e) {
+    alertEl.className = 'alert alert-danger py-2 mb-3';
+    alertEl.textContent = `Error de red: ${e.message}`;
+  }
+
+  setTimeout(() => alertEl.classList.add('d-none'), 8000);
+  setTimeout(() => { loadRecoveryStatus(); loadRecoveryHistory(); }, 2500);
+  setTimeout(() => { btn.disabled = false; }, RECOVERY_LOCKOUT_MS);
 }
 
 // ──── Acciones de servicio ────────────────────────────────────────────────────

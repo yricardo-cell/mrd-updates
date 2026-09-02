@@ -1,10 +1,10 @@
 param(
     [string]$AppServiceName = "MRDToolControl",
-    [string]$TunnelServiceName = "CloudflaredMRD",
+    [string]$TunnelServiceName = "Cloudflared",
     [string]$HealthUrl = "http://127.0.0.1:8000/health",
     [string]$PublicHealthUrl = "",
     [string]$StateRoot = "$env:ProgramData\MRDToolControl\watchdog",
-    [string]$MaintenanceMarker = "C:\mrd_tool_control\.maintenance_mode",
+    [string]$MaintenanceMarker = "C:\mrd tool\mrd-tool-control-2.5.0\.maintenance_mode",
     [int]$FailureThreshold = 3,
     [int]$CooldownSeconds = 300,
     [int]$MaxRestartsPerHour = 3,
@@ -137,16 +137,9 @@ try {
         exit 0
     }
 
-    # El tunel solo se inicia si el servicio esta detenido. Un fallo de Internet
-    # nunca provoca el reinicio de un tunel que continua ejecutandose.
-    $tunnel = Get-ServiceSafely $TunnelServiceName
-    if ($null -eq $tunnel) {
-        Write-WatchdogLog "Servicio $TunnelServiceName no encontrado." "ERROR"
-    }
-    elseif ($tunnel.Status -ne "Running") {
-        Start-ServiceSafely $TunnelServiceName "servicio detenido"
-    }
-
+    # Orden de recuperacion seguro: primero MRD, despues Cloudflare. Si ambos
+    # servicios estan caidos, restaurar el tunel antes que la app expondria
+    # temporalmente una aplicacion que aun no esta lista para recibir trafico.
     $app = Get-ServiceSafely $AppServiceName
     if ($null -eq $app) {
         Write-WatchdogLog "Servicio $AppServiceName no encontrado." "ERROR"
@@ -161,6 +154,16 @@ try {
         $state.incident_open = $true
         Save-WatchdogState $state
         exit 1
+    }
+
+    # El tunel solo se inicia si el servicio esta detenido. Un fallo de Internet
+    # nunca provoca el reinicio de un tunel que continua ejecutandose.
+    $tunnel = Get-ServiceSafely $TunnelServiceName
+    if ($null -eq $tunnel) {
+        Write-WatchdogLog "Servicio $TunnelServiceName no encontrado." "ERROR"
+    }
+    elseif ($tunnel.Status -ne "Running") {
+        Start-ServiceSafely $TunnelServiceName "servicio detenido"
     }
 
     if (Test-HttpHealth $HealthUrl) {

@@ -1,7 +1,8 @@
 param(
-    [string]$RepositoryRoot = "C:\mrd_tool_control",
+    [string]$RepositoryRoot = "C:\mrd tool\mrd-tool-control-2.5.0",
     [string]$AppServiceName = "MRDToolControl",
-    [string]$TunnelServiceName = "CloudflaredMRD",
+    [string]$TunnelServiceName = "Cloudflared",
+    [string]$HealthUrl = "http://127.0.0.1:8000/health",
     [string]$TaskName = "MRD Tool Control - Watchdog 24x7",
     [switch]$Apply
 )
@@ -49,10 +50,16 @@ foreach ($serviceName in @($AppServiceName, $TunnelServiceName)) {
     if ($LASTEXITCODE -ne 0) { throw "No se pudo activar failureflag para $serviceName" }
 }
 
+$maintenanceMarker = Join-Path $RepositoryRoot ".maintenance_mode"
 $quotedScript = '"{0}"' -f $watchdog
+$taskArgument = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $quotedScript" +
+    " -AppServiceName `"$AppServiceName`"" +
+    " -TunnelServiceName `"$TunnelServiceName`"" +
+    " -HealthUrl `"$HealthUrl`"" +
+    " -MaintenanceMarker `"$maintenanceMarker`""
 $action = New-ScheduledTaskAction `
     -Execute "powershell.exe" `
-    -Argument "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $quotedScript"
+    -Argument $taskArgument
 $startupTrigger = New-ScheduledTaskTrigger -AtStartup
 $minuteTrigger = New-ScheduledTaskTrigger `
     -Once `
