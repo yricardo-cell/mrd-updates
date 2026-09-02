@@ -1,11 +1,12 @@
 {
-  "version_actual": "2.7.15",
-  "version_anterior": "2.7.14",
+  "version_actual": "2.7.16",
+  "version_anterior": "2.7.15",
   "nombre": "MRD TOOL CONTROL",
   "edicion": "Centro operativo avanzado de almacenes",
   "fecha": "2026-09-02",
   "estado": "estable",
   "cambios": [
+    "Mostrador Único: la sesión caducada o una redirección difusa durante el escaneo o la confirmación de la operación ya no expulsa de golpe a /login perdiendo el carrito completo. Ahora se reintenta una vez en segundo plano (refrescando la cookie de sesión) y, si sigue fallando, se muestra un aviso en la propia pantalla con botón 'Reintentar' y enlace para iniciar sesión en otra pestaña, conservando siempre el carrito y reutilizando el mismo identificador de operación para que un reintento posterior no duplique el registro.",
     "Nuevo Centro de recuperación en el panel de administración (/servicio): estado consolidado de MRD (puerto, /health, PID), Cloudflare y del vigilante externo (Nivel 2), con botones de reinicio directo y de recuperación completa (MRD primero, Cloudflare después), bloqueo anti-doble-pulsación, historial corto de acciones y auditoría con usuario e IP. El reinicio directo valida que el ejecutable de destino existe como fichero real antes de detener el proceso en marcha, cancelando el reinicio en vez de dejar MRD caído si la ruta no es válida. El vigilante externo (watchdog_mrd.ps1) ahora recupera primero MRD y después Cloudflare, con el nombre real del servicio de túnel y parámetros explícitos en la tarea programada. Con batería de pruebas dedicada (tests/test_recovery_center.py).",
     "Añadida idempotencia por event_id en la creación de maquinaria, salidas de obra (maquinaria y herramientas) y albaranes de salida: un mismo envío repetido por doble clic, reintento de red o reintento automático del formulario tras un CSRF caducado ya no crea un registro duplicado, sino que devuelve el ya creado. El formulario genera una clave de idempotencia única por carga de página (reutilizada en todos los reintentos) y el servidor la valida también a nivel de base de datos (columna única indexada) para cubrir el caso de dos peticiones simultáneas. Con prueba de regresión dedicada (tests/test_doble_envio_formularios.py).",
     "Aislamiento por almacén extendido al módulo de EPI (individual y stock) y a Informes/Búsqueda global: alta, baja, asignación, importación masiva, fotos, revisiones, PDFs y exportación Excel de EPI; auditoría y exportación de herramientas; informes de resumen, maquinaria, incidencias, reparaciones y análisis inteligente; búsqueda global (Ctrl+K y página de resultados) ahora también filtran obras, maquinaria y albaranes por el almacén activo del usuario, igual que ya ocurría con herramientas y materiales. Verificado con la batería completa de pruebas de aislamiento multi-almacén (test_almacenes_aislados.py, test_multi_almacen_operativo.py y 41 pruebas más relacionadas), sin fallos nuevos.",
