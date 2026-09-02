@@ -24,3 +24,5 @@ alembic>=1.13.0
 psycopg2-binary>=2.9.9   # PostgreSQL driver (opcional, solo si se usa PostgreSQL)
 # Sprint 6.0 — Notificaciones push (Web Push / VAPID)
 pywebpush>=2.0.0
+# MRD Sentinel — proxy inverso hacia MRD Tool Control
+httpx>=0.27.0
