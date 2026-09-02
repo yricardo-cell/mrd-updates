@@ -59,7 +59,7 @@ def generar_zpl_herramienta(
 ^FO24,145^A0N,23,21^FD{serie_txt}^FS
 {linear_barcode}
 ^FO24,315^A0N,22,19^FB570,2,4,L^FD{codigo}^FS
-^FO570,62^BQN,2,5^FDLA,{codigo}^FS
+^FO570,62^BQN,2,5^FDMA,{codigo}^FS
 ^XZ"""
     return zpl
 

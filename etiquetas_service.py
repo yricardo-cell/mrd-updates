@@ -41,7 +41,7 @@ def build_zpl(*, tipo: str, referencia: str, titulo: str, detalle: str = "") -> 
         f"^FO24,24^A0N,38,34^FD{title}^FS"
         f"^FO24,74^A0N,25,22^FD{detail}^FS"
         f"^FO24,{max(110, height - 70)}^A0N,24,20^FD{reference}^FS"
-        f"^FO{max(230, width - 245)},24^BQN,2,{qr_size}^FDLA,{reference}^FS^XZ"
+        f"^FO{max(230, width - 245)},24^BQN,2,{qr_size}^FDMA,{reference}^FS^XZ"
     )
 
 

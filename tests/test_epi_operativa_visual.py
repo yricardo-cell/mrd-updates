@@ -26,6 +26,7 @@ from label_printer import (
     LABEL_HEIGHT_MM, LABEL_WIDTH_MM, ZEBRA_HEIGHT_DOTS, ZEBRA_WIDTH_DOTS,
     generar_pdf_etiquetas, generar_zpl_herramienta,
 )
+from etiquetas_service import build_zpl
 
 
 def _request():
@@ -169,6 +170,18 @@ def test_etiquetas_salen_exactamente_a_105_por_55_mm():
     zpl = generar_zpl_herramienta(**item)
     assert f"^PW{ZEBRA_WIDTH_DOTS}" in zpl
     assert f"^LL{ZEBRA_HEIGHT_DOTS}" in zpl
+
+
+def test_qr_zpl_y_pdf_usan_misma_correccion_de_errores():
+    zpl_herramienta = generar_zpl_herramienta(
+        codigo="SEPI-ECC-1", nombre="ARNES ECC", marca="MRD", num_serie="",
+    )
+    assert "^FDMA," in zpl_herramienta
+    assert "^FDLA," not in zpl_herramienta
+
+    zpl_universal = build_zpl(tipo="herramienta", referencia="SEPI-ECC-2", titulo="ARNES ECC")
+    assert "^FDMA," in zpl_universal
+    assert "^FDLA," not in zpl_universal
 
 
 def test_vistas_de_impresion_declaran_105_por_55_mm():
