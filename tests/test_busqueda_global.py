@@ -1,5 +1,5 @@
 from auth import hash_password
-from models import AlbaranSalida, Maquinaria, Usuario
+from models import AlbaranSalida, Almacen, Maquinaria, Usuario
 
 
 def _crear_admin(db):
@@ -24,8 +24,11 @@ def _login(client, db):
 
 def test_api_buscar_incluye_maquinaria_y_albaranes(client, db):
     _login(client, db)
-    db.add(Maquinaria(nombre="Grúa torre XZ-900", matricula="MAT-XZ900"))
-    db.add(AlbaranSalida(numero="ALB-XZ900", origen_destino="Obra Central"))
+    madrid = Almacen(nombre="Almacén Madrid", codigo="MRD-ALM-BUSQ", activo=True)
+    db.add(madrid)
+    db.flush()
+    db.add(Maquinaria(nombre="Grúa torre XZ-900", matricula="MAT-XZ900", almacen_id=madrid.id))
+    db.add(AlbaranSalida(numero="ALB-XZ900", origen_destino="Obra Central", almacen_id=madrid.id))
     db.commit()
 
     resp = client.get("/api/buscar?q=XZ900")

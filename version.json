@@ -1,11 +1,12 @@
 {
-  "version_actual": "2.7.12",
-  "version_anterior": "2.7.11",
+  "version_actual": "2.7.13",
+  "version_anterior": "2.7.12",
   "nombre": "MRD TOOL CONTROL",
   "edicion": "Centro operativo avanzado de almacenes",
   "fecha": "2026-09-02",
   "estado": "estable",
   "cambios": [
+    "Aislamiento por almacén extendido al módulo de EPI (individual y stock) y a Informes/Búsqueda global: alta, baja, asignación, importación masiva, fotos, revisiones, PDFs y exportación Excel de EPI; auditoría y exportación de herramientas; informes de resumen, maquinaria, incidencias, reparaciones y análisis inteligente; búsqueda global (Ctrl+K y página de resultados) ahora también filtran obras, maquinaria y albaranes por el almacén activo del usuario, igual que ya ocurría con herramientas y materiales. Verificado con la batería completa de pruebas de aislamiento multi-almacén (test_almacenes_aislados.py, test_multi_almacen_operativo.py y 41 pruebas más relacionadas), sin fallos nuevos.",
     "Escáner: reconocidos los lectores Bluetooth con latencia constante (p. ej. 150-400 ms/tecla) que antes se confundían con tecleo manual por no alcanzar el ratio de velocidad esperado. Nuevo criterio 'paced' basado en el coeficiente de variación entre pulsaciones (ritmo uniforme = lector; ritmo irregular = persona escribiendo), con pruebas de regresión que cubren ambos casos.",
     "Añadido índice que faltaba en variantes_epi.referencia_proveedor (autorreparación en el arranque vía database.py) para agilizar la búsqueda de variantes de EPI por referencia de proveedor.",
     "Añadida prueba de regresión que verifica que el envío de stock EPI no permite doble pulsación/envío simultáneo desde /scan (bloqueo de botones, guardia de evento en curso, un solo scan_event_id por operación).",

@@ -39,8 +39,8 @@ def test_informe_epis_trabajadores_agrupa_entregas_y_arneses_sin_n_mas_uno(db):
     db.add_all([
         EntregaEPI(trabajador_id=t1.id, tipo="epi", items_json="[]"),
         EntregaEPI(trabajador_id=t1.id, tipo="ropa", items_json="[]"),
-        EPIIndividual(tipo="ARNES", codigo_fabricacion="ARN-1", trabajador_id=t1.id, estado="activo"),
-        EPIIndividual(tipo="ARNES", codigo_fabricacion="ARN-2", trabajador_id=t2.id, estado="baja"),
+        EPIIndividual(tipo="ARNES", codigo_fabricacion="ARN-1", trabajador_id=t1.id, estado="activo", almacen_id=almacen.id),
+        EPIIndividual(tipo="ARNES", codigo_fabricacion="ARN-2", trabajador_id=t2.id, estado="baja", almacen_id=almacen.id),
     ])
     db.commit()
 

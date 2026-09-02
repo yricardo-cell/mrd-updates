@@ -1774,8 +1774,13 @@ def dashboard_exec(
     hoy = _date2.today()
     ESTADOS_CAMPO = ["entregada", "en_obra", "en_furgoneta", "en_transporte"]
     ESTADOS_PERDIDA = ["extraviada", "robada"]
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_id = warehouse.id if warehouse else -1
 
-    herr_all = db.query(Herramienta).filter(Herramienta.activa == True).all()
+    herr_all = db.query(Herramienta).filter(
+        Herramienta.activa == True,
+        Herramienta.almacen_id == warehouse_id,
+    ).all()
     total_herr = len(herr_all)
     valor_total = sum((h.valor_actual or h.precio_compra or 0) for h in herr_all)
     herr_campo = [h for h in herr_all if h.estado in ESTADOS_CAMPO]
@@ -1808,7 +1813,16 @@ def dashboard_exec(
     for w in range(7, -1, -1):
         ini = _dt2.combine(hoy - _td2(days=(w+1)*7), _dt2.min.time())
         fin = _dt2.combine(hoy - _td2(days=w*7), _dt2.min.time())
-        c = db.query(Movimiento).filter(Movimiento.fecha >= ini, Movimiento.fecha < fin).count()
+        c = (
+            db.query(Movimiento)
+            .join(Herramienta, Movimiento.herramienta_id == Herramienta.id)
+            .filter(
+                Herramienta.almacen_id == warehouse_id,
+                Movimiento.fecha >= ini,
+                Movimiento.fecha < fin,
+            )
+            .count()
+        )
         semanas_labels.append(f"S-{w}" if w > 0 else "Esta semana")
         semanas_data.append(c)
 
@@ -2639,7 +2653,10 @@ async def trabajadores_importar_post(
         return templates.TemplateResponse(request, "importar_trabajadores.html",
             ctx_base(request, user, error=str(_ea)), status_code=400)
     try:
-        resultado = importar_trabajadores_excel(contenido, db)
+        warehouse = _active_warehouse(db, user, request)
+        resultado = importar_trabajadores_excel(
+            contenido, db, almacen_id=warehouse.id if warehouse else None,
+        )
     except Exception as e:
         resultado = {"creados": 0, "actualizados": 0, "errores": [str(e)], "filas_procesadas": 0}
     return templates.TemplateResponse(request, "importar_trabajadores.html", ctx_base(
@@ -3133,22 +3150,31 @@ def _inicializar_stock_epi(db):
 def epis_stock_panel(request: Request, user: Usuario = Depends(requiere_login),
                      db: Session = Depends(get_db)):
     _inicializar_stock_epi(db)
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_id = warehouse.id if warehouse else -1
     nombres_archivados = {
         row.nombre for row in db.query(CatalogoEPI).filter(CatalogoEPI.activo == False).all()
     }
     todos_epis = [row for row in db.query(StockEPI).filter(
-        StockEPI.categoria == "epi"
+        StockEPI.categoria == "epi", StockEPI.almacen_id == warehouse_id,
     ).order_by(StockEPI.nombre).all() if row.nombre not in nombres_archivados]
     # Separar EPIs individualizados (arnes, absorbedor) del resto
     epis = [e for e in todos_epis if e.nombre not in TIPOS_EPI_INDIVIDUAL]
     ropa_rows = [row for row in db.query(StockEPI).filter(
-        StockEPI.categoria == "ropa"
+        StockEPI.categoria == "ropa", StockEPI.almacen_id == warehouse_id,
     ).order_by(StockEPI.nombre, StockEPI.talla).all() if row.nombre not in nombres_archivados]
     # Calcular stock de arneses/absorbedores desde EPIIndividual
     individuales_stock = {}
     for tipo in TIPOS_EPI_INDIVIDUAL:
-        total      = db.query(EPIIndividual).filter(EPIIndividual.tipo == tipo, EPIIndividual.estado != "baja").count()
-        sin_asignar = db.query(EPIIndividual).filter(EPIIndividual.tipo == tipo, EPIIndividual.estado != "baja", EPIIndividual.trabajador_id == None).count()
+        total = db.query(EPIIndividual).filter(
+            EPIIndividual.tipo == tipo, EPIIndividual.estado != "baja",
+            EPIIndividual.almacen_id == warehouse_id,
+        ).count()
+        sin_asignar = db.query(EPIIndividual).filter(
+            EPIIndividual.tipo == tipo, EPIIndividual.estado != "baja",
+            EPIIndividual.trabajador_id == None,
+            EPIIndividual.almacen_id == warehouse_id,
+        ).count()
         individuales_stock[tipo] = {"total": total, "sin_asignar": sin_asignar}
     # Agrupar ropa por nombre manteniendo orden del kit
     ropa_grupos = OrderedDict()
@@ -3196,15 +3222,17 @@ def epis_stock_entrada(
     try:
         talla_val = talla.strip() or None
         _ts_epi = tipo_seguimiento if tipo_seguimiento in ("individual", "generico") else "generico"
+        warehouse = _active_warehouse(db, user, request)
+        warehouse_id = warehouse.id if warehouse else -1
         stock = db.query(StockEPI).filter(
-            StockEPI.nombre == nombre, StockEPI.talla == talla_val
+            StockEPI.nombre == nombre, StockEPI.talla == talla_val,
+            StockEPI.almacen_id == warehouse_id,
         ).first()
         if not stock:
             cat = "ropa" if talla_val else "epi"
-            almacen_predeterminado = get_default_warehouse(db)
             stock = StockEPI(nombre=nombre, categoria=cat, talla=talla_val, cantidad=0, stock_minimo=3,
                              tipo_seguimiento=_ts_epi,
-                             almacen_id=almacen_predeterminado.id if almacen_predeterminado else None)
+                             almacen_id=warehouse_id)
             db.add(stock)
             db.flush()
             stock.codigo = f"SEPI-{stock.id:04d}"
@@ -3242,10 +3270,16 @@ def epis_stock_salida(
     if cantidad <= 0:
         raise HTTPException(400, "La cantidad debe ser positiva")
     talla_val = talla.strip() or None
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_filter = (
+        StockEPI.almacen_id == warehouse.id
+        if warehouse else StockEPI.almacen_id.is_(None)
+    )
     start_stock_transaction(db)
     try:
         stock = db.query(StockEPI).filter(
-            StockEPI.nombre == nombre, StockEPI.talla == talla_val
+            StockEPI.nombre == nombre, StockEPI.talla == talla_val,
+            warehouse_filter,
         ).first()
         if not stock:
             raise StockError(404, "Artículo no encontrado en stock")
@@ -3280,6 +3314,9 @@ def epis_stock_seguimiento(
     sepi = db.query(StockEPI).get(sepi_id)
     if not sepi:
         raise HTTPException(404, "Artículo no encontrado")
+    warehouse = _active_warehouse(db, user, request)
+    if not warehouse or sepi.almacen_id != warehouse.id:
+        raise HTTPException(404, "Artículo no encontrado en este almacén")
     if tipo_seguimiento not in ("individual", "generico"):
         raise HTTPException(400, "Tipo de seguimiento no válido")
     sepi.tipo_seguimiento = tipo_seguimiento
@@ -3294,6 +3331,7 @@ def epis_stock_etiquetas_lote(
     ids: str = Form(...),
     copias: int = Form(1),
     formato: str = Form("pdf"),
+    request: Request = None,
 ):
     """Genera un paquete PDF o ZPL de etiquetas para EPI/ropa seleccionados."""
     if not tiene_permiso(user, "etiquetas"):
@@ -3302,7 +3340,15 @@ def epis_stock_etiquetas_lote(
     if not id_list:
         raise HTTPException(400, "Selecciona al menos un artículo")
     copias = max(1, min(int(copias), 100))
-    items = db.query(StockEPI).filter(StockEPI.id.in_(id_list)).order_by(
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_filter = (
+        StockEPI.almacen_id == warehouse.id
+        if warehouse else StockEPI.almacen_id.is_(None)
+    )
+    items = db.query(StockEPI).filter(
+        StockEPI.id.in_(id_list),
+        warehouse_filter,
+    ).order_by(
         StockEPI.categoria, StockEPI.nombre, StockEPI.talla
     ).all()
     if len(items) != len(id_list):
@@ -3346,8 +3392,10 @@ def epis_stock_minimo(
     except StockError as exc:
         raise HTTPException(exc.status_code, exc.detail)
     talla_val = talla.strip() or None
+    warehouse = _active_warehouse(db, user, request)
     stock = db.query(StockEPI).filter(
-        StockEPI.nombre == nombre, StockEPI.talla == talla_val
+        StockEPI.nombre == nombre, StockEPI.talla == talla_val,
+        StockEPI.almacen_id == (warehouse.id if warehouse else -1),
     ).first()
     if stock:
         stock.stock_minimo = max(0, stock_minimo)
@@ -3366,6 +3414,7 @@ def trabajador_epi_pdf(tid: int, eid: int,
     ).first()
     if not t or not e:
         raise HTTPException(404)
+    _require_warehouse_access(user, t.almacen_id)
 
     items = json.loads(e.items_json or "[]")
     pdf_bytes = _generar_pdf_entrega_epi(t, e, items, COMPANY_NAME)
@@ -3570,16 +3619,18 @@ def epis_stock_nueva_talla(
         raise HTTPException(400, "Nombre o talla no válidos")
     start_stock_transaction(db)
     try:
+        warehouse = _active_warehouse(db, user, request)
+        warehouse_id = warehouse.id if warehouse else -1
         existing = db.query(StockEPI).filter(
             func.upper(StockEPI.nombre) == nombre_val,
             func.upper(StockEPI.talla) == talla_val,
+            StockEPI.almacen_id == warehouse_id,
         ).first()
         if not existing:
-            almacen_predeterminado = get_default_warehouse(db)
             stock = StockEPI(
                 nombre=nombre_val, categoria="ropa", talla=talla_val,
                 cantidad=0, stock_minimo=3, tipo_seguimiento="generico",
-                almacen_id=almacen_predeterminado.id if almacen_predeterminado else None,
+                almacen_id=warehouse_id,
             )
             db.add(stock)
             db.flush()
@@ -3836,9 +3887,14 @@ async def epi_individual_baja_masiva(
     if not epi_ids_raw:
         return RedirectResponse("/epis/individuales?err=sin_seleccion", status_code=303)
     count = 0
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_id = warehouse.id if warehouse else -1
     for eid_str in epi_ids_raw:
         try:
-            epi = db.query(EPIIndividual).get(int(eid_str))
+            epi = db.query(EPIIndividual).filter(
+                EPIIndividual.id == int(eid_str),
+                EPIIndividual.almacen_id == warehouse_id,
+            ).first()
             if epi and epi.estado != "baja":
                 # Cerrar historial abierto si está asignado
                 if epi.trabajador_id:
@@ -3875,8 +3931,10 @@ def epi_individual_pdf_inventario(
     from reportlab.lib.enums import TA_CENTER
     from datetime import datetime as _dt
 
+    warehouse = _active_warehouse(db, user, request)
     items = db.query(EPIIndividual).filter(
-        EPIIndividual.estado != "baja"
+        EPIIndividual.estado != "baja",
+        EPIIndividual.almacen_id == (warehouse.id if warehouse else -1),
     ).order_by(EPIIndividual.tipo, EPIIndividual.codigo_fabricacion).all()
 
     buf = io.BytesIO()
@@ -3976,6 +4034,7 @@ def epi_individual_pdf_inventario(
 
 @app.get("/docs/registro-arneses-pdf")
 def docs_registro_arneses(
+    request: Request,
     user: Usuario = Depends(requiere_login),
     db: Session = Depends(get_db),
 ):
@@ -3990,8 +4049,10 @@ def docs_registro_arneses(
     import io
     from datetime import date
 
+    warehouse = _active_warehouse(db, user, request)
     epis = db.query(EPIIndividual).filter(
         EPIIndividual.tipo.in_(TIPOS_EPI_INDIVIDUAL),
+        EPIIndividual.almacen_id == (warehouse.id if warehouse else -1),
     ).order_by(EPIIndividual.tipo, EPIIndividual.num_serie).all()
 
     buf = io.BytesIO()
@@ -4278,13 +4339,17 @@ def epi_alerta_revision_manual(
         raise HTTPException(403, "Sin permiso")
     hoy = date.today()
     prox_30 = hoy + timedelta(days=30)
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_id = warehouse.id if warehouse else -1
     vencidos = db.query(EPIIndividual).filter(
         EPIIndividual.estado == "activo",
+        EPIIndividual.almacen_id == warehouse_id,
         EPIIndividual.proxima_revision != None,
         EPIIndividual.proxima_revision < hoy,
     ).all()
     proximos = db.query(EPIIndividual).filter(
         EPIIndividual.estado == "activo",
+        EPIIndividual.almacen_id == warehouse_id,
         EPIIndividual.proxima_revision != None,
         EPIIndividual.proxima_revision >= hoy,
         EPIIndividual.proxima_revision <= prox_30,
@@ -4400,6 +4465,8 @@ async def epi_individual_importar(
 
     creados = 0; errores = []
     tipos_validos = {t.upper() for t in TIPOS_EPI_INDIVIDUAL}
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_id = warehouse.id if warehouse else -1
 
     for row_idx, row in enumerate(ws.iter_rows(min_row=3, values_only=True), start=3):
         tipo_raw = str(row[0] or "").strip().upper() if row[0] else ""
@@ -4427,7 +4494,6 @@ async def epi_individual_importar(
             except: pass
             return None
 
-        almacen_predeterminado = get_default_warehouse(db)
         epi = EPIIndividual(
             tipo=tipo_raw,
             codigo_fabricacion=codigo,
@@ -4438,7 +4504,7 @@ async def epi_individual_importar(
             proxima_revision=_parse_date(row[6]),
             notas=str(row[7] or "").strip() or None,
             estado="activo",
-            almacen_id=almacen_predeterminado.id if almacen_predeterminado else None,
+            almacen_id=warehouse_id,
         )
         db.add(epi)
         db.flush()
@@ -4457,20 +4523,29 @@ async def epi_individual_importar(
 @app.get("/epis/individuales", response_class=HTMLResponse)
 def epis_individuales_panel(request: Request, user: Usuario = Depends(requiere_login),
                             db: Session = Depends(get_db)):
-    items = db.query(EPIIndividual).filter(EPIIndividual.estado != "baja").order_by(
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_id = warehouse.id if warehouse else -1
+    items = db.query(EPIIndividual).filter(
+        EPIIndividual.estado != "baja",
+        EPIIndividual.almacen_id == warehouse_id,
+    ).order_by(
         EPIIndividual.tipo, EPIIndividual.codigo_fabricacion
     ).all()
     por_revisar = [i for i in items if i.revision_vencida]
     proximos    = [i for i in items if not i.revision_vencida and i.proxima_revision and
                    i.dias_para_revision is not None and i.dias_para_revision <= 30]
-    trabajadores = db.query(Trabajador).filter(Trabajador.activo == True).order_by(Trabajador.nombre).all()
+    trabajadores = db.query(Trabajador).filter(
+        Trabajador.activo == True,
+        Trabajador.almacen_id == warehouse_id,
+    ).order_by(Trabajador.nombre).all()
     # Stock disponible (sin asignar) por tipo
     stock_disponible = {}
     for tipo in TIPOS_EPI_INDIVIDUAL:
         stock_disponible[tipo] = db.query(EPIIndividual).filter(
             EPIIndividual.tipo == tipo,
             EPIIndividual.estado != "baja",
-            EPIIndividual.trabajador_id == None
+            EPIIndividual.trabajador_id == None,
+            EPIIndividual.almacen_id == warehouse_id,
         ).count()
     return templates.TemplateResponse(request, "epis_individuales.html", ctx_base(
         request, user, db,
@@ -4505,7 +4580,16 @@ def epis_individuales_crear(
         try: return date.fromisoformat(s) if s else None
         except Exception: return None
 
-    almacen_predeterminado = get_default_warehouse(db)
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_id = warehouse.id if warehouse else -1
+    trabajador_asignado = None
+    if trabajador_id.strip():
+        trabajador_asignado = db.query(Trabajador).filter(
+            Trabajador.id == int(trabajador_id),
+            Trabajador.almacen_id == warehouse_id,
+        ).first()
+        if not trabajador_asignado:
+            raise HTTPException(404, "Trabajador no encontrado en este almacén")
     epi = EPIIndividual(
         tipo=tipo.upper(),
         codigo_fabricacion=codigo_fabricacion.strip(),
@@ -4513,11 +4597,11 @@ def epis_individuales_crear(
         modelo=modelo.strip() or None,
         fecha_fabricacion=_pd(fecha_fabricacion),
         fecha_puesta_servicio=_pd(fecha_puesta_servicio),
-        trabajador_id=int(trabajador_id) if trabajador_id.strip() else None,
+        trabajador_id=trabajador_asignado.id if trabajador_asignado else None,
         proxima_revision=_pd(proxima_revision),
         notas=notas.strip() or None,
         estado="activo",
-        almacen_id=almacen_predeterminado.id if almacen_predeterminado else None,
+        almacen_id=warehouse_id,
     )
     db.add(epi)
     db.flush()
@@ -4537,7 +4621,11 @@ def epi_individual_detalle(eid: int, request: Request,
     epi = db.query(EPIIndividual).get(eid)
     if not epi:
         raise HTTPException(404, "EPI no encontrado")
-    trabajadores = db.query(Trabajador).filter(Trabajador.activo == True).order_by(Trabajador.nombre).all()
+    _require_warehouse_access(user, epi.almacen_id)
+    trabajadores = db.query(Trabajador).filter(
+        Trabajador.activo == True,
+        Trabajador.almacen_id == epi.almacen_id,
+    ).order_by(Trabajador.nombre).all()
     return templates.TemplateResponse(request, "epi_individual_detalle.html", ctx_base(
         request, user, db,
         epi=epi,
@@ -4564,6 +4652,7 @@ def epi_individual_revision(
     epi = db.query(EPIIndividual).get(eid)
     if not epi:
         raise HTTPException(404, "EPI no encontrado")
+    _require_warehouse_access(user, epi.almacen_id)
 
     def _pd(s):
         try: return date.fromisoformat(s) if s else None
@@ -4604,7 +4693,15 @@ def epi_individual_asignar(
     epi = db.query(EPIIndividual).get(eid)
     if not epi:
         raise HTTPException(404, "EPI no encontrado")
+    _require_warehouse_access(user, epi.almacen_id)
     nuevo_tid = int(trabajador_id) if trabajador_id.strip() else None
+    if nuevo_tid:
+        trabajador = db.query(Trabajador).filter(
+            Trabajador.id == nuevo_tid,
+            Trabajador.almacen_id == epi.almacen_id,
+        ).first()
+        if not trabajador:
+            raise HTTPException(404, "Trabajador no encontrado en este almacén")
     if nuevo_tid and epi.tipo.upper() in {"ARNES", "ABSORBEDOR"}:
         raise HTTPException(
             409,
@@ -4641,6 +4738,7 @@ def epi_individual_generar_identificador(
     epi = db.get(EPIIndividual, eid)
     if not epi:
         raise HTTPException(404, "EPI no encontrado")
+    _require_warehouse_access(user, epi.almacen_id)
     try:
         identifier = ensure_epi_identifier(db, epi, user)
         db.commit()
@@ -4667,6 +4765,7 @@ def epi_individual_devolver(
     epi = db.query(EPIIndividual).get(eid)
     if not epi:
         raise HTTPException(404, "EPI no encontrado")
+    _require_warehouse_access(user, epi.almacen_id)
     anterior = epi.trabajador.nombre_completo if epi.trabajador else "nadie"
     anterior_id = epi.trabajador_id
     if anterior_id:
@@ -4698,6 +4797,7 @@ def epi_individual_baja(
     epi = db.query(EPIIndividual).get(eid)
     if not epi:
         raise HTTPException(404, "EPI no encontrado")
+    _require_warehouse_access(user, epi.almacen_id)
     epi.estado = "baja"
     db.commit()
     return RedirectResponse("/epis/individuales", status_code=303)
@@ -4718,6 +4818,7 @@ def epi_individual_renovar_revision(
     epi = db.query(EPIIndividual).get(eid)
     if not epi:
         raise HTTPException(404, "EPI no encontrado")
+    _require_warehouse_access(user, epi.almacen_id)
     hoy = date.today()
     prox = hoy + timedelta(days=INTERVALO_REVISION_EPI_DIAS)
     rev = RevisionEPI(
@@ -4754,6 +4855,7 @@ async def epi_individual_subir_foto(
     epi = db.query(EPIIndividual).get(eid)
     if not epi:
         raise HTTPException(404, "EPI no encontrado")
+    _require_warehouse_access(user, epi.almacen_id)
     ext = Path(foto.filename).suffix.lower() if foto.filename else ".jpg"
     if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
         ext = ".jpg"
@@ -4783,6 +4885,7 @@ def epi_individual_eliminar_foto(
     epi = db.query(EPIIndividual).get(eid)
     if not epi:
         raise HTTPException(404, "EPI no encontrado")
+    _require_warehouse_access(user, epi.almacen_id)
     if epi.foto_path:
         p = BASE_DIR / "static" / "uploads" / "epis" / epi.foto_path
         if p.exists():
@@ -10109,12 +10212,16 @@ def api_v1_auditoria_herramienta(
 # ─── API v1 — EXPORT Excel ───────────────────────────────────────────────────
 @app.get("/api/v1/export/herramientas")
 def api_v1_exportar_herramientas(
+    request: Request,
     estado: str = Query(""),
     activa: str = Query(""),
     user: Usuario = Depends(requiere_login),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Herramienta)
+    warehouse = _active_warehouse(db, user, request)
+    q = db.query(Herramienta).filter(
+        Herramienta.almacen_id == (warehouse.id if warehouse else -1),
+    )
     if estado:
         q = q.filter(Herramienta.estado == estado)
     if activa:
@@ -10135,11 +10242,15 @@ def api_v1_exportar_herramientas(
 
 @app.get("/informes/trabajadores/excel")
 def exportar_trabajadores_excel_route(
+    request: Request,
     activo: str = Query(""),
     user: Usuario = Depends(requiere_login),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Trabajador)
+    warehouse = _active_warehouse(db, user, request)
+    q = db.query(Trabajador).filter(
+        Trabajador.almacen_id == (warehouse.id if warehouse else -1),
+    )
     if activo == "true":
         q = q.filter(Trabajador.activo == True)
     elif activo == "false":
@@ -10162,9 +10273,11 @@ def api_epis_disponibles(
     tipo: str = Query(None),
 ):
     """EPIs individuales sin asignar — para modal de asignacion desde trabajador."""
+    warehouse = _active_warehouse(db, user, request)
     q = db.query(EPIIndividual).filter(
         EPIIndividual.estado == "activo",
         EPIIndividual.trabajador_id == None,
+        EPIIndividual.almacen_id == (warehouse.id if warehouse else -1),
         or_(EPIIndividual.proxima_revision == None, EPIIndividual.proxima_revision >= date.today()),
     )
     if tipo:
@@ -10188,7 +10301,12 @@ def api_epis_disponibles(
 def informe_epis_trabajadores(request: Request, user: Usuario = Depends(requiere_login),
                                db: Session = Depends(get_db)):
     """Informe completo: qué EPIs/ropa/arneses tiene cada trabajador + stock disponible."""
-    trabajadores = db.query(Trabajador).filter(Trabajador.activo == True).order_by(Trabajador.nombre).all()
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_id = warehouse.id if warehouse else -1
+    trabajadores = db.query(Trabajador).filter(
+        Trabajador.activo == True,
+        Trabajador.almacen_id == warehouse_id,
+    ).order_by(Trabajador.nombre).all()
 
     entregas_por_trabajador: dict = {}
     arneses_por_trabajador: dict = {}
@@ -10200,6 +10318,7 @@ def informe_epis_trabajadores(request: Request, user: Usuario = Depends(requiere
             entregas_por_trabajador.setdefault(e.trabajador_id, []).append(e)
         for a in db.query(EPIIndividual).filter(
             EPIIndividual.trabajador_id.in_(ids_trabajadores),
+            EPIIndividual.almacen_id == warehouse_id,
             EPIIndividual.estado != "baja",
         ).all():
             arneses_por_trabajador.setdefault(a.trabajador_id, []).append(a)
@@ -10221,7 +10340,8 @@ def informe_epis_trabajadores(request: Request, user: Usuario = Depends(requiere
     # Stock disponible
     stock_epi = db.query(EPIIndividual).filter(
         EPIIndividual.estado != "baja",
-        EPIIndividual.trabajador_id == None
+        EPIIndividual.trabajador_id == None,
+        EPIIndividual.almacen_id == warehouse_id,
     ).all()
     stock_por_tipo = {}
     for epi in stock_epi:
@@ -10235,7 +10355,7 @@ def informe_epis_trabajadores(request: Request, user: Usuario = Depends(requiere
 
 
 @app.get("/informes/epis-trabajadores/excel")
-def informe_epis_trabajadores_excel(user: Usuario = Depends(requiere_login),
+def informe_epis_trabajadores_excel(request: Request, user: Usuario = Depends(requiere_login),
                                      db: Session = Depends(get_db)):
     """Exporta a Excel el informe EPIs/ropa/arneses por trabajador."""
     from openpyxl import Workbook as _WB
@@ -10243,7 +10363,12 @@ def informe_epis_trabajadores_excel(user: Usuario = Depends(requiere_login),
     from openpyxl.utils import get_column_letter as _gcl
     import io as _io
 
-    trabajadores = db.query(Trabajador).filter(Trabajador.activo == True).order_by(Trabajador.nombre).all()
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_id = warehouse.id if warehouse else -1
+    trabajadores = db.query(Trabajador).filter(
+        Trabajador.activo == True,
+        Trabajador.almacen_id == warehouse_id,
+    ).order_by(Trabajador.nombre).all()
 
     wb = _WB()
 
@@ -10317,6 +10442,7 @@ def informe_epis_trabajadores_excel(user: Usuario = Depends(requiere_login),
     row2 = 4
     epis_asignados = db.query(EPIIndividual).filter(
         EPIIndividual.trabajador_id != None,
+        EPIIndividual.almacen_id == warehouse_id,
         EPIIndividual.estado != "baja"
     ).options(joinedload(EPIIndividual.trabajador)).order_by(EPIIndividual.tipo).all()
     for idx_e, epi in enumerate(epis_asignados):
@@ -10356,7 +10482,8 @@ def informe_epis_trabajadores_excel(user: Usuario = Depends(requiere_login),
 
     disponibles = db.query(EPIIndividual).filter(
         EPIIndividual.estado != "baja",
-        EPIIndividual.trabajador_id == None
+        EPIIndividual.trabajador_id == None,
+        EPIIndividual.almacen_id == warehouse_id,
     ).order_by(EPIIndividual.tipo, EPIIndividual.codigo_fabricacion).all()
     for idx_d, epi in enumerate(disponibles):
         bg = fill_s if idx_d % 2 == 0 else _Fill("solid", fgColor="FFFFFF")
@@ -10383,6 +10510,7 @@ def informe_epis_trabajadores_excel(user: Usuario = Depends(requiere_login),
 
 @app.get("/informes/epis/excel")
 def exportar_epis_excel_route(
+    request: Request,
     user: Usuario = Depends(requiere_login),
     db: Session = Depends(get_db),
 ):
@@ -10392,8 +10520,12 @@ def exportar_epis_excel_route(
     from openpyxl.utils import get_column_letter as _gcl
     import io as _io
 
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_id = warehouse.id if warehouse else -1
     entregas = (
         db.query(EntregaEPI)
+        .join(Trabajador, EntregaEPI.trabajador_id == Trabajador.id)
+        .filter(Trabajador.almacen_id == warehouse_id)
         .options(joinedload(EntregaEPI.trabajador))
         .order_by(EntregaEPI.fecha.desc())
         .all()
@@ -10516,6 +10648,7 @@ def borrar_foto_herramienta(
 
 @app.get("/api/buscar")
 def api_buscar_global(
+    request: Request,
     q: str = Query(""),
     user: Usuario = Depends(requiere_login),
     db: Session = Depends(get_db),
@@ -10525,10 +10658,12 @@ def api_buscar_global(
         return {"herramientas": [], "trabajadores": [], "obras": [], "maquinaria": [], "albaranes": []}
     q = q.strip()
     like = f"%{q}%"
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_id = warehouse.id if warehouse else -1
 
     herramientas = (
         db.query(Herramienta)
-        .filter(Herramienta.activa == True)
+        .filter(Herramienta.activa == True, Herramienta.almacen_id == warehouse_id)
         .filter(or_(
             Herramienta.codigo.ilike(like),
             Herramienta.nombre.ilike(like),
@@ -10539,6 +10674,7 @@ def api_buscar_global(
     )
     trabajadores = (
         db.query(Trabajador)
+        .filter(Trabajador.almacen_id == warehouse_id)
         .filter(or_(
             Trabajador.nombre.ilike(like),
             Trabajador.apellidos.ilike(like),
@@ -10549,6 +10685,7 @@ def api_buscar_global(
     )
     obras = (
         db.query(Obra)
+        .filter(Obra.almacen_id == warehouse_id)
         .filter(or_(
             Obra.nombre.ilike(like),
             Obra.numero.ilike(like),
@@ -10558,6 +10695,7 @@ def api_buscar_global(
     )
     maquinaria = (
         db.query(Maquinaria)
+        .filter(Maquinaria.almacen_id == warehouse_id)
         .filter(or_(
             Maquinaria.nombre.ilike(like),
             Maquinaria.matricula.ilike(like),
@@ -10566,6 +10704,7 @@ def api_buscar_global(
     )
     albaranes = (
         db.query(AlbaranSalida)
+        .filter(AlbaranSalida.almacen_id == warehouse_id)
         .filter(or_(
             AlbaranSalida.numero.ilike(like),
             AlbaranSalida.origen_destino.ilike(like),
@@ -10593,9 +10732,11 @@ def buscar_global(
     herramientas, trabajadores, obras, maquinaria, albaranes = [], [], [], [], []
     if q and len(q.strip()) >= 2:
         like = f"%{q.strip()}%"
+        warehouse = _active_warehouse(db, user, request)
+        warehouse_id = warehouse.id if warehouse else -1
         herramientas = (
             db.query(Herramienta)
-            .filter(Herramienta.activa == True)
+            .filter(Herramienta.activa == True, Herramienta.almacen_id == warehouse_id)
             .filter(or_(
                 Herramienta.codigo.ilike(like),
                 Herramienta.nombre.ilike(like),
@@ -10606,6 +10747,7 @@ def buscar_global(
         )
         trabajadores = (
             db.query(Trabajador)
+            .filter(Trabajador.almacen_id == warehouse_id)
             .filter(or_(
                 Trabajador.nombre.ilike(like),
                 Trabajador.apellidos.ilike(like),
@@ -10616,6 +10758,7 @@ def buscar_global(
         )
         obras = (
             db.query(Obra)
+            .filter(Obra.almacen_id == warehouse_id)
             .filter(or_(
                 Obra.nombre.ilike(like),
                 Obra.numero.ilike(like),
@@ -10625,6 +10768,7 @@ def buscar_global(
         )
         maquinaria = (
             db.query(Maquinaria)
+            .filter(Maquinaria.almacen_id == warehouse_id)
             .filter(or_(
                 Maquinaria.nombre.ilike(like),
                 Maquinaria.matricula.ilike(like),
@@ -10633,6 +10777,7 @@ def buscar_global(
         )
         albaranes = (
             db.query(AlbaranSalida)
+            .filter(AlbaranSalida.almacen_id == warehouse_id)
             .filter(or_(
                 AlbaranSalida.numero.ilike(like),
                 AlbaranSalida.origen_destino.ilike(like),
@@ -12368,9 +12513,10 @@ async def api_push_desuscribirse(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @app.get("/informes/resumen/pdf")
-def informe_pdf_resumen(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+def informe_pdf_resumen(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     from config import COMPANY_NAME as _CN
-    analisis = generar_analisis_inteligente(db)
+    warehouse = _active_warehouse(db, user, request)
+    analisis = generar_analisis_inteligente(db, warehouse.id if warehouse else None)
     pdf = exportar_pdf_resumen(analisis, _CN)
     nombre = f"resumen_mrd_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     return Response(content=pdf, media_type="application/pdf",
@@ -12378,8 +12524,8 @@ def informe_pdf_resumen(user: Usuario = Depends(requiere_login), db: Session = D
 
 
 @app.get("/informes/maquinaria/excel")
-def informe_maquinaria_excel(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
-    warehouse = _active_warehouse(db, user)
+def informe_maquinaria_excel(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    warehouse = _active_warehouse(db, user, request)
     items = db.query(Maquinaria).filter(
         Maquinaria.activa == True,
         Maquinaria.almacen_id == (warehouse.id if warehouse else -1),
@@ -12392,8 +12538,8 @@ def informe_maquinaria_excel(user: Usuario = Depends(requiere_login), db: Sessio
 
 
 @app.get("/informes/incidencias/excel")
-def informe_incidencias_excel(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
-    warehouse = _active_warehouse(db, user)
+def informe_incidencias_excel(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    warehouse = _active_warehouse(db, user, request)
     items = db.query(Incidencia).filter(
         Incidencia.almacen_id == (warehouse.id if warehouse else -1),
     ).order_by(Incidencia.fecha_apertura.desc()).all()
@@ -12405,8 +12551,8 @@ def informe_incidencias_excel(user: Usuario = Depends(requiere_login), db: Sessi
 
 
 @app.get("/informes/reparaciones/excel")
-def informe_reparaciones_excel(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
-    warehouse = _active_warehouse(db, user)
+def informe_reparaciones_excel(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    warehouse = _active_warehouse(db, user, request)
     items = db.query(Reparacion).filter(
         Reparacion.almacen_id == (warehouse.id if warehouse else -1),
     ).order_by(Reparacion.fecha_entrada.desc()).all()
@@ -12418,8 +12564,9 @@ def informe_reparaciones_excel(user: Usuario = Depends(requiere_login), db: Sess
 
 
 @app.get("/api/v1/informes/analisis")
-def api_analisis_inteligente(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
-    return generar_analisis_inteligente(db)
+def api_analisis_inteligente(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    warehouse = _active_warehouse(db, user, request)
+    return generar_analisis_inteligente(db, warehouse.id if warehouse else None)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
