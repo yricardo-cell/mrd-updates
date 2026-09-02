@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.6",
-    "nombre":  "MRD TOOL CONTROL -- Publicador de actualizaciones controlado por parametros (-Version/-Descripcion/-NoPause)",
-    "fecha":  "2026-09-01",
+    "version_actual":  "2.7.7",
+    "nombre":  "MRD TOOL CONTROL -- Corrige superposicion de codigos largos en Informe EPIs por Trabajador",
+    "fecha":  "2026-09-02",
     "cambios":  [
-                    "Publicador de actualizaciones controlado por parametros (-Version/-Descripcion/-NoPause)"
+                    "Corrige superposicion de codigos largos en Informe EPIs por Trabajador"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.6.zip",
-    "sha256":  "6611fd7566d6f7bca6375da3ea3a04622450e4210b403a485a002e69deafe107"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.7.zip",
+    "sha256":  "f9d563f0b5fc1bafe9cde4d62da52ea76ded509ccaf2dcadacc0aa0ef4fce80e"
 }
