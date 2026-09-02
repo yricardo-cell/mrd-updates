@@ -449,7 +449,7 @@ def importar_herramientas_excel(db, contenido: bytes, user) -> dict:
 from datetime import timedelta
 
 
-def generar_analisis_inteligente(db) -> dict:
+def generar_analisis_inteligente(db, almacen_id: int | None = None) -> dict:
     """
     Analiza la BD y devuelve KPIs, tendencias, alertas e insights narrativos.
     No usa ML — estadística descriptiva pura.
@@ -464,22 +464,35 @@ def generar_analisis_inteligente(db) -> dict:
     hace_90 = ahora - timedelta(days=90)
 
     # ── Herramientas ──────────────────────────────────────────────
-    total_h = db.query(Herramienta).filter(Herramienta.activa == True).count()
+    filtro_h = [Herramienta.activa == True]
+    filtro_m = [Maquinaria.activa == True]
+    filtro_inc = []
+    filtro_rep = []
+    filtro_mat = [Material.activo == True]
+    if almacen_id is not None:
+        filtro_h.append(Herramienta.almacen_id == almacen_id)
+        filtro_m.append(Maquinaria.almacen_id == almacen_id)
+        filtro_inc.append(Incidencia.almacen_id == almacen_id)
+        filtro_rep.append(Reparacion.almacen_id == almacen_id)
+        filtro_mat.append(Material.almacen_id == almacen_id)
+
+    total_h = db.query(Herramienta).filter(*filtro_h).count()
     estados_h = {}
-    for row in db.query(Herramienta.estado, func.count()).filter(Herramienta.activa == True).group_by(Herramienta.estado).all():
+    for row in db.query(Herramienta.estado, func.count()).filter(*filtro_h).group_by(Herramienta.estado).all():
         estados_h[row[0]] = row[1]
 
     # Herramientas entregadas/en_obra hace más de 30 días sin devolver
     h_mucho_tiempo = db.query(Herramienta).filter(
         Herramienta.activa == True,
+        *([Herramienta.almacen_id == almacen_id] if almacen_id is not None else []),
         Herramienta.estado.in_(["entregada", "en_obra"]),
         Herramienta.ultima_actualizacion <= hace_30,
     ).count() if hasattr(Herramienta, 'ultima_actualizacion') else 0
 
     # ── Maquinaria ────────────────────────────────────────────────
-    total_m = db.query(Maquinaria).filter(Maquinaria.activa == True).count()
+    total_m = db.query(Maquinaria).filter(*filtro_m).count()
     estados_m = {}
-    for row in db.query(Maquinaria.estado, func.count()).filter(Maquinaria.activa == True).group_by(Maquinaria.estado).all():
+    for row in db.query(Maquinaria.estado, func.count()).filter(*filtro_m).group_by(Maquinaria.estado).all():
         estados_m[row[0]] = row[1]
 
     # ── Movimientos por mes (últimos 6 meses) ─────────────────────
@@ -487,9 +500,10 @@ def generar_analisis_inteligente(db) -> dict:
     for i in range(5, -1, -1):
         fecha_ref = ahora - timedelta(days=30 * i)
         mes_str = fecha_ref.strftime("%Y-%m")
-        count = db.query(Movimiento).filter(
-            func.strftime("%Y-%m", Movimiento.fecha) == mes_str
-        ).count()
+        mov_query = db.query(Movimiento)
+        if almacen_id is not None:
+            mov_query = mov_query.join(Herramienta).filter(Herramienta.almacen_id == almacen_id)
+        count = mov_query.filter(func.strftime("%Y-%m", Movimiento.fecha) == mes_str).count()
         mov_por_mes.append({"mes": fecha_ref.strftime("%b %Y"), "total": count})
 
     # Tendencia movimientos: comparar último mes vs anterior
@@ -499,25 +513,27 @@ def generar_analisis_inteligente(db) -> dict:
     delta_mov = mov_mes_actual - mov_mes_anterior
 
     # ── Incidencias ───────────────────────────────────────────────
-    total_inc = db.query(Incidencia).count()
-    inc_abiertas = db.query(Incidencia).filter(Incidencia.estado == "abierta").count()
-    inc_este_mes = db.query(Incidencia).filter(Incidencia.fecha_apertura >= hace_30).count()
+    total_inc = db.query(Incidencia).filter(*filtro_inc).count()
+    inc_abiertas = db.query(Incidencia).filter(*filtro_inc, Incidencia.estado == "abierta").count()
+    inc_este_mes = db.query(Incidencia).filter(*filtro_inc, Incidencia.fecha_apertura >= hace_30).count()
     inc_mes_pasado = db.query(Incidencia).filter(
         Incidencia.fecha_apertura >= hace_60,
         Incidencia.fecha_apertura < hace_30,
+        *filtro_inc,
     ).count()
 
     # ── Reparaciones ──────────────────────────────────────────────
-    total_rep = db.query(Reparacion).count()
-    rep_abiertas = db.query(Reparacion).filter(Reparacion.estado.in_(["pendiente", "en_proceso"])).count()
+    total_rep = db.query(Reparacion).filter(*filtro_rep).count()
+    rep_abiertas = db.query(Reparacion).filter(*filtro_rep, Reparacion.estado.in_(["pendiente", "en_proceso"])).count()
     rep_retrasadas = db.query(Reparacion).filter(
         Reparacion.estado.in_(["pendiente", "en_proceso"]),
         Reparacion.fecha_entrada <= hace_30,
+        *filtro_rep,
     ).count()
 
     # ── Materiales con stock bajo ─────────────────────────────────
     mat_stock_bajo = db.query(Material).filter(
-        Material.activo == True,
+        *filtro_mat,
         Material.stock_actual <= Material.stock_minimo,
     ).count()
 
@@ -1082,14 +1098,17 @@ def generar_plantilla_trabajadores() -> bytes:
     return buf.getvalue()
 
 
-def importar_trabajadores_excel(contenido: bytes, db) -> dict:
+def importar_trabajadores_excel(contenido: bytes, db, almacen_id: int | None = None) -> dict:
     """
     Lee Excel y realiza upsert de trabajadores.
-    Clave de actualización: DNI (si existe) o codigo.
+    Clave de actualización: DNI (si existe) o codigo; si ninguno coincide,
+    se usa nombre + apellidos como respaldo (solo si hay una única coincidencia,
+    para no fusionar por error dos trabajadores homónimos distintos).
     No elimina registros existentes.
     Devuelve resumen {creados, actualizados, errores, filas_procesadas}.
     """
     from openpyxl import load_workbook
+    from sqlalchemy import func
     from models import Trabajador
 
     wb = load_workbook(filename=io.BytesIO(contenido), read_only=True, data_only=True)
@@ -1121,16 +1140,45 @@ def importar_trabajadores_excel(contenido: bytes, db) -> dict:
 
         try:
             dni    = get(row, "dni") or None
+            if dni:
+                dni = dni.strip().upper()
             codigo = get(row, "codigo") or None
+            apellidos = get(row, "apellidos") or None
             activo_raw = get(row, "activo", "si").lower()
             activo = activo_raw not in ("no", "0", "false", "n")
 
             # Buscar existente por DNI o código
             existente = None
             if dni:
-                existente = db.query(Trabajador).filter(Trabajador.dni == dni).first()
+                existente = db.query(Trabajador).filter(func.upper(Trabajador.dni) == dni).first()
             if not existente and codigo:
                 existente = db.query(Trabajador).filter(Trabajador.codigo == codigo).first()
+
+            # Respaldo: nombre + apellidos, solo si hay una única coincidencia
+            # (evita crear duplicados cuando el registro existente aún no tiene
+            # DNI/código cargado, pero sin arriesgarse a mezclar homónimos)
+            if not existente:
+                candidatos = db.query(Trabajador).filter(
+                    func.upper(Trabajador.nombre) == nombre.upper(),
+                    func.upper(func.coalesce(Trabajador.apellidos, "")) == (apellidos or "").upper(),
+                ).all()
+                if len(candidatos) == 1:
+                    existente = candidatos[0]
+                elif len(candidatos) > 1:
+                    nombre_completo = f"{nombre} {apellidos or ''}".strip()
+                    errores.append(
+                        f"Fila {i}: hay {len(candidatos)} trabajadores con el nombre "
+                        f"'{nombre_completo}' y sin DNI/código coincidente; "
+                        "no se actualizó automáticamente para evitar mezclar registros. "
+                        "Añade el DNI o código correcto y vuelve a importar esta fila."
+                    )
+                    continue
+
+            if existente and almacen_id is not None and existente.almacen_id != almacen_id:
+                errores.append(
+                    f"Fila {i}: el trabajador ya pertenece a otro almacén y no se modificó"
+                )
+                continue
 
             if existente:
                 existente.nombre      = nombre
@@ -1160,6 +1208,7 @@ def importar_trabajadores_excel(contenido: bytes, db) -> dict:
                     departamento=get(row, "departamento") or None,
                     observaciones=get(row, "observaciones") or None,
                     activo=activo,
+                    almacen_id=almacen_id,
                 )
                 db.add(t)
                 creados += 1

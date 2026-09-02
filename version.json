@@ -1,11 +1,12 @@
 {
-  "version_actual": "2.7.7",
-  "version_anterior": "2.7.6",
+  "version_actual": "2.7.8",
+  "version_anterior": "2.7.7",
   "nombre": "MRD TOOL CONTROL",
   "edicion": "Centro operativo avanzado de almacenes",
   "fecha": "2026-09-02",
   "estado": "estable",
   "cambios": [
+    "Corregida la importación masiva de trabajadores por Excel para que ya no duplique fichas: además de DNI y código, ahora empareja por nombre y apellidos cuando el trabajador existente aún no tiene DNI/código cargado (normalizando mayúsculas y espacios); si hay varios homónimos sin forma de distinguirlos, no fusiona nada y avisa fila por fila en vez de crear un duplicado.",
     "Corregida la superposición de códigos de fabricación largos en el Informe de EPIs por Trabajador (Stock disponible): ahora se parten limpiamente dentro del badge en vez de solaparse, con una clase CSS propia que no afecta al resto de badges de la aplicación.",
     "Publicador de actualizaciones controlado: PUBLICAR_ACTUALIZACION.ps1 admite ahora parámetros de versión, descripción y modo sin pausa (-Version, -Descripcion, -NoPause) para automatizar la publicación de nuevas versiones en GitHub sin intervención manual.",
     "Corregidos los filtros vacíos de Movimientos para que buscar sin seleccionar trabajador, usuario o fechas no produzca un error de validación.",
