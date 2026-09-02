@@ -779,6 +779,7 @@ def apply_migrations(target_engine=None):
         ("ix_devoluciones_trabajador_estado", "devoluciones_trabajador", ("trabajador_id", "estado")),
         ("ix_sesiones_portal_trabajador", "sesiones_portal_trabajador", ("trabajador_id", "revocado_en")),
         ("ux_preparaciones_entrega_qr_token", "preparaciones_entrega", ("qr_token",)),
+        ("ix_variantes_epi_referencia_proveedor", "variantes_epi", ("referencia_proveedor",)),
     ]
     legacy_copies = [
         ("herramientas", "ubicacion", "ubicacion_texto"),

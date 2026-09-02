@@ -1,11 +1,13 @@
 {
-  "version_actual": "2.7.10",
-  "version_anterior": "2.7.9",
+  "version_actual": "2.7.11",
+  "version_anterior": "2.7.10",
   "nombre": "MRD TOOL CONTROL",
   "edicion": "Centro operativo avanzado de almacenes",
   "fecha": "2026-09-02",
   "estado": "estable",
   "cambios": [
+    "Añadido índice que faltaba en variantes_epi.referencia_proveedor (autorreparación en el arranque vía database.py) para agilizar la búsqueda de variantes de EPI por referencia de proveedor.",
+    "Añadida prueba de regresión que verifica que el envío de stock EPI no permite doble pulsación/envío simultáneo desde /scan (bloqueo de botones, guardia de evento en curso, un solo scan_event_id por operación).",
     "Corregido el prefijo de datos incrustado en el QR de las etiquetas (herramientas y EPI): usaba 'LA,' por un error de origen y ahora usa 'MA,' de forma consistente en los dos generadores de etiquetas de la aplicación (label_printer.py y etiquetas_service.py), con prueba de regresión que compara ambos.",
     "Corregido el error 403 por token CSRF caducado que podía perder datos al enviar formularios (maquinaria nueva, salida de herramientas/maquinaria, albaranes de salida): ahora el formulario reintenta automáticamente con un token renovado en vez de descartar lo escrito, con aviso visual si el reintento también falla.",
     "Escáner del Mostrador Único: la cancelación de una búsqueda en curso ahora es real (se aborta la petición en vez de ignorarla), con indicador visual de 'Buscando...', tiempo máximo de espera de 8 segundos y protección contra doble pulsación accidental.",

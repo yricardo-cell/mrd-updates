@@ -484,6 +484,15 @@ def test_devolucion_usa_permiso_especifico(db, modalidad):
         PERMISOS_ROL.pop("solo_entrega", None)
 
 
+def test_stock_epi_no_permite_doble_envio_simultaneo():
+    html = (ROOT / "templates" / "scan.html").read_text(encoding="utf-8")
+    assert "if (!_currentStockEPI || _stockEPIBusy) return;" in html
+    assert "_stockEPIBusy = true;" in html
+    assert "botones.forEach(function(b){ b.disabled = true; });" in html
+    assert "_pendingStockEPIEventId = _pendingStockEPIEventId || nuevoScanEventId();" in html
+    assert "scan_event_id: nuevoScanEventId()" not in html
+
+
 def test_redireccion_de_devolucion_no_se_interpreta_como_exito():
     html = (ROOT / "templates" / "movimiento_devolver.html").read_text(encoding="utf-8")
     assert "r.ok || r.redirected" not in html

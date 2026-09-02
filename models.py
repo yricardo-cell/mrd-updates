@@ -2153,7 +2153,7 @@ class VarianteEPI(Base):
     identificador_id = Column(Integer, ForeignKey("identificadores_globales.id"), nullable=False, unique=True)
     referencia_interna = Column(String(50), nullable=False, unique=True)
     codigo_qr = Column(String(50), nullable=False, unique=True)
-    referencia_proveedor = Column(String(100), nullable=True)
+    referencia_proveedor = Column(String(100), nullable=True, index=True)
     stock_minimo = Column(Integer, nullable=False, default=0)
     activo = Column(Boolean, nullable=False, default=True)
     creado_por_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
