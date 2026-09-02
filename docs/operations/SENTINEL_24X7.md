@@ -24,6 +24,17 @@ Instalación real desde PowerShell como administrador:
 powershell.exe -ExecutionPolicy Bypass -File scripts\operations\install_sentinel_task.ps1 -Apply
 ```
 
+Si no se dispone de una consola de administrador, se puede dejar funcionando con
+la cuenta actual. Esta modalidad arranca al iniciar sesión y sigue activa con la
+pantalla bloqueada o tras suspender y reanudar el equipo:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File scripts\operations\install_sentinel_task.ps1 -Apply -CurrentUser
+```
+
+La modalidad SYSTEM es la recomendada para un servidor que deba funcionar incluso
+sin ningún usuario conectado.
+
 La tarea se llama `MRD Sentinel 24x7` y el panel local queda en
 `http://127.0.0.1:9100`. En la primera apertura desde el propio servidor aparece
 un formulario para crear la cuenta inicial. Después de crearla, ese formulario

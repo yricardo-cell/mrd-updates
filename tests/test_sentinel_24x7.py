@@ -30,6 +30,14 @@ def test_instalador_es_vista_previa_por_defecto_y_apply_obligatorio():
     assert "Register-ScheduledTask" in source.split("if (-not $Apply)", 1)[1]
 
 
+def test_instalador_admite_modo_usuario_sin_elevar_permisos():
+    source = (ROOT / "scripts/operations/install_sentinel_task.ps1").read_text(encoding="utf-8")
+    assert "[switch]$CurrentUser" in source
+    assert "-AtLogOn" in source
+    assert "-LogonType Interactive" in source
+    assert "-not $CurrentUser -and -not (Test-IsAdministrator)" in source
+
+
 def test_desinstalador_conserva_datos_y_requiere_apply():
     source = (ROOT / "scripts/operations/uninstall_sentinel_task.ps1").read_text(encoding="utf-8")
     assert "[switch]$Apply" in source

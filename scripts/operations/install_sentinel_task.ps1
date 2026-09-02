@@ -7,7 +7,8 @@ param(
     [string]$PythonExe = "",
     [string]$TaskName = "MRD Sentinel 24x7",
     [switch]$Apply,
-    [switch]$NoStart
+    [switch]$NoStart,
+    [switch]$CurrentUser
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,17 +58,25 @@ try {
 
 Write-Host "Plan de instalacion de MRD Sentinel 24x7:" -ForegroundColor Cyan
 Write-Host "- Crear o actualizar la tarea '$TaskName'"
-Write-Host "- Ejecutarla como SYSTEM al arrancar Windows"
+if ($CurrentUser) {
+    Write-Host "- Ejecutarla con la cuenta actual al iniciar sesion (no requiere administrador)"
+} else {
+    Write-Host "- Ejecutarla como SYSTEM al arrancar Windows"
+}
 Write-Host "- Mantenerla activa con bateria y reiniciarla si se cierra"
 Write-Host "- Iniciar el panel local en http://127.0.0.1:9100"
 Write-Host "- No modificar MRD Tool Control, Cloudflare ni sus datos"
 Write-Host "- Python verificado: $PythonExe"
 
 if (-not $Apply) {
-    Write-Host "Modo vista previa. Use -Apply como Administrador para aplicar." -ForegroundColor Yellow
+    if ($CurrentUser) {
+        Write-Host "Modo vista previa. Use -Apply para instalar con la cuenta actual." -ForegroundColor Yellow
+    } else {
+        Write-Host "Modo vista previa. Use -Apply como Administrador para aplicar." -ForegroundColor Yellow
+    }
     exit 0
 }
-if (-not (Test-IsAdministrator)) {
+if (-not $CurrentUser -and -not (Test-IsAdministrator)) {
     throw "Ejecute PowerShell como Administrador."
 }
 
@@ -75,11 +84,20 @@ $action = New-ScheduledTaskAction `
     -Execute $PythonExe `
     -Argument "-m sentinel.service run" `
     -WorkingDirectory $RepositoryRoot
-$startupTrigger = New-ScheduledTaskTrigger -AtStartup
-$principal = New-ScheduledTaskPrincipal `
-    -UserId "SYSTEM" `
-    -LogonType ServiceAccount `
-    -RunLevel Highest
+if ($CurrentUser) {
+    $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $startupTrigger = New-ScheduledTaskTrigger -AtLogOn -User $currentIdentity
+    $principal = New-ScheduledTaskPrincipal `
+        -UserId $currentIdentity `
+        -LogonType Interactive `
+        -RunLevel Limited
+} else {
+    $startupTrigger = New-ScheduledTaskTrigger -AtStartup
+    $principal = New-ScheduledTaskPrincipal `
+        -UserId "SYSTEM" `
+        -LogonType ServiceAccount `
+        -RunLevel Highest
+}
 $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
     -AllowStartIfOnBatteries `
