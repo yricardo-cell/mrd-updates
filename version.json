@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.7",
-    "nombre":  "MRD TOOL CONTROL -- Corrige superposicion de codigos largos en Informe EPIs por Trabajador",
+    "version_actual":  "2.7.8",
+    "nombre":  "MRD TOOL CONTROL -- Corrige duplicados en la importacion masiva de trabajadores por Excel",
     "fecha":  "2026-09-02",
     "cambios":  [
-                    "Corrige superposicion de codigos largos en Informe EPIs por Trabajador"
+                    "Corrige duplicados en la importacion masiva de trabajadores por Excel"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.7.zip",
-    "sha256":  "f9d563f0b5fc1bafe9cde4d62da52ea76ded509ccaf2dcadacc0aa0ef4fce80e"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.8.zip",
+    "sha256":  "80839e9ca537e7c65131ceb7f1f7b1addd04fafc3e58f12ad2dcb4b4b2b0bf79"
 }
