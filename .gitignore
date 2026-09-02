@@ -30,6 +30,9 @@ actulizaciones/
 .service_restart
 .recovery_history.json
 
+# Credenciales de Cloudflare Tunnel (nunca deben publicarse)
+private_config/
+
 # Python
 __pycache__/
 *.py[cod]
