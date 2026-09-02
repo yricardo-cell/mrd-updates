@@ -141,6 +141,33 @@ def test_detector_usa_tiempos_solo_para_clasificar_escritura_manual():
     assert result["scannerLike"] is False
 
 
+def test_detector_reconoce_lector_bluetooth_lento_pero_regular():
+    # Un lector Bluetooth con latencia constante (~300ms/tecla) no llega a
+    # fastRatio, pero su ritmo es casi perfectamente uniforme: eso lo
+    # distingue de una persona escribiendo a mano, cuyo ritmo real siempre
+    # varía. No debe confundirse con el caso anterior (600ms, sigue siendo
+    # manual): la franja "paced" solo cubre latencias de escáner plausibles.
+    value = "MRD-MAQ-ST300-002"
+    result = _node_detector(_keys(value, step=300))[-1]
+    assert result["code"] == value
+    assert result["scannerLike"] is True
+    assert result["paced"] is True
+
+
+def test_detector_escritura_humana_irregular_no_se_confunde_con_lector_lento():
+    # Misma media (~300ms) que el caso anterior, pero con la variacion
+    # tipica de una persona tecleando: no debe activarse "paced".
+    events = []
+    current = 0
+    for delta in (120, 480, 210, 390, 260, 340, 180, 420, 300, 260, 350, 230, 310, 270, 330, 290, 250):
+        current += delta
+        events.append({"key": "x", "at": current})
+    events.append({"key": "Enter", "at": current + 300, "complete": "MRD-MAQ-ST300-003"})
+    result = _node_detector(events)[-1]
+    assert result["scannerLike"] is False
+    assert result["paced"] is False
+
+
 def test_detector_evitar_doble_lectura_simultanea_sin_bloquear_otro_codigo():
     first = _keys("TOOL-001", start=0, step=25)
     second = _keys("TOOL-001", start=350, step=25)

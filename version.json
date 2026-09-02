@@ -1,11 +1,12 @@
 {
-  "version_actual": "2.7.11",
-  "version_anterior": "2.7.10",
+  "version_actual": "2.7.12",
+  "version_anterior": "2.7.11",
   "nombre": "MRD TOOL CONTROL",
   "edicion": "Centro operativo avanzado de almacenes",
   "fecha": "2026-09-02",
   "estado": "estable",
   "cambios": [
+    "Escáner: reconocidos los lectores Bluetooth con latencia constante (p. ej. 150-400 ms/tecla) que antes se confundían con tecleo manual por no alcanzar el ratio de velocidad esperado. Nuevo criterio 'paced' basado en el coeficiente de variación entre pulsaciones (ritmo uniforme = lector; ritmo irregular = persona escribiendo), con pruebas de regresión que cubren ambos casos.",
     "Añadido índice que faltaba en variantes_epi.referencia_proveedor (autorreparación en el arranque vía database.py) para agilizar la búsqueda de variantes de EPI por referencia de proveedor.",
     "Añadida prueba de regresión que verifica que el envío de stock EPI no permite doble pulsación/envío simultáneo desde /scan (bloqueo de botones, guardia de evento en curso, un solo scan_event_id por operación).",
     "Corregido el prefijo de datos incrustado en el QR de las etiquetas (herramientas y EPI): usaba 'LA,' por un error de origen y ahora usa 'MA,' de forma consistente en los dos generadores de etiquetas de la aplicación (label_printer.py y etiquetas_service.py), con prueba de regresión que compara ambos.",

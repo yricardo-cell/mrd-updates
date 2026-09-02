@@ -613,7 +613,10 @@ const GlobalScanner = (() => {
   let capturedSelection = null;
 
   function profile() {
-    const defaults = { minLength: 3, maxAverageMs: 220, resetMs: 5000, fastRatio: 0.6, dedupeMs: 900 };
+    const defaults = {
+      minLength: 3, maxAverageMs: 220, resetMs: 5000, fastRatio: 0.6, dedupeMs: 900,
+      pacedMaxCv: 0.25, pacedMaxAverageMs: 400,
+    };
     try { return { ...defaults, ...JSON.parse(localStorage.getItem('mrd_scanner_profile') || '{}') }; }
     catch (_) { return defaults; }
   }
@@ -664,6 +667,7 @@ const GlobalScanner = (() => {
     if (!detector) detector = new MRDScannerHID.Detector({
       minLength: cfg.minLength, fastKeyMs: cfg.maxAverageMs,
       resetMs: cfg.resetMs, fastRatio: cfg.fastRatio, dedupeMs: cfg.dedupeMs,
+      pacedMaxCv: cfg.pacedMaxCv, pacedMaxAverageMs: cfg.pacedMaxAverageMs,
     });
     if (event.key.length === 1 && !detector.buffer) captureField(event.target);
     // En campos de trabajo usamos su valor completo, igual que /scan. Esto
