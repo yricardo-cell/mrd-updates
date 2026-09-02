@@ -214,7 +214,7 @@ def test_pwa_se_sirve_desde_raiz_y_puede_controlar_toda_la_app(client):
     response = client.get("/sw.js")
     assert response.status_code == 200
     assert response.headers["service-worker-allowed"] == "/"
-    assert "mrd-static-v2.7.6" in response.text
+    assert "mrd-static-v2.7.7" in response.text
 
 
 def test_listado_herramientas_usa_miniaturas_y_carga_diferida():

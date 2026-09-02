@@ -1,11 +1,12 @@
 {
-  "version_actual": "2.7.6",
-  "version_anterior": "2.7.5",
+  "version_actual": "2.7.7",
+  "version_anterior": "2.7.6",
   "nombre": "MRD TOOL CONTROL",
   "edicion": "Centro operativo avanzado de almacenes",
-  "fecha": "2026-09-01",
+  "fecha": "2026-09-02",
   "estado": "estable",
   "cambios": [
+    "Corregida la superposición de códigos de fabricación largos en el Informe de EPIs por Trabajador (Stock disponible): ahora se parten limpiamente dentro del badge en vez de solaparse, con una clase CSS propia que no afecta al resto de badges de la aplicación.",
     "Publicador de actualizaciones controlado: PUBLICAR_ACTUALIZACION.ps1 admite ahora parámetros de versión, descripción y modo sin pausa (-Version, -Descripcion, -NoPause) para automatizar la publicación de nuevas versiones en GitHub sin intervención manual.",
     "Corregidos los filtros vacíos de Movimientos para que buscar sin seleccionar trabajador, usuario o fechas no produzca un error de validación.",
     "Corregido definitivamente el error 409 al pedir material desde el portal: las bases antiguas se actualizan de forma segura al flujo actual, conservando solicitudes y permitiendo todos los estados hasta la entrega.",
