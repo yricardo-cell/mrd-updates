@@ -86,6 +86,62 @@
     _injectCsrf(this);
     _origSubmit.call(this);
   };
+
+  // ── Formularios data-csrf-safe="1": envío por fetch con reintento automático ──
+  // Si el 403 es por CSRF, se refresca el token (GET a la página actual, que
+  // fuerza al middleware a emitir cookie nueva) y se reintenta una vez sin
+  // perder los datos ya escritos. Si el reintento también falla, se muestra
+  // un aviso con botón "Reintentar" en vez de expulsar al usuario a la home.
+  function _csrfSafeBanner(form,onRetry){
+    var old=form.querySelector('.mrd-csrf-retry-banner');
+    if(old)old.remove();
+    var div=document.createElement('div');
+    div.className='alert alert-warning mrd-csrf-retry-banner';
+    div.style.marginBottom='12px';
+    div.innerHTML='No se pudo verificar la sesión de seguridad. Tus datos siguen aquí. '
+      +'<button type="button" class="btn btn-sm btn-warning">Reintentar</button>';
+    div.querySelector('button').addEventListener('click',function(){
+      div.remove();
+      onRetry();
+    });
+    form.insertBefore(div,form.firstChild);
+  }
+  function _csrfSafeRender(html,url){
+    document.open();
+    document.write(html);
+    document.close();
+    try{history.replaceState(null,'',url);}catch(_e){}
+  }
+  function _csrfSafeSubmit(form,isRetry){
+    var fd=new FormData(form);
+    var action=form.getAttribute('action')||location.href;
+    var method=(form.getAttribute('method')||'POST').toUpperCase();
+    fetch(action,{method:method,body:fd,credentials:'same-origin',headers:{'Accept':'application/json, text/html'}})
+      .then(function(resp){
+        var ct=resp.headers.get('content-type')||'';
+        if(resp.status===403&&ct.indexOf('application/json')!==-1){
+          return resp.json().then(function(data){
+            if(data&&data.error==='csrf'&&!isRetry){
+              return fetch(location.href,{method:'GET',credentials:'same-origin'}).then(function(){
+                return _csrfSafeSubmit(form,true);
+              });
+            }
+            _csrfSafeBanner(form,function(){_csrfSafeSubmit(form,false);});
+          });
+        }
+        return resp.text().then(function(html){ _csrfSafeRender(html,resp.url||action); });
+      })
+      .catch(function(){
+        _csrfSafeBanner(form,function(){_csrfSafeSubmit(form,false);});
+      });
+  }
+  document.addEventListener('submit',function(e){
+    var form=e.target;
+    if(form&&form.tagName==='FORM'&&form.getAttribute('data-csrf-safe')==='1'){
+      e.preventDefault();
+      _csrfSafeSubmit(form,false);
+    }
+  },true);
 })();
 </script>
 

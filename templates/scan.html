@@ -64,6 +64,21 @@
   border:none; color:#fff; cursor:pointer; font-size:1.1rem; transition:all .15s;
 }
 .scan-input-wrap button:hover { filter:brightness(1.1); }
+.scan-input-wrap button:disabled { opacity:.7; cursor:default; filter:none; }
+
+/* ── Indicador "Buscando…" ── */
+.scan-searching-badge {
+  display:flex; align-items:center; gap:8px; margin:-6px 0 14px;
+  padding:8px 12px; border-radius:8px; background:rgba(59,130,246,.08);
+  border:1px solid rgba(59,130,246,.2); color:#3b82f6; font-size:.8rem; font-weight:600;
+}
+.scan-spinner {
+  width:14px; height:14px; border-radius:50%; flex-shrink:0;
+  border:2px solid rgba(59,130,246,.25); border-top-color:#3b82f6;
+  animation:scan-spin .7s linear infinite;
+}
+.scan-spin { display:inline-block; animation:scan-spin .7s linear infinite; }
+@keyframes scan-spin { to { transform:rotate(360deg); } }
 
 /* ── Resultado ── */
 #scan-result-box { display:none; }
@@ -212,9 +227,13 @@
               spellcheck="false" inputmode="text" enterkeyhint="search"
               autofocus onkeydown="_onScanKeydown(event)"
             >
-            <button type="submit" title="Buscar"><i class="bi bi-search"></i></button>
+            <button type="submit" id="scan-submit-btn" title="Buscar"><i class="bi bi-search"></i></button>
           </div>
         </form>
+
+        <div id="scan-searching" class="scan-searching-badge" role="status" aria-live="polite" hidden>
+          <span class="scan-spinner" aria-hidden="true"></span> Buscando…
+        </div>
 
         <div id="scan-result-box"><div id="scan-result-content"></div></div>
         <div id="scan-error-box">
@@ -536,6 +555,24 @@ document.addEventListener('click', function(e) {
 
 // ── Búsqueda ─────────────────────────────────────────────────────
 var _lastLookupCode = '', _lastLookupAt = 0;
+// Guardan la búsqueda en curso: _scanAbort cancela la petición de red al
+// llegar un código distinto; _scanSeq evita que una respuesta ya superada
+// pinte resultados encima de una lectura más reciente.
+var _scanAbort = null, _scanActiveCode = '', _scanSeq = 0;
+function _mrdCancelledError() {
+  var err = new Error('MRD_SCAN_CANCELLED');
+  err.mrdCancelled = true;
+  return err;
+}
+function setBuscandoUI(activo) {
+  var btn = document.getElementById('scan-submit-btn');
+  var badge = document.getElementById('scan-searching');
+  if (btn) {
+    btn.disabled = activo;
+    btn.innerHTML = activo ? '<i class="bi bi-arrow-repeat scan-spin"></i>' : '<i class="bi bi-search"></i>';
+  }
+  if (badge) badge.hidden = !activo;
+}
 var _pendingScanKey = 'mrd.pendingScans.v1';
 function _pendingScans() {
   try {
@@ -556,42 +593,57 @@ function refocusScanInput(force) {
     active.matches && active.matches('input,textarea,select,button,[contenteditable="true"]');
   if (input && (force || !userIsEditing)) input.focus();
 }
-async function fetchCodigoConReintento(codigo) {
-  var url = '/scan/buscar?codigo=' + encodeURIComponent(codigo);
-  for (var intento = 0; intento < 2; intento++) {
-    var controller = new AbortController();
-    var timeout = setTimeout(function() { controller.abort(); }, 6000);
-    try {
-      var response = await fetch(url, {
-        cache: 'no-store', headers: {'Accept':'application/json'}, signal: controller.signal
-      });
-      if (response.status >= 500 && intento === 0) continue;
-      return response;
-    } catch (error) {
-      if (intento === 0) continue;
-      if (error.name === 'AbortError') {
-        throw new Error('La búsqueda tardó demasiado. Comprueba la conexión y vuelve a escanear.');
-      }
-      throw new Error('No hay conexión con MRD. Comprueba la red y vuelve a intentarlo.');
-    } finally {
-      clearTimeout(timeout);
-    }
+var SCAN_FETCH_TIMEOUT_MS = 8000;
+async function fetchCodigoConTimeout(codigo, controller) {
+  // Cancelación intencionada (llegó un código distinto): controller.signal ya
+  // está abortado en ese momento, antes de que dispare el timeout.
+  if (controller.signal.aborted) throw _mrdCancelledError();
+  var timedOut = false;
+  var timer = setTimeout(function () { timedOut = true; controller.abort(); }, SCAN_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch('/scan/buscar?codigo=' + encodeURIComponent(codigo), {
+      cache: 'no-store', headers: {'Accept':'application/json'}, signal: controller.signal
+    });
+  } catch (error) {
+    // Mismo AbortController para las dos causas: distinguimos por el
+    // temporizador, no por el signal, para no confundir timeout con cancelación.
+    if (timedOut) throw new Error('La búsqueda tardó demasiado. Comprueba la conexión y vuelve a escanear.');
+    if (controller.signal.aborted) throw _mrdCancelledError();
+    throw error; // Error de red real (sin conexión, DNS, etc.)
+  } finally {
+    clearTimeout(timer);
   }
-  throw new Error('MRD no responde en este momento. Vuelve a intentarlo.');
 }
 async function buscarCodigo(event, codigoExterno, esEscaner, desdePendientes) {
   if (event) event.preventDefault();
   var input = document.getElementById('scan-input');
   var codigo = (codigoExterno || input.value).trim();
   if (!codigo || codigo.length < 2) return;
+
+  // Doble clic o segunda lectura del mismo código mientras ya se está
+  // resolviendo: se ignora, no se relanza la búsqueda.
+  if (!desdePendientes && _scanActiveCode === codigo) return;
+
   var lookupNow = Date.now();
   if (!desdePendientes && codigo === _lastLookupCode && lookupNow - _lastLookupAt < 900) return;
   _lastLookupCode = codigo; _lastLookupAt = lookupNow;
+
+  // Llega un código distinto: cancela la búsqueda anterior (si sigue en
+  // vuelo) para que su respuesta, cuando llegue, no pise a esta.
+  if (_scanAbort) { try { _scanAbort.abort(); } catch (_) {} }
+  var myAbort = new AbortController();
+  var mySeq = ++_scanSeq;
+  _scanAbort = myAbort;
+  _scanActiveCode = codigo;
+
   ocultarResultados();
+  setBuscandoUI(true);
   var completed = false;
   try {
-    var resp = await fetchCodigoConReintento(codigo);
+    var resp = await fetchCodigoConTimeout(codigo, myAbort);
+    if (mySeq !== _scanSeq) return completed; // Superada por una lectura más reciente.
     var data = await resp.json().catch(function(){ return {}; });
+    if (mySeq !== _scanSeq) return completed;
     if (!resp.ok) throw new Error(data.detail || ('Error del escáner (' + resp.status + ')'));
     completed = true;
     if (data.found) {
@@ -618,6 +670,8 @@ async function buscarCodigo(event, codigoExterno, esEscaner, desdePendientes) {
       mostrarError((data.detail || 'No se encontró ningún activo con ese código.') + normalizedInfo, codigo);
     }
   } catch(e) {
+    if (e && e.mrdCancelled) return completed; // Cancelación intencionada: no se muestra como error.
+    if (mySeq !== _scanSeq) return completed; // Error de una lectura ya superada: se ignora en pantalla.
     beepError();
     if (!navigator.onLine && !desdePendientes) {
       guardarEscaneoPendiente(codigo);
@@ -626,7 +680,14 @@ async function buscarCodigo(event, codigoExterno, esEscaner, desdePendientes) {
       mostrarError(e.message || 'Error de conexión al buscar el código.');
     }
     _logScanError('SEARCH_ERROR', { message: e.message });
+  } finally {
+    if (mySeq === _scanSeq) {
+      setBuscandoUI(false);
+      _scanAbort = null;
+      _scanActiveCode = '';
+    }
   }
+  if (mySeq !== _scanSeq) return completed;
   if (!codigoExterno) input.value = '';
   refocusScanInput(false);
   return completed;
@@ -651,8 +712,11 @@ async function sincronizarEscaneosPendientes() {
 
 // ── Stock EPI: modal cantidad ─────────────────────────────────────
 var _currentStockEPI = null;
+var _stockEPIBusy = false;
+var _pendingStockEPIEventId = null;
 function abrirModalStockEPI(data) {
   _currentStockEPI = data;
+  _pendingStockEPIEventId = null;
   document.getElementById('sepi-nombre').textContent = data.nombre;
   document.getElementById('sepi-stock').textContent = 'Stock actual: ' + data.cantidad + ' uds';
   document.getElementById('sepi-qty').value = 1;
@@ -663,19 +727,24 @@ function abrirModalStockEPI(data) {
 function cerrarModalStockEPI() {
   document.getElementById('modal-stock-epi').classList.remove('show');
   _currentStockEPI = null;
+  _pendingStockEPIEventId = null;
   refocusScanInput(true);
 }
 function operarStockEPI(accion) {
-  if (!_currentStockEPI) return;
+  if (!_currentStockEPI || _stockEPIBusy) return;
   var qty = parseInt(document.getElementById('sepi-qty').value) || 0;
   if (qty <= 0) { document.getElementById('sepi-status').textContent = 'Introduce una cantidad válida.'; return; }
   var status = document.getElementById('sepi-status');
   status.textContent = 'Guardando…';
+  _stockEPIBusy = true;
+  var botones = document.querySelectorAll('#modal-stock-epi .modal-confirm-btn');
+  botones.forEach(function(b){ b.disabled = true; });
+  _pendingStockEPIEventId = _pendingStockEPIEventId || nuevoScanEventId();
   fetch('/scan/stock-epi-operar', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      scan_event_id: nuevoScanEventId(),
+      scan_event_id: _pendingStockEPIEventId,
       stock_epi_id: _currentStockEPI.id,
       accion: accion,
       cantidad: qty,
@@ -685,12 +754,17 @@ function operarStockEPI(accion) {
     if (d.ok) {
       status.style.color = '#22c55e';
       status.textContent = (accion === 'entrada' ? '✓ Entrada' : '✓ Salida') + ' de ' + qty + ' uds registrada. Nuevo stock: ' + d.cantidad_nueva;
+      _pendingStockEPIEventId = null;
       setTimeout(cerrarModalStockEPI, 1800);
     } else {
       status.style.color = '#ef4444';
       status.textContent = d.detail || 'Error al registrar.';
     }
-  }).catch(function(){ status.style.color='#ef4444'; status.textContent='Error de conexión.'; });
+  }).catch(function(){ status.style.color='#ef4444'; status.textContent='Error de conexión.'; })
+    .finally(function(){
+      _stockEPIBusy = false;
+      botones.forEach(function(b){ b.disabled = false; });
+    });
 }
 
 // ── Resultado ────────────────────────────────────────────────────

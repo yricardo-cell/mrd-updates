@@ -23,7 +23,7 @@
 
 <div class="card" style="max-width:640px">
   <div class="card-body" style="padding:24px">
-    <form method="post" action="{% if es_herramienta %}/herramienta/{{ maquina.id }}/salida/crear{% else %}/maquinaria/{{ maquina.id }}/salida/crear{% endif %}">
+    <form method="post" action="{% if es_herramienta %}/herramienta/{{ maquina.id }}/salida/crear{% else %}/maquinaria/{{ maquina.id }}/salida/crear{% endif %}" data-csrf-safe="1">
 
       {% if es_geda %}
       <div class="mb-3">

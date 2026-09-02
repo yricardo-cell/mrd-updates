@@ -516,6 +516,60 @@ def test_scan_fetch_rechaza_redireccion_login_y_respuesta_no_json():
     assert "fetch('/scan/cambios?inicializar=true&limite=1')" in html
 
 
+def test_scan_buscar_protege_contra_dobles_clics_y_respuestas_fuera_de_orden():
+    html = (main.BASE_DIR / "templates" / "scan.html").read_text(encoding="utf-8")
+    # Doble clic / segunda lectura del mismo código mientras ya se resuelve.
+    assert "if (!desdePendientes && _scanActiveCode === codigo) return;" in html
+    # Un código distinto cancela la búsqueda anterior con el mismo AbortController.
+    assert "if (_scanAbort) { try { _scanAbort.abort(); } catch (_) {} }" in html
+    assert "var myAbort = new AbortController();" in html
+    # Número de secuencia: una respuesta obsoleta no puede pisar a una más reciente.
+    assert "var mySeq = ++_scanSeq;" in html
+    assert html.count("if (mySeq !== _scanSeq) return completed;") >= 3
+    # El botón/indicador solo lo restaura la petición vigente.
+    assert "if (mySeq === _scanSeq) {\n      setBuscandoUI(false);" in html
+
+
+def test_scan_buscar_distingue_cancelacion_intencionada_de_error_real():
+    html = (main.BASE_DIR / "templates" / "scan.html").read_text(encoding="utf-8")
+    assert "err.mrdCancelled = true;" in html
+    # La cancelación se resuelve antes que cualquier otro manejo de errores y no se registra.
+    assert "if (e && e.mrdCancelled) return completed; // Cancelación intencionada: no se muestra como error." in html
+    assert "if (controller.signal.aborted) throw _mrdCancelledError();" in html
+
+
+def test_scan_buscar_usa_timeout_finito_sin_reintentos_automaticos():
+    html = (main.BASE_DIR / "templates" / "scan.html").read_text(encoding="utf-8")
+    assert "var SCAN_FETCH_TIMEOUT_MS = 8000;" in html
+    assert "async function fetchCodigoConTimeout(codigo, controller)" in html
+    assert "timedOut = true; controller.abort(); }, SCAN_FETCH_TIMEOUT_MS);" in html
+    assert "throw new Error('La búsqueda tardó demasiado. Comprueba la conexión y vuelve a escanear.');" in html
+    # No debe existir un bucle de reintentos automáticos (fuera de alcance de esta tanda).
+    assert "fetchCodigoConReintento" not in html
+    assert "for (var intento" not in html
+
+
+def test_scan_buscar_indicador_visual_y_boton_siempre_se_recuperan():
+    html = (main.BASE_DIR / "templates" / "scan.html").read_text(encoding="utf-8")
+    assert 'id="scan-submit-btn"' in html
+    assert 'id="scan-searching" class="scan-searching-badge" role="status" aria-live="polite" hidden' in html
+    assert "function setBuscandoUI(activo) {" in html
+    assert "btn.disabled = activo;" in html
+    assert "if (badge) badge.hidden = !activo;" in html
+
+
+def test_scan_buscar_mantiene_cola_offline_existente_intacta():
+    html = (main.BASE_DIR / "templates" / "scan.html").read_text(encoding="utf-8")
+    assert "var _pendingScanKey = 'mrd.pendingScans.v1';" in html
+    assert "function guardarEscaneoPendiente(codigo) {" in html
+    assert "localStorage.setItem(_pendingScanKey, JSON.stringify(rows.slice(-100)));" in html
+    assert "showToast('Lectura guardada. Se comprobará cuando vuelva la conexión.', 'info');" in html
+    assert "async function sincronizarEscaneosPendientes() {" in html
+    assert "window.addEventListener('online', sincronizarEscaneosPendientes);" in html
+    # Solo un error real sin conexión guarda en la cola; cancelación/obsoleta ya salieron antes.
+    assert "if (!navigator.onLine && !desdePendientes) {\n      guardarEscaneoPendiente(codigo);" in html
+
+
 def test_scan_operar_http_con_login_y_csrf_reales_devuelve_json(client, db):
     password = "ScanHttp@2026!"
     user = Usuario(

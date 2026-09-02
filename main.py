@@ -512,6 +512,9 @@ _CSRF_EXENTOS = {
 
 def _csrf_403(request: Request, detalle: str = "") -> Response:
     msg = detalle or "Token de seguridad inválido. Recarga la página e inténtalo de nuevo."
+    accept = request.headers.get("accept", "")
+    if "application/json" in accept:
+        return JSONResponse({"error": "csrf", "detail": msg}, status_code=403)
     return HTMLResponse(
         content=(
             f'<html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3;url=/">'
@@ -549,6 +552,10 @@ async def csrf_middleware(request: Request, call_next):
             else:
                 # ── 2. Verificar desde body (form submit nativo) ──────────────
                 if not csrf_cookie:
+                    mrd_logging.log_security(
+                        f"CSRF inválido (sin cookie): path={request.url.path} "
+                        f"ip={request.client.host if request.client else '?'}"
+                    )
                     return _csrf_403(request, "Sesión de seguridad no iniciada. Recarga la página.")
                 try:
                     body = await request.body()
