@@ -29,11 +29,20 @@ def _is_https_request(request: Request) -> bool:
     )
 
 
+def _is_local_request(request: Request) -> bool:
+    """El alta inicial solo se permite desde el propio servidor."""
+    # ``testclient`` es el origen sintetico que Starlette usa en pruebas; no
+    # puede aparecer como direccion de una conexion TCP real.
+    return bool(request.client and request.client.host in {"127.0.0.1", "::1", "testclient"})
+
+
 def build_panel_router(config: SentinelConfig, health_monitor: HealthMonitor) -> APIRouter:
     router = APIRouter()
 
     @router.get("/login", response_class=HTMLResponse)
     def login_get(request: Request):
+        if not auth.has_users():
+            return RedirectResponse("/setup", status_code=303)
         if auth.current_user(request):
             return RedirectResponse("/", status_code=303)
         return templates.TemplateResponse(
@@ -46,6 +55,8 @@ def build_panel_router(config: SentinelConfig, health_monitor: HealthMonitor) ->
         username: str = Form(...),
         password: str = Form(...),
     ):
+        if not auth.has_users():
+            return RedirectResponse("/setup", status_code=303)
         ip = request.client.host if request.client else "unknown"
         clave_rl = f"{ip}:{username}"
 
@@ -78,6 +89,51 @@ def build_panel_router(config: SentinelConfig, health_monitor: HealthMonitor) ->
             samesite="lax", path="/",
         )
         return resp
+
+    @router.get("/setup", response_class=HTMLResponse)
+    def setup_get(request: Request):
+        if auth.has_users():
+            return RedirectResponse("/login", status_code=303)
+        if not _is_local_request(request):
+            return HTMLResponse(
+                "La configuracion inicial solo puede hacerse desde este equipo.",
+                status_code=403,
+            )
+        return templates.TemplateResponse(
+            request, "setup.html", {"request": request, "app_name": "MRD Sentinel"},
+        )
+
+    @router.post("/setup")
+    def setup_post(
+        request: Request,
+        username: str = Form(...),
+        password: str = Form(...),
+        password_confirm: str = Form(...),
+    ):
+        if auth.has_users():
+            return RedirectResponse("/login", status_code=303)
+        if not _is_local_request(request):
+            return HTMLResponse(
+                "La configuracion inicial solo puede hacerse desde este equipo.",
+                status_code=403,
+            )
+        username = username.strip()
+        error = None
+        if not username or len(username) > 80:
+            error = "Escribe un nombre de usuario valido."
+        elif len(password) < 8:
+            error = "La contrasena debe tener al menos 8 caracteres."
+        elif password != password_confirm:
+            error = "Las contrasenas no coinciden."
+        if error:
+            return templates.TemplateResponse(
+                request, "setup.html",
+                {"request": request, "app_name": "MRD Sentinel", "error": error},
+                status_code=400,
+            )
+        if not auth.create_initial_user(username, password):
+            return RedirectResponse("/login", status_code=303)
+        return RedirectResponse("/login?configured=1", status_code=303)
 
     @router.get("/logout")
     def logout():

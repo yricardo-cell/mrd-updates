@@ -18,6 +18,8 @@ config/production.env
 config/*.env
 config/*.token
 config/vapid_keys.json
+sentinel/config/users.json
+sentinel/config/secret.key
 *.token
 
 # Actualizaciones

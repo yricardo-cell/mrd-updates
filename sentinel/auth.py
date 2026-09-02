@@ -38,6 +38,7 @@ _BLOQUEO_SEGUNDOS = 300  # 5 minutos
 
 _login_attempts: dict = {}  # {ip_o_user: {"count": int, "locked_until": float}}
 _login_lock = threading.Lock()
+_users_lock = threading.Lock()
 
 
 def _get_secret_key() -> str:
@@ -80,12 +81,37 @@ def _save_users(users: dict) -> None:
 
 
 def create_user(username: str, password: str) -> None:
-    users = _load_users()
-    users[username] = {
-        "password_hash": hash_password(password),
-        "created_at": datetime.utcnow().isoformat(),
-    }
-    _save_users(users)
+    with _users_lock:
+        users = _load_users()
+        users[username] = {
+            "password_hash": hash_password(password),
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        _save_users(users)
+
+
+def has_users() -> bool:
+    """Indica si Sentinel ya tiene al menos una cuenta configurada."""
+    return bool(_load_users())
+
+
+def create_initial_user(username: str, password: str) -> bool:
+    """Crea la primera cuenta una sola vez.
+
+    Devuelve ``False`` si otra peticion o el administrador ya habia creado
+    una cuenta. El bloqueo evita que dos aperturas simultaneas del asistente
+    inicial sobrescriban la configuracion.
+    """
+    with _users_lock:
+        users = _load_users()
+        if users:
+            return False
+        users[username] = {
+            "password_hash": hash_password(password),
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        _save_users(users)
+        return True
 
 
 def authenticate(username: str, password: str) -> bool:
