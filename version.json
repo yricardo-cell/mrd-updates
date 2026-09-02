@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.8",
-    "nombre":  "MRD TOOL CONTROL -- Corrige duplicados en la importacion masiva de trabajadores por Excel",
-    "fecha":  "2026-09-02",
-    "cambios":  [
-                    "Corrige duplicados en la importacion masiva de trabajadores por Excel"
-                ],
-    "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.8.zip",
-    "sha256":  "80839e9ca537e7c65131ceb7f1f7b1addd04fafc3e58f12ad2dcb4b4b2b0bf79"
+  "version_actual": "2.7.9",
+  "nombre": "MRD TOOL CONTROL -- Corrige el error 403 por token CSRF caducado (perdida de datos en formularios) y la cancelacion real del escaner del Mostrador Unico.",
+  "fecha": "2026-09-02",
+  "cambios": [
+    "Corrige el error 403 por token CSRF caducado (perdida de datos en formularios) y la cancelacion real del escaner del Mostrador Unico."
+  ],
+  "notas": "Instala desde Configuracion > Actualizaciones.",
+  "download_url": "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.9.zip",
+  "sha256": "d7f5748558eb2929caf8e8c34ceb810591b1df3d060b47a9e8e93f1f72b928d0"
 }
