@@ -127,10 +127,19 @@ $robocopyArgs = @(
            "private_config", "graphify-out", "repair_stage",
     "/XF", "*.log", "*.bak", "*.bak_edit", "desktop.ini", "*.pyc",
            "*.exe", "*.db", "*.db-wal", "*.db-shm",
-           "local.env", "github.token", "vapid_keys.json", ".service_restart",
+           "local.env", "*.token", "vapid_keys.json", ".service_restart",
     "/NFL", "/NDL", "/NJH", "/NJS"
 )
 & robocopy @robocopyArgs | Out-Null
+
+# Verificacion de seguridad: ningun *.token (ni otro secreto conocido) debe
+# llegar al paquete publico. robocopy copia del disco, no de git, asi que
+# .gitignore no protege aqui - esta es la unica red de seguridad real.
+$secretosEncontrados = Get-ChildItem -Path $destino -Recurse -File -Include "*.token","local.env","vapid_keys.json" -ErrorAction SilentlyContinue
+if ($secretosEncontrados) {
+    $lista = ($secretosEncontrados | ForEach-Object { $_.FullName.Substring($destino.Length) }) -join "`n    "
+    Pausar "ERROR: se encontraron archivos secretos en el paquete, publicacion abortada:`n    $lista"
+}
 
 Compress-Archive -Path "$destino\*" -DestinationPath $zipTmp -Force
 
