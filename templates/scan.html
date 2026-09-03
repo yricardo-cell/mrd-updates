@@ -532,9 +532,14 @@ var _scanHidDetector = new MRDScannerHID.Detector({
 function _onScanKeydown(e) {
   var now = Date.now();
   var scanInput = document.getElementById('scan-input');
-  var codigoCompleto = scanInput.value;
-  var result = _scanHidDetector.feed(e.key, now, codigoCompleto);
+  // #scan-input es siempre un campo de escaneo dedicado: usamos el buffer
+  // ordenado por keydown del detector en vez de scanInput.value. En lectores
+  // Bluetooth/Android rápidos el valor del input puede repintarse con
+  // retraso, perdiendo o recolocando caracteres aunque los eventos hayan
+  // llegado en el orden correcto (mismo ajuste que GlobalScanner en mrd.js).
+  var result = _scanHidDetector.feed(e.key, now);
   if (result.terminated) {
+    var codigoCompleto = result.code;
     if (codigoCompleto.trim().length >= 2) {
       e.preventDefault();
       // Una lectura terminada pertenece a un único disparo. Se vacía antes de

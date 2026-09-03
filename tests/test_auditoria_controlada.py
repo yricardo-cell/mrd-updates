@@ -319,10 +319,10 @@ def test_pwa_publica_detector_y_version_candidata_real():
     sw = (ROOT / "static/js/sw.js").read_text(encoding="utf-8")
     base = (ROOT / "templates/base.html").read_text(encoding="utf-8")
     version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
-    assert version["version_actual"] == "2.7.18"
+    assert version["version_actual"] == "2.7.19"
     assert version["estado"] == "estable"
     assert "/static/js/scanner_hid.js" in sw
-    assert "mrd-static-v2.7.18" in sw
+    assert "mrd-static-v2.7.19" in sw
     assert 'scanner_hid.js?v={{ version }}"></script>' in base
 
 
@@ -335,7 +335,12 @@ def test_pistola_bluetooth_tablet_carga_detector_y_recupera_foco_sin_robar_campo
     assert scan_scripts.index("{% endblock %}") < scan_scripts.index("{% block extra_js %}") < scan_scripts.index("function _loadZXing")
     assert 'autofocus onkeydown="_onScanKeydown(event)"' in scan
     assert "var scanInput = document.getElementById('scan-input')" in scan
-    assert "var codigoCompleto = scanInput.value" in scan
+    # #scan-input es un campo de escaneo dedicado: usamos el buffer ordenado
+    # por keydown del detector (result.code), no scanInput.value, para evitar
+    # perder o recolocar caracteres si el DOM se repinta con retraso en
+    # lectores Bluetooth/Android rápidos.
+    assert "var result = _scanHidDetector.feed(e.key, now);" in scan
+    assert "var codigoCompleto = result.code" in scan
     assert "refocusScanInput(false)" in scan
     assert scan.count("refocusScanInput(true)") >= 2
     assert "userIsEditing" in scan
