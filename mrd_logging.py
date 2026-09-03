@@ -7,6 +7,7 @@ MRD TOOL CONTROL — Sistema de logging profesional
 """
 import logging
 import os
+import time
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
@@ -27,6 +28,28 @@ _LEVEL = getattr(logging, _LEVEL_STR, logging.INFO)
 _RETENTION_DAYS = int(os.getenv("MRD_LOG_RETENTION_DAYS", "30"))
 
 
+class _SafeTimedRotatingFileHandler(TimedRotatingFileHandler):
+    """TimedRotatingFileHandler que no deja de escribir si falla la rotación.
+
+    En Windows, si otro proceso tiene el mismo fichero de log abierto (p. ej.
+    una instancia de desarrollo en el puerto 8090 corriendo desde el mismo
+    directorio que producción), el rename() de la rotación diaria lanza
+    PermissionError. La clase base cierra su stream antes de intentar el
+    rename y no lo reabre si este falla, así que sin este parche cada
+    mensaje posterior se pierde en silencio para siempre (shouldRollover()
+    sigue devolviendo True en cada llamada). Aquí se pospone la rotación al
+    día siguiente y se reabre el fichero actual para no perder logs.
+    """
+
+    def doRollover(self):
+        try:
+            super().doRollover()
+        except (PermissionError, OSError):
+            if self.stream is None and not self.delay:
+                self.stream = self._open()
+            self.rolloverAt = self.computeRollover(int(time.time()))
+
+
 def _crear_logger(nombre: str, archivo: str) -> logging.Logger:
     logger = logging.getLogger(f"mrd.{nombre}")
     if logger.handlers:
@@ -35,7 +58,7 @@ def _crear_logger(nombre: str, archivo: str) -> logging.Logger:
     logger.setLevel(_LEVEL)
 
     # Handler rotativo diario
-    handler = TimedRotatingFileHandler(
+    handler = _SafeTimedRotatingFileHandler(
         filename=str(_LOG_DIR / archivo),
         when="midnight",
         interval=1,

@@ -1,11 +1,12 @@
 {
-    "version_actual":  "2.7.19",
+    "version_actual":  "2.7.20",
     "nombre":  "MRD TOOL CONTROL",
     "edicion":  "Centro operativo avanzado de almacenes",
-    "version_anterior":  "2.7.18",
+    "version_anterior":  "2.7.19",
     "fecha":  "2026-09-03",
     "estado":  "estable",
     "cambios":  [
+                    "Corregida la perdida silenciosa de logs de error: cuando otro proceso (p. ej. una instancia de desarrollo en el puerto 8090 corriendo desde el mismo directorio que produccion) tenia abierto logs/errores.log durante la rotacion diaria a medianoche, la rotacion fallaba con PermissionError en Windows y, por un fallo del handler estandar de Python, todos los mensajes de error posteriores se perdian en silencio para siempre en vez de solo ese dia. Ahora la rotacion fallida se pospone y el fichero actual se reabre, sin perder ningun mensaje nuevo.",
                     "Corregida la pagina /scan (escaneo dedicado de herramientas/EPI/materiales): un lector Bluetooth/Android rapido podia repintar el valor del campo con retraso y perder o recolocar un caracter, provocando que el codigo no se reconociera hasta varios intentos. Ahora usa el mismo buffer ordenado por pulsaciones que ya protegia a los campos de mrd.js (GlobalScanner), aplicado tambien al detector propio de /scan.",
                     "Auditoria de herramientas/QR/escaner sobre 2.7.17: sin nuevos fallos reproducibles, cubierto el unico hueco de pruebas detectado (aplicar_accion con las acciones a_obra y a_furgoneta no tenia regresion que verificara que Herramienta.almacen_id se conserva y la herramienta sigue visible en el listado).",
                     "Corregido el almacén propietario de herramientas entregadas, en obra o en vehículo: ya no desaparecen del listado ni producen un 403 al abrirlas; recuperadas las herramientas 56, 57 y 58 en Madrid sin alterar responsable, estado ni historial.",
