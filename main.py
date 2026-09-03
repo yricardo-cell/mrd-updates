@@ -7077,6 +7077,11 @@ def scan_buscar(
         if exc.status_code == 400:
             raise HTTPException(400, exc.detail)
         normalized = normalize_scanned_code(codigo)
+        mrd_logging.log_error(
+            f"/scan/buscar sin resultado — codigo={codigo!r} normalizado={normalized!r} "
+            f"almacen_id={active_warehouse.id if active_warehouse else None} "
+            f"usuario={current_user.username if current_user else 'anonimo'} detalle={exc.detail}"
+        )
         return JSONResponse({
             "found": False,
             "detail": "Código no reconocido" if not current_user else exc.detail,
@@ -7275,6 +7280,11 @@ def mostrador_resolver(
             raise HTTPException(404, "Tu rol no opera este tipo de artículo")
         return JSONResponse({"ok": True, "item": item})
     except CounterError as exc:
+        mrd_logging.log_error(
+            f"/api/mostrador/resolver — codigo={codigo!r} "
+            f"almacen_id={warehouse.id if warehouse else None} usuario={user.username} "
+            f"status={exc.status_code} detalle={exc.detail}"
+        )
         raise HTTPException(exc.status_code, exc.detail)
 
 
@@ -7297,6 +7307,11 @@ def mostrador_buscar(
         ]
         return JSONResponse({"ok": True, "items": items})
     except CounterError as exc:
+        mrd_logging.log_error(
+            f"/api/mostrador/buscar — q={q!r} "
+            f"almacen_id={warehouse.id if warehouse else None} usuario={user.username} "
+            f"status={exc.status_code} detalle={exc.detail}"
+        )
         raise HTTPException(exc.status_code, exc.detail)
 
 
@@ -7325,10 +7340,30 @@ def mostrador_operar(
         return JSONResponse(result)
     except CounterError as exc:
         db.rollback()
+        warehouse_ref = locals().get("warehouse")
+        lineas_resumen = [
+            {"tipo": line.tipo, "id": line.id, "cantidad": line.cantidad}
+            for line in payload.lineas
+        ]
+        mrd_logging.log_error(
+            f"/api/mostrador/operar — accion={payload.accion} lineas={lineas_resumen} "
+            f"almacen_id={warehouse_ref.id if warehouse_ref else None} usuario={user.username} "
+            f"status={exc.status_code} detalle={exc.detail}"
+        )
         raise HTTPException(exc.status_code, exc.detail)
-    except Exception:
+    except Exception as exc:
         db.rollback()
-        mrd_logging.log_app("Mostrador unico: operacion revertida por error inesperado", level="error")
+        warehouse_ref = locals().get("warehouse")
+        lineas_resumen = [
+            {"tipo": line.tipo, "id": line.id, "cantidad": line.cantidad}
+            for line in payload.lineas
+        ]
+        mrd_logging.log_error(
+            f"/api/mostrador/operar — operacion revertida por error inesperado — "
+            f"accion={payload.accion} lineas={lineas_resumen} "
+            f"almacen_id={warehouse_ref.id if warehouse_ref else None} usuario={user.username}",
+            exc=exc,
+        )
         raise HTTPException(500, "No se registro ningun movimiento. El carrito completo fue revertido.")
 
 
@@ -8450,6 +8485,12 @@ def scan_operar(
             "detalle": exc.detail,
             "http_status": exc.status_code,
         }
+        mrd_logging.log_error(
+            f"/scan/operar — accion={payload.accion} herramienta_id={payload.herramienta_id} "
+            f"scan_event_id={payload.scan_event_id} "
+            f"almacen_id={warehouse.id if warehouse else None} usuario={user_name} "
+            f"status={exc.status_code} detalle={exc.detail}"
+        )
         notification = {
             "tipo": "conflicto_herramienta" if final_state == "conflicto" else "error_operacion",
             "herramienta_id": payload.herramienta_id,
@@ -8471,7 +8512,7 @@ def scan_operar(
     except ScanLeaseLost:
         db.rollback()
         return JSONResponse({"resultado": "pending", "detalle": "Lease recuperado por otra petición"}, status_code=202)
-    except Exception:
+    except Exception as exc:
         db.rollback()
         result = {
             "resultado": "error",
@@ -8481,6 +8522,13 @@ def scan_operar(
             "detalle": "La operación no pudo completarse y fue revertida.",
             "http_status": 500,
         }
+        mrd_logging.log_error(
+            f"/scan/operar — operacion revertida por error inesperado — "
+            f"accion={payload.accion} herramienta_id={payload.herramienta_id} "
+            f"scan_event_id={payload.scan_event_id} "
+            f"almacen_id={warehouse.id if warehouse else None} usuario={user_name}",
+            exc=exc,
+        )
         mark_event_error(db, reservation.event_id, reservation.lease_token, result)
         return JSONResponse(result, status_code=500)
 
