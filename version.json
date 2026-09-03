@@ -1,11 +1,11 @@
 {
-  "version_actual": "2.7.17",
-  "nombre": "MRD TOOL CONTROL -- Repara herramientas de patio, permisos de almacen y escaner Mostrador",
-  "fecha": "2026-09-03",
-  "cambios": [
-    "Repara herramientas de patio, permisos de almacen y escaner Mostrador"
-  ],
-  "notas": "Instala desde Configuracion > Actualizaciones.",
-  "download_url": "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.17.zip",
-  "sha256": "9e26dc3d6ba5889b6a247b1b42f88d50838d3ea024cd5d436e8f5f5f960b2c75"
+    "version_actual":  "2.7.18",
+    "nombre":  "MRD TOOL CONTROL -- Cobertura de pruebas: aplicar_accion conserva almacen_id en a_obra y a_furgoneta",
+    "fecha":  "2026-09-03",
+    "cambios":  [
+                    "Cobertura de pruebas: aplicar_accion conserva almacen_id en a_obra y a_furgoneta"
+                ],
+    "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.18.zip",
+    "sha256":  "19bfd9be8a6f8d3d91cc98db81dec61bc49f372148811a58ede86f7ac9deab0c"
 }
