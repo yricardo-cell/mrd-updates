@@ -1,11 +1,12 @@
 {
-  "version_actual": "2.7.17",
+  "version_actual": "2.7.18",
   "nombre": "MRD TOOL CONTROL",
   "edicion": "Centro operativo avanzado de almacenes",
-  "version_anterior": "2.7.16",
+  "version_anterior": "2.7.17",
   "fecha": "2026-09-03",
   "estado": "estable",
   "cambios": [
+    "Auditoria de herramientas/QR/escaner sobre 2.7.17: sin nuevos fallos reproducibles, cubierto el unico hueco de pruebas detectado (aplicar_accion con las acciones a_obra y a_furgoneta no tenia regresion que verificara que Herramienta.almacen_id se conserva y la herramienta sigue visible en el listado).",
     "Corregido el almacén propietario de herramientas entregadas, en obra o en vehículo: ya no desaparecen del listado ni producen un 403 al abrirlas; recuperadas las herramientas 56, 57 y 58 en Madrid sin alterar responsable, estado ni historial.",
     "Mostrador Único devuelve siempre errores JSON en sus APIs, evitando el mensaje engañoso 'Respuesta no válida del servidor' y mostrando el motivo real del escaneo.",
     "Escáner HID/Bluetooth reforzado en los campos dedicados usando el orden real de las pulsaciones, evitando caracteres perdidos o recolocados en lectores rápidos.",
@@ -180,6 +181,7 @@
   "download_url": "",
   "sha256": "",
   "archivos_actualizados": [
+    "tests/test_mostrador_unico.py",
     "auth.py",
     "codigos.py",
     "config.py",

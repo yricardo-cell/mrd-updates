@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from models import (
     AlbaranSalida, Almacen, Base, EPIIndividual, EventoMaquinaria, EventoOperacion,
     Herramienta, HistorialEPIIndividual, Maquinaria, Movimiento,
-    MovimientoStock, StockEPI, Trabajador, Usuario, Vehiculo,
+    MovimientoStock, Obra, StockEPI, Trabajador, Usuario, Vehiculo,
 )
 from mostrador_service import (
     CounterError, normalize_scanned_code, operate_counter,
@@ -98,6 +98,48 @@ def test_entrega_desde_ficha_conserva_almacen_propietario(tmp_path):
     assert stored.estado == "entregada"
     assert stored.responsable_id == worker.id
     assert stored.almacen_id == warehouse.id
+
+
+def _visible_en_listado(db, warehouse_id, tool_id):
+    """Replica el filtro real de GET /herramientas para no depender de detalles internos."""
+    return db.query(Herramienta).filter(
+        Herramienta.activa == True,
+        Herramienta.almacen_id == warehouse_id,
+        Herramienta.id == tool_id,
+    ).first() is not None
+
+
+def test_asignar_a_obra_o_furgoneta_conserva_almacen_y_no_oculta_del_listado(tmp_path):
+    db = _session(tmp_path)
+    user, worker, warehouse, tool, *_ = _seed(db)
+    obra = Obra(numero="OBRA-QR-1", nombre="Obra Norte", activa=True)
+    vehicle2 = Vehiculo(codigo="VEH-QR-2", matricula="1111MRD", marca="Ford", estado="activo", activo=True)
+    tool.almacen_id = warehouse.id
+    db.add_all([obra, vehicle2])
+    db.commit()
+
+    aplicar_accion(db, tool, "a_obra", user, obra_id=obra.id)
+    db.commit()
+    stored = db.get(Herramienta, tool.id)
+    assert stored.estado == "en_obra"
+    assert stored.obra_id == obra.id
+    assert stored.almacen_id == warehouse.id
+    assert _visible_en_listado(db, warehouse.id, tool.id)
+
+    aplicar_accion(db, tool, "a_furgoneta", user, vehiculo_id=vehicle2.id)
+    db.commit()
+    stored = db.get(Herramienta, tool.id)
+    assert stored.estado == "en_furgoneta"
+    assert stored.vehiculo_id == vehicle2.id
+    assert stored.almacen_id == warehouse.id
+    assert _visible_en_listado(db, warehouse.id, tool.id)
+
+    aplicar_accion(db, tool, "entregar", user, trabajador_id=worker.id)
+    db.commit()
+    stored = db.get(Herramienta, tool.id)
+    assert stored.estado == "entregada"
+    assert stored.almacen_id == warehouse.id
+    assert _visible_en_listado(db, warehouse.id, tool.id)
 
 
 def test_salida_guarda_plazo_y_solo_avisa_cuando_vence(tmp_path):
