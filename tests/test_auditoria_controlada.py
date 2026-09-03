@@ -96,6 +96,7 @@ def test_mostrador_e_inventarios_consumen_pistola_sin_saltar_a_scan():
     session = (ROOT / "templates/inventario_sesion.html").read_text(encoding="utf-8")
     receipt = (ROOT / "templates/inventario_recepcion.html").read_text(encoding="utf-8")
     assert "detector.feed(event.key, now, completeValue)" in common
+    assert "capturedField?.isConnected && !localInput" in common
     assert "window.MRDGlobalScanner = GlobalScanner" in common
     assert "mrd.js?v={{ version }}-scanner-inventory-v3" in base
     for source in (counter, inventory, session, receipt):
@@ -116,6 +117,33 @@ def test_pistola_se_queda_en_flujos_locales_y_mostrador_limpia_lectura():
     fetch_start = counter.index("fetchAuthSafe('/api/mostrador/resolver", add_start)
     assert counter.index("scan.value=''", add_start) < fetch_start
     assert "await searchByName(code)" in counter
+    assert "r.status>=300&&r.status<400" in counter
+
+
+def test_los_errores_del_mostrador_son_json_y_no_paginas_html():
+    import asyncio
+    import json
+
+    from fastapi import HTTPException
+    from starlette.requests import Request
+
+    import main
+
+    request = Request({
+        "type": "http", "http_version": "1.1", "method": "GET",
+        "scheme": "http", "path": "/api/mostrador/resolver",
+        "raw_path": b"/api/mostrador/resolver", "query_string": b"",
+        "headers": [(b"accept", b"application/json")],
+        "client": ("127.0.0.1", 1234), "server": ("testserver", 80),
+        "root_path": "",
+    })
+    response = asyncio.run(main.http_error_handler(
+        request, HTTPException(status_code=404, detail="QR no reconocido o articulo inactivo"),
+    ))
+
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("application/json")
+    assert json.loads(response.body)["detail"] == "QR no reconocido o articulo inactivo"
 
 
 def test_inventario_acepta_bluetooth_lento_y_resuelve_qr_oficial_en_servidor():
@@ -291,10 +319,10 @@ def test_pwa_publica_detector_y_version_candidata_real():
     sw = (ROOT / "static/js/sw.js").read_text(encoding="utf-8")
     base = (ROOT / "templates/base.html").read_text(encoding="utf-8")
     version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
-    assert version["version_actual"] == "2.7.16"
+    assert version["version_actual"] == "2.7.17"
     assert version["estado"] == "estable"
     assert "/static/js/scanner_hid.js" in sw
-    assert "mrd-static-v2.7.16" in sw
+    assert "mrd-static-v2.7.17" in sw
     assert 'scanner_hid.js?v={{ version }}"></script>' in base
 
 

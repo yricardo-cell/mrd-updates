@@ -647,20 +647,34 @@ def _render_error(request: Request, code: int, detail: str = "") -> HTMLResponse
 
 @app.exception_handler(StarletteHTTPException)
 async def http_error_handler(request: Request, exc: StarletteHTTPException):
-    scan_api = request.url.path in {"/scan/operar", "/scan/cambios"}
+    request_path = request.url.path
+    scan_api = request_path in {"/scan/operar", "/scan/cambios"}
+    # Los consumidores bajo /api esperan siempre JSON. Antes solo se trataban
+    # dos rutas del escáner y errores normales del Mostrador (por ejemplo un
+    # QR no reconocido) se convertían en una página HTML. El navegador no
+    # podía interpretarla y mostraba el engañoso «Respuesta no válida».
+    json_api = scan_api or request_path.startswith("/api/")
     # Para redirecciones devolver la respuesta directamente (no re-lanzar)
     if exc.status_code in (301, 302, 303, 307, 308):
-        if scan_api:
-            return JSONResponse({"resultado": "error", "detalle": "Sesión caducada"}, status_code=401)
+        if json_api:
+            return JSONResponse(
+                {"resultado": "error", "detalle": "Sesión caducada", "detail": "Sesión caducada"},
+                status_code=401,
+            )
         location = (exc.headers or {}).get("location", "/login")
         return RedirectResponse(url=location, status_code=exc.status_code)
     if exc.status_code == 401:
-        if scan_api:
-            return JSONResponse({"resultado": "error", "detalle": "Sesión caducada"}, status_code=401)
+        if json_api:
+            return JSONResponse(
+                {"resultado": "error", "detalle": "Sesión caducada", "detail": "Sesión caducada"},
+                status_code=401,
+            )
         return RedirectResponse("/login", status_code=303)
     detail = str(exc.detail) if exc.detail else ""
     mrd_logging.log_error(f"HTTP {exc.status_code} en {request.url.path} — {detail}")
     if request.url.path == "/admin/reiniciar":
+        return JSONResponse({"detail": detail}, status_code=exc.status_code)
+    if json_api:
         return JSONResponse({"detail": detail}, status_code=exc.status_code)
     return _render_error(request, exc.status_code, detail)
 

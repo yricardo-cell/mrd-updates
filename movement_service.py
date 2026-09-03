@@ -124,7 +124,6 @@ def deliver_tool(
         estado="entregada",
         responsable_id=trabajador_id,
         obra_id=obra_id,
-        almacen_id=None,
         ubicacion_texto=destino,
     ).execution_options(synchronize_session=False))
     if changed.rowcount != 1:

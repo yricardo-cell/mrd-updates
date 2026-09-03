@@ -251,7 +251,6 @@ def aplicar_accion(
         herramienta.estado        = "entregada"
         herramienta.responsable_id = trabajador_id
         herramienta.obra_id        = obra_id
-        herramienta.almacen_id     = None
         herramienta.vehiculo_id    = None
         herramienta.ubicacion_texto = (
             trab.nombre_completo if trab
@@ -276,7 +275,6 @@ def aplicar_accion(
         obra = db.query(Obra).get(obra_id) if obra_id else None
         herramienta.estado          = "en_obra"
         herramienta.obra_id         = obra_id
-        herramienta.almacen_id      = None
         herramienta.vehiculo_id     = None
         herramienta.ubicacion_texto = obra.nombre if obra else "En obra"
         tipo_mov = "traslado"
@@ -297,7 +295,6 @@ def aplicar_accion(
         veh = db.query(Vehiculo).get(vehiculo_id) if vehiculo_id else None
         herramienta.estado          = "en_furgoneta"
         herramienta.vehiculo_id     = vehiculo_id
-        herramienta.almacen_id      = None
         herramienta.ubicacion_texto = veh.matricula if veh else "Furgoneta"
         tipo_mov = "traslado"
         destino  = herramienta.ubicacion_texto

@@ -670,15 +670,19 @@ const GlobalScanner = (() => {
       pacedMaxCv: cfg.pacedMaxCv, pacedMaxAverageMs: cfg.pacedMaxAverageMs,
     });
     if (event.key.length === 1 && !detector.buffer) captureField(event.target);
-    // En campos de trabajo usamos su valor completo, igual que /scan. Esto
-    // conserva el prefijo aunque Android trate el separador como tecla muerta.
-    const completeValue = capturedField?.isConnected ? capturedField.value : undefined;
+    const localInput = event.target?.matches?.(
+      '#counter-scan,#inventory-scan-input,#line-filter,#receipt-code,#transfer-scan,#prep-scan,#purchase-code'
+    );
+    // En un campo dedicado de escaneo usamos el buffer ordenado de keydown.
+    // En Android/lectores Bluetooth muy rápidos el valor del input puede
+    // repintarse con retraso, perdiendo o recolocando caracteres aunque los
+    // eventos hayan llegado en el orden correcto. Fuera de esos campos se
+    // conserva el valor DOM completo para soportar teclas muertas.
+    const completeValue = capturedField?.isConnected && !localInput
+      ? capturedField.value : undefined;
     const result = detector.feed(event.key, now, completeValue);
     if (result.terminated) {
       const code = normalize(result.code);
-      const localInput = event.target?.matches?.(
-        '#counter-scan,#inventory-scan-input,#line-filter,#receipt-code,#transfer-scan,#prep-scan,#purchase-code'
-      );
       // Dentro de un flujo de escaneo explícito, Enter/Tab confirma siempre el
       // valor completo. Así una pistola Bluetooth con pausas funciona igual
       // que en /scan, sin depender de su velocidad de escritura.

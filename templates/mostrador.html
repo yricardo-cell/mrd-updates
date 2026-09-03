@@ -72,7 +72,7 @@
  // carrito nunca se pierde salvo que el usuario decida abandonar la pagina.
  async function fetchAuthSafe(url,opts,isRetry){
    const r=await fetch(url,Object.assign({},opts,{redirect:'manual'}));
-   if(r.status===0||r.type==='opaqueredirect'||r.status===401){
+   if(r.status===0||r.type==='opaqueredirect'||r.status===401||(r.status>=300&&r.status<400)){
      if(!isRetry){await fetch(location.href,{method:'GET',credentials:'same-origin'}).catch(()=>{});return fetchAuthSafe(url,opts,true)}
      const err=new Error('No se pudo verificar tu sesión.');err.authFailure=true;throw err;
    }

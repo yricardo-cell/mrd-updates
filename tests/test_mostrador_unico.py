@@ -14,6 +14,7 @@ from mostrador_service import (
     CounterError, normalize_scanned_code, operate_counter,
     resolve_counter_item, search_counter_items,
 )
+from tools import aplicar_accion
 from anomalias import _detectar_herramientas
 from albaran_service import create_delivery_note
 
@@ -50,6 +51,9 @@ def _seed(db):
 def test_mostrador_salida_mixta_es_una_sola_transaccion(tmp_path):
     db = _session(tmp_path)
     user, worker, warehouse, tool, machine, stock, epi, vehicle = _seed(db)
+    worker.almacen_id = warehouse.id
+    tool.almacen_id = warehouse.id
+    db.commit()
     result = operate_counter(
         db, user, operation_id="counter-mixed-output-001", action="salida",
         worker_id=worker.id, work_id=None, warehouse_id=warehouse.id,
@@ -68,6 +72,7 @@ def test_mostrador_salida_mixta_es_una_sola_transaccion(tmp_path):
     assert "Modelo: ST300" in machine_line["nombre"]
     assert "N.º serie: SERIE-300" in machine_line["nombre"]
     assert db.get(Herramienta, tool.id).estado == "entregada"
+    assert db.get(Herramienta, tool.id).almacen_id == warehouse.id
     assert db.get(Maquinaria, machine.id).estado == "en_uso"
     assert db.get(StockEPI, stock.id).cantidad == 17
     assert db.get(EPIIndividual, epi.id).trabajador_id == worker.id
@@ -77,6 +82,22 @@ def test_mostrador_salida_mixta_es_una_sola_transaccion(tmp_path):
     assert db.query(EventoMaquinaria).count() == 1
     assert db.query(HistorialEPIIndividual).count() == 1
     assert db.query(EventoOperacion).filter_by(event_id="counter-mixed-output-001", estado="ok").count() == 1
+
+
+def test_entrega_desde_ficha_conserva_almacen_propietario(tmp_path):
+    db = _session(tmp_path)
+    user, worker, warehouse, tool, *_ = _seed(db)
+    worker.almacen_id = warehouse.id
+    tool.almacen_id = warehouse.id
+    db.commit()
+
+    aplicar_accion(db, tool, "entregar", user, trabajador_id=worker.id)
+    db.commit()
+
+    stored = db.get(Herramienta, tool.id)
+    assert stored.estado == "entregada"
+    assert stored.responsable_id == worker.id
+    assert stored.almacen_id == warehouse.id
 
 
 def test_salida_guarda_plazo_y_solo_avisa_cuando_vence(tmp_path):
