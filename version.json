@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.16",
-    "nombre":  "MRD TOOL CONTROL -- Centro de recuperacion en Administracion, proteccion del carrito del Mostrador Unico ante sesion caducada, aislamiento por almacen en EPI/informes/busqueda global e idempotencia contra dobles envios.",
-    "fecha":  "2026-09-02",
-    "cambios":  [
-                    "Centro de recuperacion en Administracion, proteccion del carrito del Mostrador Unico ante sesion caducada, aislamiento por almacen en EPI/informes/busqueda global e idempotencia contra dobles envios."
-                ],
-    "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.16.zip",
-    "sha256":  "489c862678bb9ed5cccf3926564776b3a1c9199f379398d5cb4b0680725289f9"
+  "version_actual": "2.7.17",
+  "nombre": "MRD TOOL CONTROL -- Repara herramientas de patio, permisos de almacen y escaner Mostrador",
+  "fecha": "2026-09-03",
+  "cambios": [
+    "Repara herramientas de patio, permisos de almacen y escaner Mostrador"
+  ],
+  "notas": "Instala desde Configuracion > Actualizaciones.",
+  "download_url": "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.17.zip",
+  "sha256": "9e26dc3d6ba5889b6a247b1b42f88d50838d3ea024cd5d436e8f5f5f960b2c75"
 }
