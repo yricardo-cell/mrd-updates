@@ -1,11 +1,12 @@
 {
-    "version_actual":  "2.7.20",
+    "version_actual":  "2.7.21",
     "nombre":  "MRD TOOL CONTROL",
     "edicion":  "Centro operativo avanzado de almacenes",
-    "version_anterior":  "2.7.19",
-    "fecha":  "2026-09-03",
+    "version_anterior":  "2.7.20",
+    "fecha":  "2026-09-04",
     "estado":  "estable",
     "cambios":  [
+                    "Corregido error critico que impedia generar el albaran de cualquier solicitud del trabajador con una linea de tipo 'herramienta' (el mas habitual): las lineas de SolicitudTrabajador son texto libre sin ID de catalogo real, pero create_delivery_note() intentaba tratarlas como herramienta de catalogo (int(line['id'])) y fallaba con KeyError por ninguna via (cambio de estado, boton manual o buzon legacy). Ahora estas lineas siempre se registran como item libre. Sin datos de produccion afectados (verificado: cero solicitudes en estado 'entregada' en la base actual). Detectado durante la auditoria que anadio test_solicitud_genera_albaran_todas_vias.py.",
                     "Corregida la perdida silenciosa de logs de error: cuando otro proceso (p. ej. una instancia de desarrollo en el puerto 8090 corriendo desde el mismo directorio que produccion) tenia abierto logs/errores.log durante la rotacion diaria a medianoche, la rotacion fallaba con PermissionError en Windows y, por un fallo del handler estandar de Python, todos los mensajes de error posteriores se perdian en silencio para siempre en vez de solo ese dia. Ahora la rotacion fallida se pospone y el fichero actual se reabre, sin perder ningun mensaje nuevo.",
                     "Corregida la pagina /scan (escaneo dedicado de herramientas/EPI/materiales): un lector Bluetooth/Android rapido podia repintar el valor del campo con retraso y perder o recolocar un caracter, provocando que el codigo no se reconociera hasta varios intentos. Ahora usa el mismo buffer ordenado por pulsaciones que ya protegia a los campos de mrd.js (GlobalScanner), aplicado tambien al detector propio de /scan.",
                     "Auditoria de herramientas/QR/escaner sobre 2.7.17: sin nuevos fallos reproducibles, cubierto el unico hueco de pruebas detectado (aplicar_accion con las acciones a_obra y a_furgoneta no tenia regresion que verificara que Herramienta.almacen_id se conserva y la herramienta sigue visible en el listado).",

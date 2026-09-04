@@ -6,9 +6,10 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from albaran_service import create_delivery_note
 from auth import tiene_permiso
 from models import (
-    Almacen, ComentarioSolicitudTrabajador, ComunicacionTrabajador,
+    Almacen, AlbaranSalida, ComentarioSolicitudTrabajador, ComunicacionTrabajador,
     IncidenciaPortalTrabajador, LineaSolicitudTrabajador, NotificacionTrabajador,
     SolicitudDevolucionTrabajador, SolicitudTrabajador, Trabajador, Usuario,
     ESTADOS_SOLICITUD_TRABAJADOR, PRIVACIDAD_COMUNICACION_TRABAJADOR,
@@ -215,6 +216,38 @@ def require_request_access(
         raise WorkerPortalError(403, "La solicitud pertenece a otro almacén")
 
 
+def ensure_delivery_note_for_request(
+    db: Session, user: Usuario, request: SolicitudTrabajador,
+) -> AlbaranSalida:
+    """Garantiza que una solicitud entregada tenga su albarán asociado.
+
+    Idempotente: localiza el albarán existente por el marcador de texto en
+    ``notas`` (ver deuda técnica en CLAUDE.md/notas del proyecto sobre este
+    acoplamiento) antes de crear uno nuevo, así que puede llamarse más de una
+    vez para la misma solicitud sin duplicar el documento.
+    """
+    marker = f"Solicitud {request.numero}"
+    note = db.query(AlbaranSalida).filter(AlbaranSalida.notas.like(f"{marker}%")).first()
+    if note:
+        return note
+    reason = f" · Motivo: {request.motivo}" if request.motivo else ""
+    return create_delivery_note(
+        db, user_id=user.id, worker_id=request.trabajador_id,
+        warehouse_id=request.almacen_id,
+        origin_destination=request.obra_destino or request.trabajador.nombre_completo,
+        notes=f"{marker}{reason}",
+        # "tipo" fijo a "libre": las líneas de SolicitudTrabajador son texto
+        # libre sin ID de catálogo, así que nunca deben mapear a las ramas
+        # "herramienta"/"material" de create_delivery_note (esas exigen un
+        # "id" real y revientan con KeyError si no lo tienen).
+        lines=[{
+            "tipo": "libre",
+            "nombre": line.observaciones or f"{line.descripcion}{f' · T. {line.talla}' if line.talla else ''}",
+            "cantidad": line.cantidad_aprobada or line.cantidad,
+        } for line in request.lineas],
+    )
+
+
 def transition_worker_request(
     db: Session, user: Usuario, request: SolicitudTrabajador,
     *, new_status: str, notes: str = "", access_warehouse_id: int | None = None,
@@ -230,6 +263,7 @@ def transition_worker_request(
     request.actualizado_en = datetime.now()
     if new_status == "entregada":
         request.entregado_en = datetime.now()
+        ensure_delivery_note_for_request(db, user, request)
     create_worker_notification(
         db, request.trabajador_id, title=f"Solicitud {request.numero}",
         message=f"Tu solicitud ha cambiado a {new_status.replace('_', ' ')}.",

@@ -148,8 +148,8 @@ from worker_portal_service import (
     REQUEST_TRANSITIONS, WorkerPortalError, add_worker_request_comment,
     cancel_worker_request, can_manage_requests, create_worker_incident,
     create_worker_message, create_worker_notification, create_worker_request,
-    create_worker_return, manage_worker_message, require_request_access,
-    transition_worker_request,
+    create_worker_return, ensure_delivery_note_for_request, manage_worker_message,
+    require_request_access, transition_worker_request,
 )
 from reports import (exportar_inventario_excel, exportar_movimientos_excel,
                     exportar_trabajadores_excel,
@@ -15327,24 +15327,9 @@ async def solicitud_trabajador_estado(
                 solicitud.fecha_estimada = datetime.fromisoformat(estimated)
             except ValueError:
                 raise WorkerPortalError(422, "Fecha estimada no válida")
-        if solicitud.estado == "entregada":
-            marker = f"Solicitud {solicitud.numero}"
-            existing_note = db.query(AlbaranSalida).filter(
-                AlbaranSalida.notas.like(f"{marker}%"),
-            ).first()
-            if not existing_note:
-                reason = f" · Motivo: {solicitud.motivo}" if solicitud.motivo else ""
-                create_delivery_note(
-                    db, user_id=user.id, worker_id=solicitud.trabajador_id,
-                    warehouse_id=solicitud.almacen_id,
-                    origin_destination=solicitud.obra_destino or solicitud.trabajador.nombre_completo,
-                    notes=f"{marker}{reason}",
-                    lines=[{
-                        "tipo": line.tipo,
-                        "nombre": line.observaciones or f"{line.descripcion}{f' · T. {line.talla}' if line.talla else ''}",
-                        "cantidad": line.cantidad_aprobada or line.cantidad,
-                    } for line in solicitud.lineas],
-                )
+        # La generación del albarán al llegar a "entregada" la garantiza
+        # transition_worker_request() (worker_portal_service.py) — no se
+        # duplica aquí para que ninguna vía pueda saltársela.
         db.add(AuditoriaLog(
             tabla="solicitudes_trabajador", registro_id=solicitud.id, accion="cambiar_estado",
             resumen=f"Solicitud {solicitud.numero}: {solicitud.estado}", usuario_id=user.id,
@@ -15379,20 +15364,9 @@ def solicitud_trabajador_generar_albaran(
     if solicitud.estado != "entregada":
         raise HTTPException(409, "El albarán se genera al completar la entrega")
     marker = f"Solicitud {solicitud.numero}"
-    note = db.query(AlbaranSalida).filter(AlbaranSalida.notas.like(f"{marker}%")).first()
-    if not note:
-        reason = f" · Motivo: {solicitud.motivo}" if solicitud.motivo else ""
-        note = create_delivery_note(
-            db, user_id=user.id, worker_id=solicitud.trabajador_id,
-            warehouse_id=solicitud.almacen_id,
-            origin_destination=solicitud.obra_destino or solicitud.trabajador.nombre_completo,
-            notes=f"{marker}{reason}",
-            lines=[{
-                "tipo": line.tipo,
-                "nombre": line.observaciones or f"{line.descripcion}{f' · T. {line.talla}' if line.talla else ''}",
-                "cantidad": line.cantidad_aprobada or line.cantidad,
-            } for line in solicitud.lineas],
-        )
+    existing_before = db.query(AlbaranSalida).filter(AlbaranSalida.notas.like(f"{marker}%")).first()
+    note = ensure_delivery_note_for_request(db, user, solicitud)
+    if not existing_before:
         db.add(AuditoriaLog(
             tabla="solicitudes_trabajador", registro_id=solicitud.id,
             accion="generar_albaran", resumen=f"{solicitud.numero}: {note.numero}",
