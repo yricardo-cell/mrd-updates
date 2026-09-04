@@ -13,6 +13,26 @@ _DASHES = str.maketrans({
 })
 
 
+def _delayed_trailing_key_candidates(value: str) -> list[str]:
+    """Corrige un único carácter HID que Android entrega al final.
+
+    Solo se aplica a identificadores internos MRD con cuerpo hexadecimal de
+    32 caracteres. No hace coincidencias aproximadas: genera las posibles
+    reinserciones del último carácter y la base de datos sigue exigiendo una
+    coincidencia exacta con un código oficial existente.
+    """
+    match = re.fullmatch(r"(MRD-[A-Z0-9]+-)([A-F0-9]{32})", value)
+    if not match:
+        return []
+    prefix, body = match.groups()
+    delayed = body[-1]
+    without_delayed = body[:-1]
+    return [
+        prefix + without_delayed[:position] + delayed + without_delayed[position:]
+        for position in range(len(without_delayed))
+    ]
+
+
 def _decode(value: str) -> str:
     for _ in range(2):
         decoded = unquote(value)
@@ -82,6 +102,9 @@ def scan_code_candidates(raw_value: str) -> list[str]:
         for candidate in (value, re.sub(r"\s+", "", value)):
             if candidate and len(candidate) <= 128 and candidate not in candidates:
                 candidates.append(candidate)
+                for repaired in _delayed_trailing_key_candidates(candidate):
+                    if repaired not in candidates:
+                        candidates.append(repaired)
     return candidates
 
 

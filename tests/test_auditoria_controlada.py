@@ -17,7 +17,7 @@ from mostrador_service import (
     operate_counter,
     resolve_counter_item,
 )
-from scanner_service import normalize_scanned_code
+from scanner_service import normalize_scanned_code, scan_code_candidates
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -130,6 +130,38 @@ def test_mostrador_e_inventarios_consumen_pistola_sin_saltar_a_scan():
     assert "useInventoryScan(event.detail.code)" in inventory
     assert "useScannedLine(event.detail.code)" in session
     assert "code.value=window.MRDGlobalScanner.normalize(event.detail.code)" in receipt
+
+
+def test_android_hid_reubica_una_tecla_retrasada_al_final_solo_por_coincidencia_exacta(tmp_path):
+    correcto = "MRD-HTA-90BE7E6F852C20DCADCAB3B267529C2B"
+    leido = "MRD'HTA'90BE7EF852C20DCADCAB3B267529C2B6"
+    candidatos = scan_code_candidates(leido)
+    assert candidatos[0] == "MRD-HTA-90BE7EF852C20DCADCAB3B267529C2B6"
+    assert correcto in candidatos
+    assert scan_code_candidates("TALADRO6") == ["TALADRO6"]
+
+    engine = create_engine(f"sqlite:///{(tmp_path / 'hid-retrasado.db').as_posix()}")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    tool = Herramienta(codigo=correcto, nombre="Batería", estado="entregada", activa=True)
+    db.add(tool)
+    db.commit()
+    assert resolve_counter_item(db, leido)["id"] == tool.id
+
+
+def test_boton_buscar_mostrador_no_envia_el_pointer_event_como_codigo():
+    counter = (ROOT / "templates/mostrador.html").read_text(encoding="utf-8")
+    assert "document.getElementById('scan-add').onclick=()=>add()" in counter
+    assert "document.getElementById('scan-add').onclick=add" not in counter
+
+
+def test_codigo_herramienta_es_permanente_y_configurador_recomienda_retardo_hid():
+    main = (ROOT / "main.py").read_text(encoding="utf-8")
+    configurador = (ROOT / "templates/scanner_configurar.html").read_text(encoding="utf-8")
+    api = main[main.index("async def api_v1_actualizar_herramienta"):main.index("# ─── API v1 — DELETE")]
+    assert 'if "codigo" in body' in api
+    assert "El código MRD es permanente y no se puede modificar" in api
+    assert "retardo entre caracteres de 50–100 ms" in configurador
 
 
 def test_pistola_se_queda_en_flujos_locales_y_mostrador_limpia_lectura():
@@ -343,10 +375,10 @@ def test_pwa_publica_detector_y_version_candidata_real():
     sw = (ROOT / "static/js/sw.js").read_text(encoding="utf-8")
     base = (ROOT / "templates/base.html").read_text(encoding="utf-8")
     version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
-    assert version["version_actual"] == "2.7.23"
+    assert version["version_actual"] == "2.7.24"
     assert version["estado"] == "estable"
     assert "/static/js/scanner_hid.js" in sw
-    assert "mrd-static-v2.7.23" in sw
+    assert "mrd-static-v2.7.24" in sw
     assert 'scanner_hid.js?v={{ version }}"></script>' in base
 
 

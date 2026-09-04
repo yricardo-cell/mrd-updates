@@ -9933,6 +9933,11 @@ async def api_v1_actualizar_herramienta(
     if not h:
         raise HTTPException(404, "No encontrada")
     body: Dict[str, Any] = await request.json()
+    if "codigo" in body and str(body.get("codigo") or "").strip().upper() != str(h.codigo or "").strip().upper():
+        raise HTTPException(
+            409,
+            "El código MRD es permanente y no se puede modificar. Reimprime la etiqueta existente.",
+        )
     snap_ant = snapshot_herramienta(h)
     campos = ["nombre", "descripcion", "categoria", "subcategoria", "familia",
               "marca", "modelo", "fabricante", "num_serie", "potencia", "voltaje",
