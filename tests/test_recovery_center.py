@@ -122,6 +122,21 @@ def _csrf_headers(client):
     return {"X-CSRF-Token": token}
 
 
+class TestServicioPanel:
+    """Regresión: la única prueba previa de GET /servicio comprobaba el
+    redirect a /login sin autenticar (test_service.py), así que un admin
+    autenticado nunca llegaba a renderizar la plantilla. Eso dejó pasar un
+    bug real: ctx_base(request, user, "servicio") colaba el string
+    "servicio" en el parámetro db, que ni siquiera estaba inyectado en la
+    ruta, y explotaba con AttributeError al primer acceso real."""
+
+    def test_admin_autenticado_carga_el_panel_sin_error(self, client, db):
+        admin = _crear_admin(db, "admin-servicio-panel")
+        _login(client, "admin-servicio-panel")
+        resp = client.get("/servicio")
+        assert resp.status_code == 200, resp.text
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Nivel 1 — _restart_exec_target / _restart_target_is_valid
 # ═══════════════════════════════════════════════════════════════════════════════

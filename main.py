@@ -13284,9 +13284,11 @@ def reiniciar_servidor(
 
 # ─── GET /servicio (Panel admin) ──────────────────────────────────────────────
 @app.get("/servicio")
-def servicio_panel(request: Request, user: Usuario = Depends(requiere_login)):
+def servicio_panel(
+    request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db),
+):
     _svc_requiere_admin(user)
-    return templates.TemplateResponse(request, "servicio.html", ctx_base(request, user, "servicio"))
+    return templates.TemplateResponse(request, "servicio.html", ctx_base(request, user, db))
 
 
 # ─── GET /api/service/status ──────────────────────────────────────────────────
