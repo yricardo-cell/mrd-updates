@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.21",
-    "nombre":  "MRD TOOL CONTROL -- Repara generacion de albaran para solicitudes de tipo herramienta (bug critico que afectaba a las 3 vias de entrega)",
+    "version_actual":  "2.7.22",
+    "nombre":  "MRD TOOL CONTROL -- Repara el panel de administracion /servicio (Centro de recuperacion), que devolvia error 500 al acceder por primera vez desde el commit inicial.",
     "fecha":  "2026-09-04",
     "cambios":  [
-                    "Repara generacion de albaran para solicitudes de tipo herramienta (bug critico que afectaba a las 3 vias de entrega)"
+                    "Repara el panel de administracion /servicio (Centro de recuperacion), que devolvia error 500 al acceder por primera vez desde el commit inicial."
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.21.zip",
-    "sha256":  "d02a0f1c08878afb16bedc030ca8628a248277422c77632bb93f74d37f50a0f3"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.22.zip",
+    "sha256":  "8bfc17ba25effb4f3870db6f4ab1243c4742699f5c2298238970cb904e3c85a2"
 }
