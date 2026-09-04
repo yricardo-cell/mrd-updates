@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.18",
-    "nombre":  "MRD TOOL CONTROL -- Cobertura de pruebas: aplicar_accion conserva almacen_id en a_obra y a_furgoneta",
-    "fecha":  "2026-09-03",
+    "version_actual":  "2.7.21",
+    "nombre":  "MRD TOOL CONTROL -- Repara generacion de albaran para solicitudes de tipo herramienta (bug critico que afectaba a las 3 vias de entrega)",
+    "fecha":  "2026-09-04",
     "cambios":  [
-                    "Cobertura de pruebas: aplicar_accion conserva almacen_id en a_obra y a_furgoneta"
+                    "Repara generacion de albaran para solicitudes de tipo herramienta (bug critico que afectaba a las 3 vias de entrega)"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.18.zip",
-    "sha256":  "19bfd9be8a6f8d3d91cc98db81dec61bc49f372148811a58ede86f7ac9deab0c"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.21.zip",
+    "sha256":  "d02a0f1c08878afb16bedc030ca8628a248277422c77632bb93f74d37f50a0f3"
 }
