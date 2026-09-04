@@ -13,6 +13,24 @@
     pacedMaxCv: 0.25, pacedMaxAverageMs: 400,
   };
 
+  function selectCompleteCode(bufferValue, fieldValue) {
+    const buffered = String(bufferValue == null ? '' : bufferValue).trim();
+    const complete = String(fieldValue == null ? '' : fieldValue).trim();
+    if (!complete || complete === buffered) return buffered;
+    if (!buffered) return complete;
+
+    // Algunos lectores Android emiten letras mediante el valor compuesto del
+    // input (key='Unidentified') y solo los dígitos como keydown normal. Otros
+    // repintan el input con retraso. Preferimos un identificador MRD completo;
+    // si ninguno lo es, el valor más largo; en empate conserva el buffer, que
+    // mantiene el orden real de las pulsaciones.
+    const official = value => /^(?:https?:\/\/\S+|MRD[-'´’`][A-Z0-9])/i.test(value);
+    const bufferedOfficial = official(buffered);
+    const completeOfficial = official(complete);
+    if (bufferedOfficial !== completeOfficial) return completeOfficial ? complete : buffered;
+    return complete.length > buffered.length ? complete : buffered;
+  }
+
   class Detector {
     constructor(options) {
       this.config = Object.assign({}, DEFAULTS, options || {});
@@ -37,7 +55,7 @@
         const paced = intervals.length >= 2
           && averageMs <= this.config.pacedMaxAverageMs
           && intervalCv <= this.config.pacedMaxCv;
-        const code = String(completeValue == null ? this.buffer : completeValue).trim();
+        const code = selectCompleteCode(this.buffer, completeValue);
         const scannerLike = code.length >= this.config.minLength
           && (fastRatio >= this.config.fastRatio || paced);
         this.clear();
@@ -54,5 +72,5 @@
       return {terminated: false};
     }
   }
-  return {Detector, DEFAULTS};
+  return {Detector, DEFAULTS, selectCompleteCode};
 });

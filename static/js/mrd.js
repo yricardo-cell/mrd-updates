@@ -673,13 +673,13 @@ const GlobalScanner = (() => {
     const localInput = event.target?.matches?.(
       '#counter-scan,#inventory-scan-input,#line-filter,#receipt-code,#transfer-scan,#prep-scan,#purchase-code'
     );
-    // En un campo dedicado de escaneo usamos el buffer ordenado de keydown.
-    // En Android/lectores Bluetooth muy rápidos el valor del input puede
-    // repintarse con retraso, perdiendo o recolocando caracteres aunque los
-    // eventos hayan llegado en el orden correcto. Fuera de esos campos se
-    // conserva el valor DOM completo para soportar teclas muertas.
-    const completeValue = capturedField?.isConnected && !localInput
-      ? capturedField.value : undefined;
+    // Los campos dedicados también aportan su valor compuesto: ciertos
+    // lectores Android envían letras como key='Unidentified', aunque sí las
+    // insertan en el input. Detector selecciona el candidato completo o, si
+    // el DOM va retrasado, conserva el buffer ordenado de keydown.
+    const completeValue = localInput && event.target?.value != null
+      ? event.target.value
+      : (capturedField?.isConnected ? capturedField.value : undefined);
     const result = detector.feed(event.key, now, completeValue);
     if (result.terminated) {
       const code = normalize(result.code);

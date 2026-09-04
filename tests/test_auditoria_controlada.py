@@ -69,6 +69,30 @@ def test_detector_tolera_pausa_bluetooth_sin_truncar_inicio():
     assert result["code"] == value
 
 
+def test_detector_recupera_letras_android_desde_el_valor_compuesto_del_input():
+    full = "MRD-HTA-54135918F68CCA3DDA246EA1658A9E48"
+    # Caso real 04/09/2026: Android emitió por keydown exactamente el código
+    # completo después de eliminar A-F y los separadores.
+    digits_only = "".join(char for char in full if char.isdigit())
+    events = _keys(digits_only)
+    events[-1]["complete"] = full
+
+    result = _node_detector(events)[-1]
+
+    assert result["scannerLike"] is True
+    assert result["code"] == full
+
+
+def test_detector_conserva_buffer_ordenado_si_el_valor_del_input_va_retrasado():
+    full = "MRD-HTA-90BE7E6F852C20DCADCAB3B267529C2B"
+    events = _keys(full)
+    events[-1]["complete"] = full[:-6]
+
+    result = _node_detector(events)[-1]
+
+    assert result["code"] == full
+
+
 @pytest.mark.parametrize(
     "raw,expected",
     [
@@ -96,7 +120,7 @@ def test_mostrador_e_inventarios_consumen_pistola_sin_saltar_a_scan():
     session = (ROOT / "templates/inventario_sesion.html").read_text(encoding="utf-8")
     receipt = (ROOT / "templates/inventario_recepcion.html").read_text(encoding="utf-8")
     assert "detector.feed(event.key, now, completeValue)" in common
-    assert "capturedField?.isConnected && !localInput" in common
+    assert "localInput && event.target?.value != null" in common
     assert "window.MRDGlobalScanner = GlobalScanner" in common
     assert "mrd.js?v={{ version }}-scanner-inventory-v3" in base
     for source in (counter, inventory, session, receipt):
@@ -319,10 +343,10 @@ def test_pwa_publica_detector_y_version_candidata_real():
     sw = (ROOT / "static/js/sw.js").read_text(encoding="utf-8")
     base = (ROOT / "templates/base.html").read_text(encoding="utf-8")
     version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
-    assert version["version_actual"] == "2.7.22"
+    assert version["version_actual"] == "2.7.23"
     assert version["estado"] == "estable"
     assert "/static/js/scanner_hid.js" in sw
-    assert "mrd-static-v2.7.22" in sw
+    assert "mrd-static-v2.7.23" in sw
     assert 'scanner_hid.js?v={{ version }}"></script>' in base
 
 
@@ -335,11 +359,9 @@ def test_pistola_bluetooth_tablet_carga_detector_y_recupera_foco_sin_robar_campo
     assert scan_scripts.index("{% endblock %}") < scan_scripts.index("{% block extra_js %}") < scan_scripts.index("function _loadZXing")
     assert 'autofocus onkeydown="_onScanKeydown(event)"' in scan
     assert "var scanInput = document.getElementById('scan-input')" in scan
-    # #scan-input es un campo de escaneo dedicado: usamos el buffer ordenado
-    # por keydown del detector (result.code), no scanInput.value, para evitar
-    # perder o recolocar caracteres si el DOM se repinta con retraso en
-    # lectores Bluetooth/Android rápidos.
-    assert "var result = _scanHidDetector.feed(e.key, now);" in scan
+    # #scan-input combina el buffer keydown con el valor compuesto del campo:
+    # Android puede emitir letras como Unidentified y sí insertarlas en input.
+    assert "var result = _scanHidDetector.feed(e.key, now, valorCampo);" in scan
     assert "var codigoCompleto = result.code" in scan
     assert "refocusScanInput(false)" in scan
     assert scan.count("refocusScanInput(true)") >= 2
