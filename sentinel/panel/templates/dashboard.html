@@ -1,62 +1,149 @@
 {% extends "base.html" %}
 {% block title %}{{ app_name }} — Panel{% endblock %}
 {% block content %}
-<header><h1>{{ app_name }}</h1><p>Sesión: {{ user }} — <a href="/logout">Salir</a></p></header>
-<p>Actualizado: {{ now }}</p>
-
-<div class="metrics">
-  <div class="metric">CPU<strong>{{ system.cpu_percent }}%</strong></div>
-  <div class="metric">Memoria<strong>{{ system.memory_percent }}%</strong><small>{{ system.memory_used_gb }} / {{ system.memory_total_gb }} GB</small></div>
-  <div class="metric">Disco<strong>{{ system.disk_percent }}%</strong><small>{{ system.disk_free_gb }} GB libres</small></div>
-  <div class="metric">Equipo encendido<strong>{{ system.uptime }}</strong></div>
+{% macro icon(name) -%}
+{%- if name == "cpu" -%}
+<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M12 2v3M15 2v3M9 19v3M12 19v3M15 19v3M2 9h3M2 12h3M2 15h3M19 9h3M19 12h3M19 15h3"/></svg>
+{%- elif name == "ram" -%}
+<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="M7 8V5M11 8V5M15 8V5M7 16v3M11 16v3M15 16v3"/></svg>
+{%- elif name == "disk" -%}
+<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 14h18"/><circle cx="8" cy="17" r="1" fill="currentColor" stroke="none"/></svg>
+{%- elif name == "clock" -%}
+<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+{%- elif name == "check" -%}
+<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 5-5"/></svg>
+{%- elif name == "warn" -%}
+<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3z"/><path d="M12 10v3.5"/><circle cx="12" cy="16.5" r="0.75" fill="currentColor" stroke="none"/></svg>
+{%- elif name == "cross" -%}
+<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+{%- elif name == "plus" -%}
+<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+{%- elif name == "logout" -%}
+<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+{%- elif name == "app" -%}
+<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/></svg>
+{%- elif name == "sun" -%}
+<svg class="icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+{%- elif name == "moon" -%}
+<svg class="icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg>
+{%- endif -%}
+{%- endmacro %}
+<div class="topbar">
+  <div class="brand">
+    <span class="brand-mark">{{ app_name[0] }}</span>
+    <h1>{{ app_name }}</h1>
+  </div>
+  <div class="session">
+    <span class="avatar">{{ user[0]|upper }}</span>
+    <span>{{ user }}</span>
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Cambiar tema">
+      {{ icon("sun") }}{{ icon("moon") }}
+    </button>
+    <a href="/logout" class="btn-ghost">{{ icon("logout") }}Salir</a>
+  </div>
 </div>
 
-<section>
-  <h2>Añadir aplicación vigilada</h2>
-  <p>Se guardará en la configuración y comenzará a comprobarse sin reiniciar Sentinel.</p>
-  {% if add_error %}<p class="bad">{{ add_error }}</p>{% endif %}
-  <form method="post" action="/apps">
-    <label>ID<br><input name="id" placeholder="mi_aplicacion" pattern="[a-z0-9][a-z0-9_-]{1,48}" required></label>
-    <label>Nombre<br><input name="display_name" placeholder="Mi aplicación" maxlength="120" required></label>
-    <label>URL local<br><input name="local_url" placeholder="http://127.0.0.1:8100" required></label>
-    <label>Ruta de salud<br><input name="health_path" value="/health" required></label>
-    <label>Dominio público<br><input name="public_hostname" placeholder="mi-app.ejemplo.com" required></label>
-    <br><button type="submit">Añadir aplicación</button>
-  </form>
-</section>
+<div class="page">
+  <p class="muted">Actualizado: {{ now }}</p>
 
-{% for app in apps %}
-<section>
-  <h2>{{ app.display_name }} — <span class="{{ 'ok' if app.healthy else 'bad' }}">{{ "SANO" if app.healthy else "NO RESPONDE" }}</span></h2>
-  <p>Local: {{ app.local_url }} — Público: {{ app.public_hostname }}</p>
+  {% macro pct_class(value) -%}
+    {%- if value >= 90 -%}bad{%- elif value >= 70 -%}warn{%- else -%}ok{%- endif -%}
+  {%- endmacro %}
+  <div class="metrics">
+    <div class="metric">
+      <span class="metric-label">{{ icon("cpu") }} CPU</span>
+      <strong>{{ system.cpu_percent }}%</strong>
+      <div class="metric-bar"><span class="{{ pct_class(system.cpu_percent) }}" style="width: {{ system.cpu_percent }}%"></span></div>
+    </div>
+    <div class="metric">
+      <span class="metric-label">{{ icon("ram") }} Memoria</span>
+      <strong>{{ system.memory_percent }}%</strong>
+      <small>{{ system.memory_used_gb }} / {{ system.memory_total_gb }} GB</small>
+      <div class="metric-bar"><span class="{{ pct_class(system.memory_percent) }}" style="width: {{ system.memory_percent }}%"></span></div>
+    </div>
+    <div class="metric">
+      <span class="metric-label">{{ icon("disk") }} Disco</span>
+      <strong>{{ system.disk_percent }}%</strong>
+      <small>{{ system.disk_free_gb }} GB libres</small>
+      <div class="metric-bar"><span class="{{ pct_class(system.disk_percent) }}" style="width: {{ system.disk_percent }}%"></span></div>
+    </div>
+    <div class="metric">
+      <span class="metric-label">{{ icon("clock") }} Equipo encendido</span>
+      <strong>{{ system.uptime }}</strong>
+    </div>
+  </div>
 
-  {% if app.state %}
-  <p>Túnel activo: {{ app.state.active_tunnel }} —
-     Fallos públicos consecutivos: {{ app.state.consecutive_public_failures }} —
-     Último chequeo público: {{ app.state.last_public_check }} —
-     Local OK: {{ app.state.last_local_ok }}</p>
-  {% else %}
-  <p>Sin estado de failover registrado todavía.</p>
-  {% endif %}
+  <section>
+    <h2>Añadir aplicación vigilada</h2>
+    <p class="muted">Se guardará en la configuración y comenzará a comprobarse sin reiniciar Sentinel.</p>
+    <p class="muted form-hint">Todos los campos son obligatorios. El ID solo admite minúsculas, números, guion y guion bajo.</p>
+    {% if add_error %}<p class="field-error">{{ icon("cross") }}{{ add_error }}</p>{% endif %}
+    <form method="post" action="/apps">
+      <div class="form-grid">
+        <label>Nombre<input name="display_name" placeholder="Mi aplicación" maxlength="120" required></label>
+        <label>ID<input name="id" placeholder="mi_aplicacion" pattern="[a-z0-9][a-z0-9_-]{1,48}" required></label>
+        <label>URL local<input name="local_url" placeholder="http://127.0.0.1:8100" required></label>
+        <label>Ruta de salud<input name="health_path" value="/health" required></label>
+        <label class="span-2">Dominio público<input name="public_hostname" placeholder="mi-app.ejemplo.com" required></label>
+      </div>
+      <div class="form-actions">
+        <button type="submit">{{ icon("plus") }}Añadir aplicación</button>
+      </div>
+    </form>
+  </section>
 
-  <h3>Historial reciente</h3>
-  {% if app.history %}
-  <table border="1" cellpadding="4">
-    <tr><th>Fecha</th><th>Acción</th><th>De</th><th>A</th><th>Motivo</th><th>Dry-run</th></tr>
-    {% for entry in app.history %}
-    <tr>
-      <td>{{ entry.get("timestamp", "") }}</td>
-      <td>{{ entry.get("action", "") }}</td>
-      <td>{{ entry.get("from", "") }}</td>
-      <td>{{ entry.get("to", "") }}</td>
-      <td>{{ entry.get("reason", "") }}</td>
-      <td>{{ entry.get("dry_run", "") }}</td>
-    </tr>
+  <div class="apps-grid">
+    {% for app in apps %}
+    {% set tiene_avisos = app.healthy and app.state and (app.state.get("consecutive_public_failures", 0) or 0) > 0 %}
+    <section>
+      <h2 class="app-title">{{ icon("app") }}{{ app.display_name }}
+        {% if not app.healthy %}
+        <span class="badge bad">{{ icon("cross") }}NO RESPONDE</span>
+        {% elif tiene_avisos %}
+        <span class="badge warn">{{ icon("warn") }}AVISO</span>
+        {% else %}
+        <span class="badge ok">{{ icon("check") }}SANO</span>
+        {% endif %}
+      </h2>
+      <p class="muted">Local: {{ app.local_url }}<br>Público: {{ app.public_hostname }}</p>
+
+      {% if app.state %}
+      <p class="muted">
+        Túnel activo: {{ app.state.active_tunnel }}<br>
+        Fallos públicos consecutivos: {{ app.state.consecutive_public_failures }}<br>
+        Último chequeo público: {{ app.state.last_public_check }}<br>
+        Local OK: {{ app.state.last_local_ok }}
+      </p>
+      {% else %}
+      <p class="muted">Sin estado de failover registrado todavía.</p>
+      {% endif %}
+
+      <h3>Historial reciente</h3>
+      {% if app.history %}
+      <div class="table-wrap">
+        <table class="history-table">
+          <thead>
+            <tr><th>Fecha</th><th>Acción</th><th>De</th><th>A</th><th>Motivo</th><th>Dry-run</th></tr>
+          </thead>
+          <tbody>
+          {% for entry in app.history %}
+          <tr>
+            <td data-label="Fecha">{{ entry.get("timestamp", "") }}</td>
+            <td data-label="Acción">{{ entry.get("action", "") }}</td>
+            <td data-label="De">{{ entry.get("from", "") }}</td>
+            <td data-label="A">{{ entry.get("to", "") }}</td>
+            <td data-label="Motivo">{{ entry.get("reason", "") }}</td>
+            <td data-label="Dry-run">{{ entry.get("dry_run", "") }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="muted">Sin eventos de failover todavía.</p>
+      {% endif %}
+    </section>
     {% endfor %}
-  </table>
-  {% else %}
-  <p>Sin eventos de failover todavía.</p>
-  {% endif %}
-</section>
-{% endfor %}
+  </div>
+</div>
 {% endblock %}
