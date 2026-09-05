@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Incidencias{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div class="brand">
+    <span class="brand-mark">{{ app_name[0] }}</span>
+    <h1>{{ app_name }}</h1>
+  </div>
+  <div class="session">
+    <span class="avatar">{{ user[0]|upper }}</span>
+    <span>{{ user }}</span>
+    <a href="/" class="btn-ghost">&larr; Volver al panel</a>
+    <a href="/logout" class="btn-ghost">Salir</a>
+  </div>
+</div>
+
+<div class="page">
+  <section>
+    <h2>Incidencias recientes</h2>
+    <p class="muted">
+      Errores 403/409/500 detectados en el tráfico real hacia las aplicaciones vigiladas,
+      agrupados por código y ruta. No se muestran consultas, cookies, tokens ni rutas físicas.
+    </p>
+    {% if entries %}
+    <div class="table-wrap">
+      <table class="history-table">
+        <thead>
+          <tr><th>Código</th><th>Ruta</th><th>Repeticiones</th><th>Primera vez</th><th>Última vez</th></tr>
+        </thead>
+        <tbody>
+        {% for entry in entries %}
+          <tr>
+            <td data-label="Código">{{ entry.status_code }}</td>
+            <td data-label="Ruta">{{ entry.path }}</td>
+            <td data-label="Repeticiones">{{ entry.count }}</td>
+            <td data-label="Primera vez">{{ entry.first_seen }}</td>
+            <td data-label="Última vez">{{ entry.last_seen }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="muted">Sin incidencias registradas.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

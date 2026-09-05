@@ -1,0 +1,29 @@
+# MRD Sentinel — Registro de apps vigiladas.
+#
+# Anadir una app nueva (ej. MRD Fuel Control) NO requiere tocar codigo de
+# Sentinel: basta con una entrada nueva aqui + una instancia propia de
+# scripts/operations/failover.py corriendo con su propio --state-root para
+# esa app + una regla de ingress en Cloudflare que apunte su hostname a
+# este mismo Sentinel (puerto sentinel.port).
+
+sentinel:
+  host: "0.0.0.0"
+  port: 9100
+
+apps:
+  - id: mrd_tool_control
+    display_name: "MRD Tool Control"
+    local_url: "http://127.0.0.1:8000"
+    health_path: "/health"
+    public_hostname: "app.iasmrd.com"
+    failover_state_root: "C:\\ProgramData\\MRDToolControl\\failover"
+    proxy_enabled: true
+
+  # Futuro, ejemplo (no activo hoy):
+  # - id: mrd_fuel_control
+  #   display_name: "MRD Fuel Control"
+  #   local_url: "http://127.0.0.1:8100"
+  #   health_path: "/health"
+  #   public_hostname: "fuel.iasmrd.com"
+  #   failover_state_root: "C:\\ProgramData\\MRDFuelControl\\failover"
+  #   proxy_enabled: true
