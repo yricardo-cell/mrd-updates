@@ -26,6 +26,7 @@ DEFAULT_TIMEOUT_SECONDS = 3.0
 class AppHealth:
     healthy: bool
     checked_at: str
+    latency_ms: float | None = None
 
 
 def check_http_health(url: str, timeout: float) -> bool:
@@ -41,6 +42,17 @@ def check_http_health(url: str, timeout: float) -> bool:
                 return True
     except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError):
         return False
+
+
+def check_http_health_timed(url: str, timeout: float) -> tuple[bool, float | None]:
+    """Igual que check_http_health, pero tambien devuelve cuanto tardo el
+    intento (para el historial de tiempos de respuesta). Delega en
+    check_http_health para seguir siendo el unico punto que los tests
+    sustituyen via monkeypatch."""
+    start = time.monotonic()
+    healthy = check_http_health(url, timeout)
+    elapsed_ms = round((time.monotonic() - start) * 1000, 1)
+    return healthy, elapsed_ms
 
 
 class HealthMonitor:
@@ -87,9 +99,36 @@ class HealthMonitor:
             result = self._results.get(app_id)
             return bool(result and result.healthy)
 
+    def get(self, app_id: str) -> AppHealth | None:
+        with self._lock:
+            return self._results.get(app_id)
+
     def snapshot(self) -> dict[str, AppHealth]:
         with self._lock:
             return dict(self._results)
+
+    def latency_snapshot(self) -> dict[str, float | None]:
+        """Ultimo tiempo de respuesta conocido por app, para el historial
+        de metricas. None si la app aun no respondio nunca."""
+        with self._lock:
+            return {app_id: result.latency_ms for app_id, result in self._results.items()}
+
+    def check_now(self, app_id: str) -> AppHealth | None:
+        """Lanza un chequeo inmediato de una sola app (fuera del ciclo de
+        sondeo periodico) y actualiza la cache, para el boton "Comprobar
+        ahora" del panel."""
+        app = self._config.get_app(app_id)
+        if app is None:
+            return None
+        healthy, latency_ms = check_http_health_timed(app.health_url, self._timeout)
+        result = AppHealth(
+            healthy=healthy,
+            checked_at=datetime.now(timezone.utc).isoformat(),
+            latency_ms=latency_ms,
+        )
+        with self._lock:
+            self._results[app_id] = result
+        return result
 
     def _run(self) -> None:
         # Primer chequeo inmediato para no arrancar con todo en "no sano".
@@ -99,7 +138,7 @@ class HealthMonitor:
 
     def _tick(self) -> None:
         for app in self._config.apps:
-            healthy = check_http_health(app.health_url, self._timeout)
+            healthy, latency_ms = check_http_health_timed(app.health_url, self._timeout)
             now = datetime.now(timezone.utc).isoformat()
             with self._lock:
-                self._results[app.id] = AppHealth(healthy=healthy, checked_at=now)
+                self._results[app.id] = AppHealth(healthy=healthy, checked_at=now, latency_ms=latency_ms)

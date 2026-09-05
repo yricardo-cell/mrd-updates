@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Acciones{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div class="brand">
+    <span class="brand-mark">{{ app_name[0] }}</span>
+    <h1>{{ app_name }}</h1>
+  </div>
+  <div class="session">
+    <span class="avatar">{{ user[0]|upper }}</span>
+    <span>{{ user }}</span>
+    <a href="/" class="btn-ghost">&larr; Volver al panel</a>
+    <a href="/logout" class="btn-ghost">Salir</a>
+  </div>
+</div>
+
+<div class="page">
+  {% if resultado == "ok" %}
+  <p class="banner-ok">Acción "{{ accion_id }}" ejecutada correctamente.</p>
+  {% elif resultado == "error" %}
+  <p class="field-error">La acción "{{ accion_id }}" se ejecutó pero devolvió un error. Revisa la auditoría para el detalle.</p>
+  {% endif %}
+
+  <section>
+    <h2>Acciones administrativas</h2>
+    <p class="muted">
+      Lista cerrada: solo las acciones de aquí abajo se pueden ejecutar. Las
+      de re-comprobación no reinician ni reparan nada; las de reparación real
+      exigen escribir el nombre exacto del componente para confirmarlas.
+      Cada ejecución queda registrada en la <a href="/admin/auditoria">auditoría</a>.
+    </p>
+    {% if acciones %}
+    <div class="apps-grid">
+      {% for accion in acciones %}
+      <div class="app-card">
+        <div class="app-title">{{ accion.label }}</div>
+        {% if accion.confirm_text %}
+        <form method="post" action="/admin/acciones/{{ accion.id }}" class="form-confirmacion-texto">
+          <input type="hidden" name="confirmar" value="si">
+          <label class="muted" for="confirmacion-{{ accion.id }}">
+            Escribe «{{ accion.confirm_text }}» para confirmar
+          </label>
+          <input type="text" id="confirmacion-{{ accion.id }}" name="confirmacion"
+                 data-confirm-text="{{ accion.confirm_text }}" autocomplete="off" required>
+          <button type="submit" class="btn-hud" data-doble-clic="proteger" disabled>Ejecutar</button>
+        </form>
+        {% else %}
+        <form method="post" action="/admin/acciones/{{ accion.id }}"
+              onsubmit="return confirm('¿Confirmas: {{ accion.label }}?');">
+          <input type="hidden" name="confirmar" value="si">
+          <button type="submit" class="btn-hud" data-doble-clic="proteger">Ejecutar</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No hay acciones disponibles en este entorno.</p>
+    {% endif %}
+  </section>
+</div>
+<script>
+// Bloqueo anti doble-clic en cliente (el servidor tambien lo aplica igualmente).
+document.querySelectorAll('button[data-doble-clic="proteger"]').forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    setTimeout(function () { btn.disabled = true; }, 0);
+  });
+});
+// Acciones con confirmacion por texto: el boton solo se habilita cuando el
+// texto escrito coincide exactamente con el nombre del componente.
+document.querySelectorAll('input[data-confirm-text]').forEach(function (input) {
+  var boton = input.closest("form").querySelector('button[type="submit"]');
+  input.addEventListener("input", function () {
+    boton.disabled = input.value !== input.dataset.confirmText;
+  });
+});
+</script>
+{% endblock %}

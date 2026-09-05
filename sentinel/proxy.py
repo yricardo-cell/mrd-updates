@@ -12,6 +12,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, Response
 
 from sentinel.config import WatchedApp
+from sentinel.error_log import TRACKED_STATUS_CODES, ErrorLog
 from sentinel.health_monitor import HealthMonitor
 
 # Headers salto-a-salto que no se deben reenviar (RFC 7230 6.1) mas los
@@ -51,6 +52,7 @@ def _filtered_headers(headers: httpx.Headers) -> dict:
 
 async def proxy_request(
     request: Request, app: WatchedApp, health_monitor: HealthMonitor,
+    error_log: ErrorLog | None = None,
 ) -> Response:
     if not health_monitor.is_healthy(app.id):
         html = RECONNECTING_HTML.format(app_name=app.display_name)
@@ -71,6 +73,9 @@ async def proxy_request(
     except httpx.HTTPError:
         html = RECONNECTING_HTML.format(app_name=app.display_name)
         return HTMLResponse(html, status_code=503)
+
+    if error_log is not None and upstream.status_code in TRACKED_STATUS_CODES:
+        error_log.record(upstream.status_code, request.url.path)
 
     return Response(
         content=upstream.content,

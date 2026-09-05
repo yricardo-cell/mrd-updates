@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Estado del sistema{% endblock %}
+{% block content %}
+{% macro icon(name) -%}
+{%- if name == "check" -%}
+<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 5-5"/></svg>
+{%- elif name == "warn" -%}
+<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3z"/><path d="M12 10v3.5"/><circle cx="12" cy="16.5" r="0.75" fill="currentColor" stroke="none"/></svg>
+{%- elif name == "cross" -%}
+<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+{%- elif name == "alert" -%}
+<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M10.3 20a1.8 1.8 0 0 0 3.4 0"/></svg>
+{%- elif name == "refresh" -%}
+<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
+{%- endif -%}
+{%- endmacro %}
+{% macro estado_badge(status) -%}
+  {%- if status == "ok" -%}
+  <span class="badge ok">{{ icon("check") }}OK</span>
+  {%- elif status == "atencion" -%}
+  <span class="badge warn">{{ icon("warn") }}ATENCIÓN</span>
+  {%- elif status == "caido" -%}
+  <span class="badge bad">{{ icon("cross") }}CAÍDO</span>
+  {%- else -%}
+  <span class="badge unknown">{{ icon("alert") }}DESCONOCIDO</span>
+  {%- endif -%}
+{%- endmacro %}
+
+<div class="topbar">
+  <div class="brand">
+    <span class="brand-mark">{{ app_name[0] }}</span>
+    <h1>{{ app_name }} — Estado del sistema</h1>
+  </div>
+</div>
+
+<div class="page">
+  {% if overall == "ok" %}
+  <p class="banner-ok">{{ icon("check") }}Sistema funcionando con normalidad.</p>
+  {% else %}
+  <p class="field-error">{{ icon("warn") }}El sistema necesita atención.</p>
+  {% endif %}
+  <p class="muted floating-note">Actualizado: {{ generated_at }}{% if checked_at %} · Último chequeo: {{ checked_at }}{% endif %}</p>
+
+  <div class="control-row">
+    <button type="button" class="btn-hud" onclick="location.reload()">{{ icon("refresh") }}Comprobar ahora</button>
+  </div>
+
+  <div class="apps-grid">
+    {% for key, card in cards.items() %}
+    <div class="app-card">
+      <div class="app-title">
+        <span class="status-ring {{ 'ok' if card.status == 'ok' else ('warn' if card.status == 'atencion' else ('bad' if card.status == 'caido' else 'unknown')) }}" aria-hidden="true"></span>
+        {{ card.label }}
+        {{ estado_badge(card.status) }}
+      </div>
+      {% if card.uptime %}<p class="muted">Encendido: {{ card.uptime }}</p>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <p class="muted floating-note">
+    Esta vista es de solo lectura y no requiere iniciar sesión. No muestra
+    direcciones internas, registros técnicos ni permite ejecutar ninguna
+    acción.
+  </p>
+</div>
+{% endblock %}

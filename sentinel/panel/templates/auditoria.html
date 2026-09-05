@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Auditoría{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div class="brand">
+    <span class="brand-mark">{{ app_name[0] }}</span>
+    <h1>{{ app_name }}</h1>
+  </div>
+  <div class="session">
+    <span class="avatar">{{ user[0]|upper }}</span>
+    <span>{{ user }}</span>
+    <a href="/admin/acciones" class="btn-ghost">&larr; Volver a acciones</a>
+    <a href="/logout" class="btn-ghost">Salir</a>
+  </div>
+</div>
+
+<div class="page">
+  <section>
+    <h2>Auditoría de acciones administrativas</h2>
+    <p class="muted">
+      Registro de solo lectura: quién ejecutó cada acción, cuándo, sobre qué
+      componente, el resultado y cuánto tardó. No se puede borrar ni editar
+      desde el panel.
+    </p>
+    {% if entries %}
+    <div class="table-wrap">
+      <table class="history-table">
+        <thead>
+          <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Componente</th><th>Resultado</th><th>Duración (ms)</th></tr>
+        </thead>
+        <tbody>
+        {% for entry in entries %}
+          <tr>
+            <td data-label="Fecha">{{ entry.timestamp }}</td>
+            <td data-label="Usuario">{{ entry.executor }}</td>
+            <td data-label="Acción">{{ entry.action_id }}</td>
+            <td data-label="Componente">{{ entry.component }}</td>
+            <td data-label="Resultado">{{ entry.result }}</td>
+            <td data-label="Duración (ms)">{{ entry.duration_ms }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="muted">Sin acciones registradas todavía.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
