@@ -123,3 +123,25 @@ def test_borrar_hueco_suelto_tambien_suelta_el_epi(client, db):
     assert r.status_code == 303
     db.expire_all()
     assert db.get(StockEPI, casco.id).ubicacion_id is None and db.get(Herramienta, taladro.id).ubicacion_id is None
+
+
+def test_mover_arrastrando_elemento_y_zona(client, db):
+    almacen, vieja, taladro, discos, casco = _setup(db)
+    h = _login(client)
+    zid = client.post("/api/nave/zonas", json={"nombre": "C", "largo": 600, "ancho": 240, "alto": 250, "pos_x": 100, "pos_z": 100}, headers=h).json()["id"]
+    eid = client.post("/api/nave/elementos", json={"zona_id": zid, "tipo": "cajonera", "nombre": "Caj", "ancho": 80, "fondo": 50, "alto": 90,
+                                                   "pared": "derecha", "desde_puerta": 120, "desde_pared": 0}, headers=h).json()["id"]
+    el = client.get("/api/nave/3d").json()["zonas"][0]["elementos"][0]
+    assert (el["x"], el["z"]) == (400, 190)
+    r = client.post(f"/api/nave/elementos/{eid}/mover", json={"x": 100, "z": 10}, headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json()["desde_puerta"] == 600 - 100 - 80 and r.json()["desde_pared"] == 240 - 10 - 50 and r.json()["pared"] == "derecha"
+    el = client.get("/api/nave/3d").json()["zonas"][0]["elementos"][0]
+    assert (el["x"], el["z"]) == (100, 10)
+    r = client.post(f"/api/nave/elementos/{eid}/mover", json={"x": 5000, "z": 5000}, headers=h)
+    assert (r.json()["x"], r.json()["z"]) == (600 - 80, 240 - 50)
+    r = client.post(f"/api/nave/zonas/{zid}/mover", json={"x": 1200, "z": 300}, headers=h)
+    assert r.status_code == 200 and r.json() == {"ok": True, "pos_x": 1200, "pos_z": 300}
+    z = client.get("/api/nave/3d").json()["zonas"][0]
+    assert (z["pos_x"], z["pos_z"]) == (1200, 300)
+    assert 'id="v-mover"' in client.get("/nave/3d").text
