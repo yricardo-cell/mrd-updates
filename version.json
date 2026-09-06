@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.41",
-    "nombre":  "MRD TOOL CONTROL -- Estado real en /servicio, lecturas del escaner solo con digitos y entorno de pruebas",
+    "version_actual":  "2.7.42",
+    "nombre":  "MRD TOOL CONTROL -- EPI y ropa solo por Mostrador Unico: panel EPI del trabajador y kit calculado con entregas reales",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Estado real en /servicio, lecturas del escaner solo con digitos y entorno de pruebas"
+                    "EPI y ropa solo por Mostrador Unico: panel EPI del trabajador y kit calculado con entregas reales"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.41.zip",
-    "sha256":  "53ee5e1dce85a2de1f7625ca6d49f103db2245d5d5f416d0088723fe8adf6c9f"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.42.zip",
+    "sha256":  "48239b78142f85f22fe0327b3c5b557e5bd0cce5095943c7915b0cfcf986f53f"
 }
