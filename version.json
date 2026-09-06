@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.38",
-    "nombre":  "MRD TOOL CONTROL -- Kits: unidades por paquete en materiales y EPI de stock",
+    "version_actual":  "2.7.39",
+    "nombre":  "MRD TOOL CONTROL -- Kits: maletín con contenido y escaneo en bloque",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Kits: unidades por paquete en materiales y EPI de stock"
+                    "Kits: maletín con contenido y escaneo en bloque"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.38.zip",
-    "sha256":  "55babd837b25038b2a96f9df43659eac086c27eff7653e8f6193ba71668972d8"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.39.zip",
+    "sha256":  "6d428ea72d49badaef75a95a3c7c98fbb3a466908feb60cb1f3641edc3fae985"
 }
