@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.48",
-    "nombre":  "MRD TOOL CONTROL -- Gasto por herramienta y consumo por obra con Excel; avisos push al movil del trabajador",
+    "version_actual":  "2.7.49",
+    "nombre":  "MRD TOOL CONTROL -- Puesta a punto de datos: que falta en cada ficha, con enlaces para completarlo",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Gasto por herramienta y consumo por obra con Excel; avisos push al movil del trabajador"
+                    "Puesta a punto de datos: que falta en cada ficha, con enlaces para completarlo"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.48.zip",
-    "sha256":  "483005842e180d3bb0a264a5521cf4aa3381af57f923bcad1509cb00058cdbc6"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.49.zip",
+    "sha256":  "1a3a1ad8e687a47b216cd2d7276f8517c5bd81d7c80030c9946b360b1f700fd9"
 }
