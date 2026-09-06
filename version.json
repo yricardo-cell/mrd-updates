@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.37",
-    "nombre":  "MRD TOOL CONTROL -- Solicitudes entregadas desde Mostrador Unico",
+    "version_actual":  "2.7.38",
+    "nombre":  "MRD TOOL CONTROL -- Kits: unidades por paquete en materiales y EPI de stock",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Solicitudes entregadas desde Mostrador Unico"
+                    "Kits: unidades por paquete en materiales y EPI de stock"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.37.zip",
-    "sha256":  "f0dc5dd710f6fcc2a41ed3022ecbf527c5e6a92decb468c44a1e4eeb19347b84"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.38.zip",
+    "sha256":  "55babd837b25038b2a96f9df43659eac086c27eff7653e8f6193ba71668972d8"
 }
