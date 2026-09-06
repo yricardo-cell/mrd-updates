@@ -82,6 +82,27 @@ try {
 
 $legacyService = Get-Service -Name $LegacyServiceName -ErrorAction SilentlyContinue
 
+# El vigilante escribe estado, lock y logs en ProgramData. Si ya los creo el
+# servicio SYSTEM, pertenecen a Administradores y una tarea con la cuenta
+# actual no podria abrirlos: moriria nada mas arrancar sin dejar rastro.
+$stateRoot = Join-Path $env:ProgramData "MRDToolControl\failover"
+if ($CurrentUser) {
+    $probeTargets = @(
+        (Join-Path $stateRoot "logs\failover.log"),
+        (Join-Path $stateRoot "state.json"),
+        (Join-Path $stateRoot "failover.lock")
+    )
+    foreach ($target in $probeTargets) {
+        if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { continue }
+        try {
+            $stream = [System.IO.File]::Open($target, 'Open', 'ReadWrite', 'ReadWrite')
+            $stream.Close()
+        } catch {
+            throw "La cuenta actual no puede escribir $target (lo creo el servicio SYSTEM). Instale como Administrador sin -CurrentUser, o corrija los permisos con: icacls `"$stateRoot`" /grant `"$env:USERNAME`":(OI)(CI)F /T"
+        }
+    }
+}
+
 Write-Host "Plan de instalacion de $TaskName`:" -ForegroundColor Cyan
 Write-Host "- Crear o actualizar la tarea '$TaskName'"
 if ($CurrentUser) {
