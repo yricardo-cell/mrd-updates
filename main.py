@@ -15225,8 +15225,16 @@ def portal_trabajador(token: str, request: Request, db: Session = Depends(get_db
             entrega.items_portal = []
     portal_base = MRD_PUBLIC_URL if IS_PRODUCTION else str(request.base_url).rstrip("/")
     carnet_qr_b64 = generar_qr_base64(f"{portal_base}/portal/{t.portal_token}")
+    # Tu EPI (2.7.46): tallas en ficha y kit básico según entregas reales.
+    catalogo_kit_portal = [
+        {"nombre": c.nombre, "cantidad": c.cantidad_kit}
+        for c in db.query(CatalogoEPI).filter(CatalogoEPI.categoria == "epi", CatalogoEPI.activo == True)
+        .order_by(CatalogoEPI.orden, CatalogoEPI.nombre).all()
+    ] or KIT_EPI_INICIAL
+    kit_estado_portal = _kit_epi_estado(db, t.id, catalogo_kit_portal)
     response = templates.TemplateResponse(request, "portal_trabajador.html", {
         "request": request, "trabajador": t, "epis": epis,
+        "kit_estado": kit_estado_portal, "catalogo_kit": catalogo_kit_portal,
         "formaciones": formaciones, "reconocimientos": reconocs,
         "herramientas": herramientas, "maquinaria": maquinaria,
         "solicitudes": solicitudes, "comunicaciones": comunicaciones,
