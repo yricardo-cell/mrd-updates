@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.33",
-    "nombre":  "MRD TOOL CONTROL -- Inventario guiado en tres pasos",
+    "version_actual":  "2.7.34",
+    "nombre":  "MRD TOOL CONTROL -- Estado visual con activos y unidades por separado",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Inventario guiado en tres pasos"
+                    "Estado visual con activos y unidades por separado"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.33.zip",
-    "sha256":  "9b0a97d716b8677c02f94d919a73136287ea5c6df725e23bb7b5cf4480666fb8"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.34.zip",
+    "sha256":  "5d5b6dbd9747569254c218ec4e9aaa5cd942d4c827d5a21ad46f5dd135146298"
 }
