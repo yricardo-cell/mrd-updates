@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.40",
-    "nombre":  "MRD TOOL CONTROL -- Reinicio seguro del servidor: afinidad de CPU desde el lanzador y relanzamiento supervisado",
+    "version_actual":  "2.7.41",
+    "nombre":  "MRD TOOL CONTROL -- Estado real en /servicio, lecturas del escaner solo con digitos y entorno de pruebas",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Reinicio seguro del servidor: afinidad de CPU desde el lanzador y relanzamiento supervisado"
+                    "Estado real en /servicio, lecturas del escaner solo con digitos y entorno de pruebas"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.40.zip",
-    "sha256":  "ed4e216b88017c6114789399882e4f3717ba3f14d81c5df4e5df888351d3bfd5"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.41.zip",
+    "sha256":  "53ee5e1dce85a2de1f7625ca6d49f103db2245d5d5f416d0088723fe8adf6c9f"
 }
