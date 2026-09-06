@@ -62,6 +62,32 @@ manual del token, sin tocar el DNS:
 venv\Scripts\python.exe scripts\operations\failover.py --verify-token --state-root $env:TEMP\mrd-failover-verify
 ```
 
+## Túnel B como tarea SYSTEM y failover seguro
+
+El túnel de respaldo (`config/cloudflared-backup.yml`, tarea `CloudflaredBackup`)
+debe arrancar con Windows y sin depender de que alguien inicie sesión. El
+06/09/2026 corría con la cuenta del usuario y, tras un reinicio, estuvo 11 horas
+parado mientras Sentinel lo daba por bien. Instalación como SYSTEM al arrancar,
+con reinicio automático y comprobación real de que el conector se registra en
+Cloudflare (`127.0.0.1:20251/ready`):
+
+```powershell
+# Vista previa
+powershell -ExecutionPolicy Bypass -File scripts\operations\install_backup_tunnel_task.ps1
+# Aplicar (PowerShell de administrador; con & si se lanza desde una consola)
+& ".\scripts\operations\install_backup_tunnel_task.ps1" -Apply
+```
+
+Dos protecciones acompañan a esto:
+
+- El vigilante de failover comprueba `/ready` del túnel B antes de cambiar el
+  CNAME. Si B no está conectado, **no conmuta** (sería una caída total), lo deja
+  escrito en el log e intenta arrancar la tarea `CloudflaredBackup` (como mucho
+  una vez por minuto) hasta que B responda.
+- Sentinel solo marca un túnel como activo si su endpoint `/ready` devuelve 200
+  (A en `20241`, B en `20251`); el estado de la tarea o del servicio de Windows ya
+  no basta.
+
 ## Mantenimiento y despliegues
 
 Antes de un reinicio controlado se crea el archivo `.maintenance_mode`. Al finalizar las comprobaciones se elimina. No debe dejarse activo permanentemente.

@@ -61,6 +61,7 @@ DEFAULT_STATE = {
     "last_public_check": None,
     "last_public_ok": None,
     "last_local_ok": None,
+    "last_backup_start_attempt": None,
     "zone_id": None,
     "record_id": None,
 }
@@ -163,6 +164,43 @@ def check_tunnel_ready(url: str | None, timeout: float) -> bool | None:
             return resp.status == 200
     except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError):
         return None
+
+
+BACKUP_START_MIN_INTERVAL_SECONDS = 60
+
+
+def try_start_backup_tunnel(args: argparse.Namespace, state: dict, now: datetime) -> bool:
+    """El túnel B no está conectado y hace falta: intenta arrancar su tarea
+    programada (schtasks /run). Como mucho una vez por minuto, para no
+    inundar el log mientras el túnel tarda en levantarse. Devuelve True si
+    se lanzó el intento."""
+    if not args.backup_task_name:
+        return False
+    last = state.get("last_backup_start_attempt")
+    if last:
+        try:
+            elapsed = (now - datetime.fromisoformat(last)).total_seconds()
+        except ValueError:
+            elapsed = BACKUP_START_MIN_INTERVAL_SECONDS
+        if elapsed < BACKUP_START_MIN_INTERVAL_SECONDS:
+            return False
+    state["last_backup_start_attempt"] = now.isoformat()
+    try:
+        result = subprocess.run(
+            ["schtasks", "/run", "/tn", args.backup_task_name],
+            capture_output=True, text=True, timeout=15, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logging.error("No se pudo lanzar la tarea %s del túnel B: %s", args.backup_task_name, exc)
+        return True
+    if result.returncode == 0:
+        logging.warning("Tarea %s (túnel B) lanzada; se reevalúa en el siguiente ciclo.", args.backup_task_name)
+    else:
+        logging.error(
+            "schtasks /run %s devolvió %s: %s", args.backup_task_name, result.returncode,
+            (result.stderr or result.stdout or "").strip()[:200],
+        )
+    return True
 
 
 def reload_token_if_rotated(path: Path, current: str) -> str | None:
@@ -388,7 +426,18 @@ def tick(args: argparse.Namespace, token: str, state: dict, history_path: Path) 
             state["consecutive_public_failures"], args.failure_threshold,
         )
         if state["consecutive_public_failures"] >= args.failure_threshold:
-            do_failover(args, token, state, now, history_path)
+            b_ready = check_tunnel_ready(args.tunnel_b_ready_url, args.health_timeout_seconds)
+            if b_ready:
+                do_failover(args, token, state, now, history_path)
+            else:
+                # Conmutar el DNS a un túnel que no está conectado al edge sería
+                # una caída total (el 06/09/2026 el túnel B llevaba horas parado
+                # con su tarea fallida). Se mantiene A y se intenta levantar B.
+                logging.error(
+                    "Túnel B no está conectado (%s no responde): NO se conmuta el DNS. "
+                    "Se intenta arrancar el túnel B.", args.tunnel_b_ready_url,
+                )
+                try_start_backup_tunnel(args, state, now)
     else:
         logging.error("Túnel B (activo) no responde y la app local está sana; revisar manualmente.")
 
@@ -483,6 +532,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--state-root", type=Path,
         default=Path(os.environ.get("ProgramData", r"C:\ProgramData")) / "MRDToolControl" / "failover",
+    )
+    p.add_argument(
+        "--backup-task-name", default="CloudflaredBackup",
+        help="Tarea programada del túnel B que se intenta arrancar si B no está conectado ('' para desactivar).",
     )
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--once", action="store_true", help="Ejecuta una sola comprobación y termina (para pruebas).")

@@ -293,10 +293,36 @@ def test_tunnel_checks_no_inventa_estado_si_powershell_falla(monkeypatch):
         tunnel_checks.subprocess, "run",
         lambda *a, **k: _FakeCompletedProcess(),
     )
+    monkeypatch.setattr(tunnel_checks, "_probe_ready", lambda url: None)
     servicio = tunnel_checks.check_cloudflared_service()
     tarea = tunnel_checks.check_cloudflared_backup_task()
     assert servicio.state == "not_available"
     assert tarea.state == "not_available"
+
+
+def test_tunnel_checks_un_tunel_solo_esta_running_si_esta_conectado_al_edge(monkeypatch):
+    """06/09/2026: el tunel B paso 11 horas con la tarea en 'Ready' y sin
+    conexion; Sentinel lo daba por ok. Ahora manda el endpoint /ready."""
+    from sentinel import tunnel_checks
+
+    class _FakeCompletedProcess:
+        def __init__(self, stdout):
+            self.returncode = 0
+            self.stdout = stdout
+
+    respuestas = iter(["Running", "Ready"])
+    monkeypatch.setattr(
+        tunnel_checks.subprocess, "run",
+        lambda *a, **k: _FakeCompletedProcess(next(respuestas)),
+    )
+    monkeypatch.setattr(tunnel_checks, "_probe_ready", lambda url: True)
+    assert tunnel_checks.check_cloudflared_service().state == "running"
+    assert tunnel_checks.check_cloudflared_backup_task().state == "running"
+
+    respuestas = iter(["Running", "Running"])
+    monkeypatch.setattr(tunnel_checks, "_probe_ready", lambda url: None)
+    assert tunnel_checks.check_cloudflared_service().state == "stopped"
+    assert tunnel_checks.check_cloudflared_backup_task().state == "stopped"
 
 
 def test_tunnel_checks_interpreta_estados_reales(monkeypatch):
@@ -313,10 +339,12 @@ def test_tunnel_checks_interpreta_estados_reales(monkeypatch):
         tunnel_checks.subprocess, "run",
         lambda *a, **k: _FakeCompletedProcess(next(respuestas)),
     )
+    sondas = iter([True, None])
+    monkeypatch.setattr(tunnel_checks, "_probe_ready", lambda url: next(sondas))
     servicio = tunnel_checks.check_cloudflared_service()
     tarea = tunnel_checks.check_cloudflared_backup_task()
     assert servicio.state == "running"
-    assert tarea.state == "ready"
+    assert tarea.state == "stopped"
 
 
 def test_tunnel_monitor_nunca_llama_subprocess_con_shell_true(monkeypatch):
@@ -333,6 +361,7 @@ def test_tunnel_monitor_nunca_llama_subprocess_con_shell_true(monkeypatch):
         return _FakeCompletedProcess()
 
     monkeypatch.setattr(tunnel_checks.subprocess, "run", _fake_run)
+    monkeypatch.setattr(tunnel_checks, "_probe_ready", lambda url: True)
     monitor = tunnel_checks.TunnelMonitor()
     results = monitor.check_now()
 
@@ -643,6 +672,7 @@ def test_tunnel_repair_nunca_llama_subprocess_con_shell_true(monkeypatch):
     # importado (import subprocess), asi que un unico parche cubre ambos
     # puntos de llamada (el reinicio y la verificacion posterior).
     monkeypatch.setattr(tunnel_repair.subprocess, "run", _fake_run)
+    from sentinel import tunnel_checks as _tc; monkeypatch.setattr(_tc, "_probe_ready", lambda url: True)
 
     resultado = tunnel_repair.restart_cloudflared_service()
 
@@ -671,6 +701,7 @@ def test_tunnel_repair_reinicia_tarea_backup_con_stop_y_start(monkeypatch):
         return _FakeCompletedProcess()
 
     monkeypatch.setattr(tunnel_repair.subprocess, "run", _fake_run)
+    from sentinel import tunnel_checks as _tc; monkeypatch.setattr(_tc, "_probe_ready", lambda url: True)
 
     resultado = tunnel_repair.restart_cloudflared_backup_task()
 
@@ -687,6 +718,7 @@ def test_tunnel_repair_devuelve_mensaje_generico_si_falla(monkeypatch):
         stdout = "Stopped"
 
     monkeypatch.setattr(tunnel_repair.subprocess, "run", lambda *a, **k: _FakeCompletedProcess())
+    from sentinel import tunnel_checks as _tc; monkeypatch.setattr(_tc, "_probe_ready", lambda url: None)
     monkeypatch.setattr(tunnel_repair, "_VERIFY_DELAY_SECONDS", 0.0)
 
     resultado = tunnel_repair.restart_cloudflared_service()
@@ -779,6 +811,7 @@ def test_endpoint_reinicio_de_tunel_exige_confirmacion_por_texto_y_verifica_tras
         return _FakeCompletedProcess()
 
     monkeypatch.setattr(tunnel_repair.subprocess, "run", _fake_run)
+    from sentinel import tunnel_checks as _tc; monkeypatch.setattr(_tc, "_probe_ready", lambda url: True)
     monkeypatch.setattr(tunnel_repair, "_VERIFY_DELAY_SECONDS", 0.0)
 
     with TestClient(create_app(config_path)) as client:
