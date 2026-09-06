@@ -56,6 +56,12 @@ def create_worker_notification(
     )
     db.add(notification)
     db.flush()
+    # Aviso push al móvil del trabajador (2.7.48); nunca bloquea la operación.
+    try:
+        from push_service import enviar_push_trabajador
+        enviar_push_trabajador(db, worker_id, notification.titulo, notification.mensaje, notification.enlace)
+    except Exception:
+        pass
     return notification
 
 

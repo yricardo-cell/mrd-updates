@@ -72,3 +72,37 @@ def enviar_push(subscription_info: dict, payload: dict) -> str:
         return str(e)
     except Exception as e:
         return str(e)
+
+
+# ── Avisos al trabajador desde el portal (2.7.48) ─────────────────────────
+ENVIO_SINCRONO = False   # los tests lo ponen a True para comprobar los envíos
+
+
+def enviar_push_trabajador(db, trabajador_id: int, titulo: str, mensaje: str, enlace: str | None = None) -> int:
+    """Envía un aviso a los móviles suscritos de un trabajador. Los envíos van
+    en un hilo aparte para no retrasar la operación que los origina; devuelve
+    cuántas suscripciones había. Nunca lanza excepciones al llamador."""
+    import threading
+    try:
+        from models import PushSuscripcion
+        subs = db.query(PushSuscripcion).filter(PushSuscripcion.trabajador_id == trabajador_id).all()
+        infos = [{"endpoint": s.endpoint, "keys": {"p256dh": s.p256dh, "auth": s.auth}} for s in subs]
+    except Exception as exc:
+        logger.warning("push trabajador %s: no se pudieron leer suscripciones: %s", trabajador_id, exc)
+        return 0
+    if not infos:
+        return 0
+    payload = {"titulo": titulo, "mensaje": mensaje, "enlace": enlace or "/"}
+
+    def _enviar():
+        for info in infos:
+            try:
+                enviar_push(info, payload)
+            except Exception as exc:
+                logger.warning("push trabajador %s: %s", trabajador_id, exc)
+
+    if ENVIO_SINCRONO:
+        _enviar()
+    else:
+        threading.Thread(target=_enviar, daemon=True).start()
+    return len(infos)

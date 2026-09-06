@@ -689,6 +689,8 @@ def apply_migrations(target_engine=None):
         # Kits (2.7.39): maletín con contenido
         ("herramientas", "es_maletin",           "INTEGER NOT NULL DEFAULT 0"),
         ("herramientas", "maletin_id",           "INTEGER REFERENCES herramientas(id)"),
+        # Avisos push del portal del trabajador (2.7.48)
+        ("push_suscripciones", "trabajador_id",  "INTEGER REFERENCES trabajadores(id)"),
         # catalogo_epi — campos marca y notas
         ("catalogo_epi", "marca",            "VARCHAR(100)"),
         ("catalogo_epi", "notas",            "TEXT"),

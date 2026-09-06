@@ -124,6 +124,36 @@
   </div>
 </div>
 
+<!-- Gasto por herramienta y consumo por obra (2.7.48) -->
+{% if gasto_herramientas is defined %}
+<div class="bottom-row" id="informes-gasto">
+  <div class="card">
+    <div class="card-header"><div class="card-title"><i class="bi bi-cash-coin"></i> Gasto por herramienta</div><a class="table-meta" href="/informes/gasto-herramientas/excel"><i class="bi bi-file-earmark-excel"></i> Excel completo</a></div>
+    <div class="card-body p-0">
+      {% if gasto_herramientas %}
+      <div class="table-responsive"><table class="mrd-table mb-0"><thead><tr><th>Herramienta</th><th>Reparaciones</th><th>Mantenimiento</th><th>Total</th><th>% compra</th></tr></thead><tbody>
+        {% for f in gasto_herramientas %}
+        <tr><td><a href="/herramientas/{{ f.id }}">{{ f.nombre }}</a> <small class="text-muted">{{ f.codigo }}</small></td><td>{{ '{:,.2f} €'.format(f.reparaciones) }}</td><td>{{ '{:,.2f} €'.format(f.mantenimiento) }}</td><td><strong>{{ '{:,.2f} €'.format(f.total) }}</strong></td><td>{% if f.porcentaje is not none %}<span class="badge {{ 'badge-danger' if f.porcentaje >= 50 else 'badge-gray' }}">{{ f.porcentaje }} %</span>{% else %}—{% endif %}</td></tr>
+        {% endfor %}
+      </tbody></table></div>
+      {% else %}<p class="text-muted p-3 mb-0">Todavía no hay reparaciones ni mantenimientos con importe. Cuando cierres una reparación con su coste, aparecerá aquí.</p>{% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title"><i class="bi bi-building"></i> Consumo por obra</div><a class="table-meta" href="/informes/consumo-obras/excel"><i class="bi bi-file-earmark-excel"></i> Excel completo</a></div>
+    <div class="card-body p-0">
+      {% if consumo_obras %}
+      <div class="table-responsive"><table class="mrd-table mb-0"><thead><tr><th>Obra</th><th>Material (ud)</th><th>Referencias</th><th>Herramientas ahora</th><th>Incidencias</th></tr></thead><tbody>
+        {% for f in consumo_obras %}
+        <tr><td><a href="/obras/{{ f.id }}">{{ f.nombre }}</a> <small class="text-muted">{{ f.numero }}</small></td><td><strong>{{ '%g' % f.unidades }}</strong></td><td>{{ f.referencias }}</td><td>{{ f.herramientas }}</td><td>{% if f.incidencias %}<span class="badge badge-danger">{{ f.incidencias }}</span>{% else %}0{% endif %}</td></tr>
+        {% endfor %}
+      </tbody></table></div>
+      {% else %}<p class="text-muted p-3 mb-0">Sin salidas de material ni herramientas asignadas a obras todavía.</p>{% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Rankings y Exportaciones -->
 <div class="bottom-row">
 
@@ -176,6 +206,12 @@
         </a>
         <a href="/informes/reparaciones/excel" class="export-item">
           <i class="bi bi-file-earmark-spreadsheet export-icon-excel"></i> Reparaciones
+        </a>
+        <a href="/informes/gasto-herramientas/excel" class="export-item">
+          <i class="bi bi-cash-coin"></i><span>Gasto por herramienta</span>
+        </a>
+        <a href="/informes/consumo-obras/excel" class="export-item">
+          <i class="bi bi-building"></i><span>Consumo por obra</span>
         </a>
         <a href="/informes/epis/excel" class="export-item">
           <i class="bi bi-file-earmark-spreadsheet export-icon-excel"></i> EPIs/Ropa

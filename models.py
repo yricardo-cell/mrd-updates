@@ -1435,6 +1435,7 @@ class PushSuscripcion(Base):
 
     id              = Column(Integer, primary_key=True, index=True)
     usuario_id      = Column(Integer, ForeignKey("usuarios.id"), nullable=True, index=True)
+    trabajador_id   = Column(Integer, ForeignKey("trabajadores.id"), nullable=True, index=True)  # push del portal (2.7.48)
     endpoint        = Column(Text, nullable=False, unique=True)
     p256dh          = Column(String(255), nullable=False)
     auth            = Column(String(255), nullable=False)

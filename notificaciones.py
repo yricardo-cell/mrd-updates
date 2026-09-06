@@ -159,7 +159,7 @@ def _enviar_webpush(db: "Session", aviso_titulo: str, aviso_mensaje: str,
     from models import PushSuscripcion
     from push_service import enviar_push
 
-    subs = db.query(PushSuscripcion).all()
+    subs = db.query(PushSuscripcion).filter(PushSuscripcion.trabajador_id.is_(None)).all()
     if not subs:
         return "No hay dispositivos suscritos a notificaciones push"
 

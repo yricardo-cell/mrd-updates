@@ -171,7 +171,9 @@ from reports import (exportar_inventario_excel, exportar_movimientos_excel,
                     generar_analisis_inteligente, exportar_pdf_resumen,
                     exportar_maquinaria_excel, exportar_incidencias_excel,
                     exportar_reparaciones_excel, exportar_inventario_pdf,
-                    generar_plantilla_trabajadores, importar_trabajadores_excel)
+                    generar_plantilla_trabajadores, importar_trabajadores_excel,
+    exportar_tabla_excel,
+)
 # Sprint 5.7 updater compatibility shim
 import updater as _updater_mod
 import json as _json
@@ -7387,6 +7389,35 @@ def mostrador_buscar(
         raise HTTPException(exc.status_code, exc.detail)
 
 
+def _avisar_kit_incompleto(db, trabajador_id: int) -> dict | None:
+    """Tras una salida a un trabajador, si su kit básico sigue incompleto se le
+    deja aviso (y push si tiene el móvil suscrito), como mucho una vez por
+    semana (2.7.48). Nunca interrumpe la operación del Mostrador."""
+    try:
+        t = db.get(Trabajador, trabajador_id)
+        if not t:
+            return None
+        catalogo = [
+            {"nombre": c.nombre, "cantidad": c.cantidad_kit}
+            for c in db.query(CatalogoEPI).filter(CatalogoEPI.categoria == "epi", CatalogoEPI.activo == True)
+            .order_by(CatalogoEPI.orden, CatalogoEPI.nombre).all()
+        ] or KIT_EPI_INICIAL
+        estado = _kit_epi_estado(db, t.id, catalogo)
+        if estado["completo"]:
+            return {"completo": True, "faltan": []}
+        semana = datetime.now().strftime("%G-%V")
+        create_worker_notification(
+            db, t.id, kind="epi", title="Te falta parte del kit básico de EPI",
+            message="Faltan: " + ", ".join(estado["faltan"]) + ". Pídelo en tu portal o recógelo en el Mostrador.",
+            link=f"/portal/{t.portal_token}#tu-epi" if t.portal_token else None,
+            event_key=f"kit_incompleto:{t.id}:{semana}",
+        )
+        return {"completo": False, "faltan": estado["faltan"]}
+    except Exception as exc:
+        mrd_logging.log_app(f"Aviso de kit incompleto no enviado (trabajador {trabajador_id}): {exc}", level="warning")
+        return None
+
+
 def _entregar_solicitud_por_mostrador(db, user, solicitud_id: int, trabajador_id, warehouse_id: int) -> dict:
     """Cuando el almacén entrega por Mostrador Único lo que pidió un trabajador,
     la solicitud avanza sola por los estados permitidos hasta "entregada"
@@ -7511,6 +7542,8 @@ def mostrador_operar(
             result["solicitud"] = _entregar_solicitud_por_mostrador(
                 db, user, payload.solicitud_id, payload.trabajador_id, warehouse.id,
             )
+        if payload.trabajador_id and payload.accion == "salida":
+            result["kit"] = _avisar_kit_incompleto(db, payload.trabajador_id)
         db.commit()
         return JSONResponse(result)
     except CounterError as exc:
@@ -8729,6 +8762,100 @@ def scan_cambios(
 
 
 # ─── Importación Excel ────────────────────────────────────────────────────────
+def _ranking_gasto_herramientas(db: Session, warehouse_id: int | None, limite: int | None = None) -> list[dict]:
+    """Gasto acumulado por herramienta: reparaciones (coste final o estimado)
+    y mantenimientos (coste real o estimado), con precio de compra (2.7.48)."""
+    rep = dict(db.query(
+        Reparacion.herramienta_id,
+        func.sum(func.coalesce(Reparacion.coste_final, Reparacion.coste_estimado, 0.0)),
+    ).filter(Reparacion.herramienta_id.isnot(None)).group_by(Reparacion.herramienta_id).all())
+    mant = dict(db.query(
+        MantenimientoProgramado.activo_id,
+        func.sum(func.coalesce(MantenimientoProgramado.coste_real, MantenimientoProgramado.coste_estimado, 0.0)),
+    ).filter(MantenimientoProgramado.tipo_activo == "herramienta").group_by(MantenimientoProgramado.activo_id).all())
+    ids = set(rep) | set(mant)
+    if not ids:
+        return []
+    query = db.query(Herramienta).filter(Herramienta.id.in_(ids))
+    if warehouse_id:
+        query = query.filter(Herramienta.almacen_id == warehouse_id)
+    filas = []
+    for h in query.all():
+        r = float(rep.get(h.id) or 0); m = float(mant.get(h.id) or 0); precio = float(h.precio_compra or 0)
+        if r + m <= 0:
+            continue
+        filas.append({
+            "id": h.id, "codigo": h.codigo, "nombre": h.nombre, "precio_compra": precio,
+            "reparaciones": r, "mantenimiento": m, "total": r + m,
+            "porcentaje": round((r + m) / precio * 100) if precio else None,
+        })
+    filas.sort(key=lambda x: x["total"], reverse=True)
+    return filas[:limite] if limite else filas
+
+
+def _ranking_consumo_obras(db: Session, warehouse_id: int | None, limite: int | None = None) -> list[dict]:
+    """Consumo por obra: unidades de material sacadas, referencias distintas,
+    herramientas ahora en la obra e incidencias abiertas (2.7.48)."""
+    consumos = db.query(
+        MovimientoMaterial.obra_id, func.sum(MovimientoMaterial.cantidad), func.count(func.distinct(MovimientoMaterial.material_id)),
+    ).filter(MovimientoMaterial.obra_id.isnot(None), MovimientoMaterial.tipo.in_(("salida", "mostrador_salida"))).group_by(MovimientoMaterial.obra_id).all()
+    por_obra = {oid: (float(unidades or 0), int(refs or 0)) for oid, unidades, refs in consumos}
+    herramientas = dict(db.query(Herramienta.obra_id, func.count(Herramienta.id)).filter(
+        Herramienta.obra_id.isnot(None), Herramienta.activa == True,
+        Herramienta.estado.notin_(("disponible", "baja", "archivada")),
+    ).group_by(Herramienta.obra_id).all())
+    incidencias = dict(db.query(Incidencia.obra_id, func.count(Incidencia.id)).filter(
+        Incidencia.obra_id.isnot(None), Incidencia.estado.notin_(("cerrada", "resuelta")),
+    ).group_by(Incidencia.obra_id).all())
+    ids = set(por_obra) | set(herramientas) | set(incidencias)
+    if not ids:
+        return []
+    query = db.query(Obra).filter(Obra.id.in_(ids))
+    if warehouse_id:
+        query = query.filter(Obra.almacen_id == warehouse_id)
+    filas = []
+    for o in query.all():
+        unidades, refs = por_obra.get(o.id, (0.0, 0))
+        filas.append({
+            "id": o.id, "numero": o.numero, "nombre": o.nombre, "activa": bool(o.activa),
+            "unidades": unidades, "referencias": refs,
+            "herramientas": int(herramientas.get(o.id, 0)), "incidencias": int(incidencias.get(o.id, 0)),
+        })
+    filas.sort(key=lambda x: (x["unidades"], x["herramientas"]), reverse=True)
+    return filas[:limite] if limite else filas
+
+
+@app.get("/informes/gasto-herramientas/excel")
+def informe_gasto_herramientas_excel(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    warehouse = _active_warehouse(db, user, request)
+    filas = _ranking_gasto_herramientas(db, warehouse.id if warehouse else None)
+    excel = exportar_tabla_excel(
+        "Gasto por herramienta",
+        ["Código", "Herramienta", "Precio compra (€)", "Reparaciones (€)", "Mantenimiento (€)", "Gasto total (€)", "% sobre compra"],
+        [[f["codigo"], f["nombre"], f["precio_compra"], f["reparaciones"], f["mantenimiento"], f["total"],
+          f["porcentaje"] if f["porcentaje"] is not None else ""] for f in filas],
+        [16, 32, 16, 16, 16, 16, 14],
+    )
+    nombre = f"gasto_herramientas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return Response(content=excel, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f"attachment; filename={nombre}"})
+
+
+@app.get("/informes/consumo-obras/excel")
+def informe_consumo_obras_excel(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    warehouse = _active_warehouse(db, user, request)
+    filas = _ranking_consumo_obras(db, warehouse.id if warehouse else None)
+    excel = exportar_tabla_excel(
+        "Consumo por obra",
+        ["Número", "Obra", "Estado", "Unidades de material", "Referencias distintas", "Herramientas en la obra", "Incidencias abiertas"],
+        [[f["numero"], f["nombre"], "activa" if f["activa"] else "finalizada", f["unidades"], f["referencias"], f["herramientas"], f["incidencias"]] for f in filas],
+        [14, 34, 12, 18, 18, 20, 18],
+    )
+    nombre = f"consumo_obras_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return Response(content=excel, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f"attachment; filename={nombre}"})
+
+
 @app.get("/informes", response_class=HTMLResponse)
 def informes(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     warehouse = _active_warehouse(db, user, request)
@@ -8749,6 +8876,8 @@ def informes(request: Request, user: Usuario = Depends(requiere_login), db: Sess
         request, user, db,
         analisis=analisis,
         resumen=resumen_real,
+        gasto_herramientas=_ranking_gasto_herramientas(db, warehouse.id if warehouse else None, limite=10),
+        consumo_obras=_ranking_consumo_obras(db, warehouse.id if warehouse else None, limite=10),
         chart_estados_json=dumps_for_script(chart_estados),
         chart_mov_json=dumps_for_script(chart_mov),
     ))
@@ -15126,6 +15255,52 @@ async def portal_activar_pin(token: str, request: Request, db: Session = Depends
 
 
 # ─── Portal QR del trabajador ──────────────────────────────────────────────────────────────────
+
+@app.get("/portal/{token}/push/clave")
+def portal_push_clave(token: str, request: Request, db: Session = Depends(get_db)):
+    """Clave pública VAPID para que el móvil del trabajador se suscriba (2.7.48)."""
+    _portal_worker_required(token, request, db)
+    return {"public_key": push_service.clave_publica_vapid()}
+
+
+@app.post("/portal/{token}/push/suscribirse")
+async def portal_push_suscribirse(token: str, request: Request, db: Session = Depends(get_db)):
+    worker = _portal_worker_required(token, request, db)
+    body = await request.json()
+    endpoint = (body.get("endpoint") or "").strip()
+    keys = body.get("keys") or {}
+    p256dh = (keys.get("p256dh") or "").strip()
+    auth = (keys.get("auth") or "").strip()
+    if not endpoint or not p256dh or not auth:
+        raise HTTPException(400, detail="Suscripción incompleta")
+    existente = db.query(PushSuscripcion).filter(PushSuscripcion.endpoint == endpoint).first()
+    if existente:
+        existente.trabajador_id = worker.id
+        existente.usuario_id = None
+        existente.p256dh = p256dh
+        existente.auth = auth
+        existente.user_agent = request.headers.get("user-agent", "")[:255]
+    else:
+        db.add(PushSuscripcion(
+            trabajador_id=worker.id, endpoint=endpoint, p256dh=p256dh, auth=auth,
+            user_agent=request.headers.get("user-agent", "")[:255],
+        ))
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/portal/{token}/push/desuscribirse")
+async def portal_push_desuscribirse(token: str, request: Request, db: Session = Depends(get_db)):
+    worker = _portal_worker_required(token, request, db)
+    body = await request.json()
+    endpoint = (body.get("endpoint") or "").strip()
+    if endpoint:
+        db.query(PushSuscripcion).filter(
+            PushSuscripcion.endpoint == endpoint, PushSuscripcion.trabajador_id == worker.id,
+        ).delete()
+        db.commit()
+    return {"ok": True}
+
 
 @app.get("/portal/{token}/manifest.json", include_in_schema=False)
 def portal_worker_manifest(token: str, request: Request, db: Session = Depends(get_db)):

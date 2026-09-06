@@ -1223,3 +1223,29 @@ def importar_trabajadores_excel(contenido: bytes, db, almacen_id: int | None = N
         "errores": errores,
         "filas_procesadas": creados + actualizados + len(errores),
     }
+
+
+def exportar_tabla_excel(titulo: str, headers: list, rows: list, col_w: list | None = None) -> bytes:
+    """Hoja sencilla con cabecera MRD para rankings e informes tabulares (2.7.48)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = (titulo or "Informe")[:30]
+    widths = col_w or [max(12, min(40, len(str(h)) + 6)) for h in headers]
+    for i, h in enumerate(headers, 1):
+        c = ws.cell(row=1, column=i, value=h)
+        c.fill = _header_fill(MRD_BLUE)
+        c.font = Font(bold=True, color="FFFFFF", size=10)
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = _borde()
+        ws.column_dimensions[get_column_letter(i)].width = widths[i - 1] if i - 1 < len(widths) else 14
+    ws.row_dimensions[1].height = 28
+    for r, row in enumerate(rows, 2):
+        for i, value in enumerate(row, 1):
+            c = ws.cell(row=r, column=i, value=value)
+            c.border = _borde()
+            if isinstance(value, float):
+                c.number_format = "#,##0.00"
+    ws.freeze_panes = "A2"
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
