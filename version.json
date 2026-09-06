@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.56",
-    "nombre":  "MRD TOOL CONTROL -- Copia fuera del PC (USB, disco o nube, con aviso si falla), foto desde el movil con camara directa y reduccion automatica, y modo Mover en las zonas 3D para arrastrar zonas y elementos",
-    "fecha":  "2026-09-06",
+    "version_actual":  "2.7.57",
+    "nombre":  "MRD TOOL CONTROL -- Guardian (MRD Sentinel 1.5.0): bloqueo de emergencia con 503 a todo el mundo, incluida la LAN, salvo /health y acceso local; se levanta con el PIN por Telegram",
+    "fecha":  "2026-09-07",
     "cambios":  [
-                    "Copia fuera del PC (USB, disco o nube, con aviso si falla), foto desde el movil con camara directa y reduccion automatica, y modo Mover en las zonas 3D para arrastrar zonas y elementos"
+                    "Guardian (MRD Sentinel 1.5.0): bloqueo de emergencia con 503 a todo el mundo, incluida la LAN, salvo /health y acceso local; se levanta con el PIN por Telegram"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.56.zip",
-    "sha256":  "86be6fff108188d5feaa366b84e2e7dd65cefdf781ad64abfcff9ef9d13517fc"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.57.zip",
+    "sha256":  "3a05f84c44ee7da8314c43b6b0ede6d0c7680d099d763a21a0ada3a1dff1b07d"
 }
