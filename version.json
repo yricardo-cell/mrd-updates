@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.35",
-    "nombre":  "MRD TOOL CONTROL -- Dashboard operativo con tareas de hoy y dinero en juego",
+    "version_actual":  "2.7.36",
+    "nombre":  "MRD TOOL CONTROL -- Graficos del Dashboard rehechos",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Dashboard operativo con tareas de hoy y dinero en juego"
+                    "Graficos del Dashboard rehechos"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.35.zip",
-    "sha256":  "2536ea4673aa2787be7a42905d8398e13a32b64241378275d42c5c3d68a2a610"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.36.zip",
+    "sha256":  "66f37cc42c78ff63033321eba087ca252b75e500b8a12bfa5aedbe72ae117880"
 }
