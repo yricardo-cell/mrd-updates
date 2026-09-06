@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MRD · Maqueta: Pedidos a proveedor sin complicaciones</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  :root{--bg:#0b1220;--surface:#111a2e;--surface2:#16213a;--border:#22304d;--text:#e2e8f0;--muted:#94a3b8;--cyan:#22d3ee;--green:#34d399;--amber:#f59e0b;--red:#f87171;--violet:#a78bfa}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 28px 8px}header h1{margin:0 0 4px;font-size:20px}header p{margin:0;color:var(--muted);max-width:1080px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:18px;padding:8px 28px 28px}
+  .screen{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px}
+  .screen h2{margin:0 0 2px;font-size:16px}.screen .sub{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .pill{background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:12px;white-space:nowrap}
+  .pill.ok{border-color:var(--green);color:var(--green)}.pill.warn{border-color:var(--amber);color:var(--amber)}.pill.bad{border-color:var(--red);color:var(--red)}.pill.info{border-color:var(--violet);color:var(--violet)}
+  .btn{border:0;border-radius:9px;padding:9px 13px;font:inherit;font-weight:700;cursor:pointer;white-space:nowrap}
+  .btn.primary{background:var(--cyan);color:#0b1220}.btn.ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}.btn.ok{background:var(--green);color:#0b1220}
+  .btn.sm{padding:6px 10px;font-size:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}th{color:var(--muted);font-weight:600;text-align:left;padding:8px 6px;border-bottom:1px solid var(--border);font-size:12px}td{padding:9px 6px;border-bottom:1px solid var(--border);vertical-align:middle}
+  .note{background:#1c2740;border-left:3px solid var(--cyan);padding:8px 12px;border-radius:8px;font-size:13px;margin-top:10px}
+  .old{background:#2a1a1a;border-left:3px solid var(--red);padding:8px 12px;border-radius:8px;font-size:13px;margin-top:10px}
+  .notes{padding:0 28px 40px;max-width:1080px}.notes h3{font-size:15px;margin:18px 0 6px}.notes ul{padding-left:18px}.notes li{margin:4px 0}
+  .field{display:grid;gap:4px}.field label{color:var(--muted);font-size:12px}.field input,.field select{background:#0b1220;border:1px solid var(--border);color:#fff;border-radius:8px;padding:7px 9px;font:inherit;min-width:110px}
+  input.qty{background:#0b1220;border:1px solid var(--border);color:#fff;border-radius:8px;padding:6px 8px;font:inherit;width:74px;text-align:right}
+  .group{margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:12px;background:#0b1220}
+  .group h4{margin:0 0 6px;font-size:13px;color:var(--cyan)}
+  .steps{display:flex;gap:8px;margin:6px 0 12px}.steps span{flex:1;text-align:center;padding:6px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);font-size:12px}.steps span.on{border-color:var(--cyan);color:var(--cyan)}
+  .muted{color:var(--muted)}
+  .big{font-size:18px;font-weight:800}
+</style>
+</head>
+<body>
+<header>
+  <h1>Pedidos a proveedor: tres pasos y sin escribir nada de más</h1>
+  <p>El módulo actual nunca se ha usado (0 pedidos creados) aunque hay <b>8 materiales y 36 referencias de EPI bajo mínimo</b>. Hoy el pedido se crea a ciegas (todo el stock bajo de golpe, proveedor escrito a mano, cantidades que solo llegan al mínimo, sin poder tocar líneas ni cancelar) y la recepción obliga a rellenar una tabla con lote y caducidad. La propuesta: <b>1 · Marcar lo que falta → 2 · Revisar el pedido → 3 · Recibir</b>, todo con botones, sin formularios largos.</p>
+</header>
+<div class="grid">
+  <section class="screen">
+    <h2><i class="bi bi-exclamation-triangle"></i> 1 · Qué falta (pantalla Pedidos)</h2>
+    <p class="sub">La página abre directamente con lo que hay que pedir, agrupado por proveedor. Cada línea ya trae la cantidad sugerida (hasta el máximo, o en paquetes completos). Se marca y se pulsa un botón.</p>
+    <div class="steps"><span class="on">1 · Qué falta</span><span>2 · Revisar pedido</span><span>3 · Recibir</span></div>
+    <div class="row" style="justify-content:space-between">
+      <div class="row"><span class="pill bad">44 referencias bajo mínimo</span><span class="pill warn">2 ya en un pedido abierto</span></div>
+      <div class="row"><button class="btn ghost sm"><i class="bi bi-upc-scan"></i> Añadir por código</button><button class="btn ghost sm"><i class="bi bi-clock-history"></i> Pedidos anteriores</button></div>
+    </div>
+    <div class="group"><h4><i class="bi bi-truck"></i> Würth · 3 referencias</h4>
+      <table>
+        <tr><th></th><th>Referencia</th><th>Stock</th><th>Pedir</th></tr>
+        <tr><td><input type="checkbox" checked></td><td>Tornillo 6x40 <small class="muted">MAT-0012</small></td><td><span class="pill bad">40 / mín. 200</span></td><td><input class="qty" value="500"> <small class="muted">uds (máx. 500)</small></td></tr>
+        <tr><td><input type="checkbox" checked></td><td>Disco corte 125 <small class="muted">MAT-0031</small></td><td><span class="pill bad">3 / mín. 25</span></td><td><input class="qty" value="2"> <small class="muted">paq. de 25</small></td></tr>
+        <tr><td><input type="checkbox"></td><td>Brocas SDS 10 <small class="muted">MAT-0044</small></td><td><span class="pill warn">10 / mín. 10</span></td><td><span class="pill info">ya en PED-0906-A1</span></td></tr>
+      </table>
+    </div>
+    <div class="group"><h4><i class="bi bi-truck"></i> Sin proveedor asignado · 41 referencias <button class="btn ghost sm" style="margin-left:8px"><i class="bi bi-person-plus"></i> Asignar proveedor a las marcadas</button></h4>
+      <table>
+        <tr><th></th><th>Referencia</th><th>Stock</th><th>Pedir</th></tr>
+        <tr><td><input type="checkbox" checked></td><td>Guantes nitrilo T9 <small class="muted">EPI-ST-021</small></td><td><span class="pill bad">4 / mín. 24</span></td><td><input class="qty" value="5"> <small class="muted">paq. de 6</small></td></tr>
+        <tr><td><input type="checkbox" checked></td><td>Chaleco XL <small class="muted">EPI-ST-034</small></td><td><span class="pill bad">0 / mín. 5</span></td><td><input class="qty" value="10"> <small class="muted">uds</small></td></tr>
+        <tr><td colspan="4" class="muted">… 39 más (desplegar)</td></tr>
+      </table>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:12px"><span class="muted">5 líneas marcadas · 2 proveedores</span><button class="btn primary"><i class="bi bi-cart-plus"></i> Crear pedido con lo marcado</button></div>
+    <div class="note">Si hay varios proveedores marcados se crea <b>un pedido por proveedor</b> de una vez. Lo que ya está en un pedido abierto se muestra pero no se vuelve a pedir por error.</div>
+    <div class="old"><b>Hoy:</b> Incluir todo el stock bajo mete las 44 referencias en un solo pedido sin mirarlas, con cantidad = mínimo − stock (a veces 1 unidad), proveedor a mano, y no se pueden quitar líneas después.</div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-clipboard-check"></i> 2 · Revisar y enviar el pedido</h2>
+    <p class="sub">El borrador se puede tocar: cantidades, quitar línea, añadir por código, fecha prevista. El proveedor viene de la lista (con su teléfono y correo) y el envío es un botón real, no solo un cambio de estado.</p>
+    <div class="steps"><span>1 · Qué falta</span><span class="on">2 · Revisar pedido</span><span>3 · Recibir</span></div>
+    <div class="row" style="justify-content:space-between">
+      <div><span class="big">PED-0906-B7</span> <span class="pill">Borrador</span><br><small class="muted">Almacén Madrid · creado por Yusniel hoy 19:40</small></div>
+      <div class="row"><div class="field"><label>Proveedor</label><select><option>Würth · 91 555 00 11</option><option>Otro…</option></select></div><div class="field"><label>Fecha prevista</label><input type="date" value="2026-09-10"></div></div>
+    </div>
+    <table style="margin-top:10px">
+      <tr><th>Referencia</th><th>Ref. proveedor</th><th>Cantidad</th><th>Últ. precio</th><th></th></tr>
+      <tr><td>Tornillo 6x40</td><td class="muted">WU-6040</td><td><input class="qty" value="500"> uds</td><td class="muted">0,04 €</td><td><button class="btn ghost sm"><i class="bi bi-x"></i></button></td></tr>
+      <tr><td>Disco corte 125</td><td class="muted">WU-D125</td><td><input class="qty" value="2"> paq. (50 uds)</td><td class="muted">1,10 €</td><td><button class="btn ghost sm"><i class="bi bi-x"></i></button></td></tr>
+      <tr><td colspan="5"><button class="btn ghost sm"><i class="bi bi-upc-scan"></i> Añadir por código o nombre</button></td></tr>
+    </table>
+    <div class="row" style="justify-content:space-between;margin-top:12px">
+      <div class="row"><button class="btn ghost sm"><i class="bi bi-trash"></i> Cancelar pedido</button></div>
+      <div class="row"><button class="btn ghost"><i class="bi bi-file-earmark-pdf"></i> PDF</button><button class="btn ghost"><i class="bi bi-whatsapp"></i> WhatsApp</button><button class="btn primary"><i class="bi bi-envelope"></i> Enviar por correo y marcar enviado</button></div>
+    </div>
+    <div class="note">Enviar genera el PDF del pedido con la referencia del proveedor y lo manda (correo o WhatsApp al contacto del proveedor). Si no hay correo, se marca enviado y se descarga el PDF para llamarlo.</div>
+    <div class="old"><b>Hoy:</b> la única acción es Marcar como enviado; no hay PDF ni datos del proveedor, no se pueden editar líneas ni cancelar el pedido.</div>
+  </section>
+  <section class="screen">
+    <h2><i class="bi bi-box-seam"></i> 3 · Recibir (cuando llega el material)</h2>
+    <p class="sub">Un solo botón cubre el caso normal: llegó todo. Lote y caducidad solo se piden si se pulsa tiene lote. Lo que no llega se queda pendiente y el pedido sigue en parcial.</p>
+    <div class="steps"><span>1 · Qué falta</span><span>2 · Revisar pedido</span><span class="on">3 · Recibir</span></div>
+    <div class="row" style="justify-content:space-between"><div><span class="big">PED-0906-B7</span> <span class="pill warn">Enviado · Würth</span><br><small class="muted">previsto 10/09 · 2 líneas pendientes</small></div><button class="btn ok"><i class="bi bi-check2-all"></i> Ha llegado todo</button></div>
+    <table style="margin-top:10px">
+      <tr><th>Referencia</th><th>Pedido</th><th>Recibido</th><th>Llega ahora</th><th></th></tr>
+      <tr><td>Tornillo 6x40</td><td>500</td><td>0</td><td><input class="qty" value="500"></td><td><button class="btn ghost sm"><i class="bi bi-tag"></i> tiene lote</button></td></tr>
+      <tr><td>Disco corte 125</td><td>50</td><td>0</td><td><input class="qty" value="25"></td><td><span class="pill">lote L-2209 · cad. 03/2028</span></td></tr>
+    </table>
+    <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn primary"><i class="bi bi-box-arrow-in-down"></i> Registrar lo que ha llegado</button></div>
+    <div class="note">Al registrar, el stock sube por el mismo motor de hoy (move_material / move_stock_epi, idempotente) y se imprime la etiqueta si la referencia lleva QR. El pedido pasa a <b>recibido</b> o <b>parcial</b> solo.</div>
+    <div class="old"><b>Hoy:</b> tabla con lote y caducidad siempre visibles en cada línea, sin recibir todo.</div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-signpost-split"></i> 4 · Dónde se llega a esto (sin buscarlo en el menú)</h2>
+    <p class="sub">Los pedidos aparecen donde se ve el problema: el Dashboard, la lista de materiales y el Stock bajo. Un clic y ya estás en el paso 1 con esa referencia marcada.</p>
+    <table>
+      <tr><th>Pantalla</th><th>Hoy</th><th>Propuesta</th></tr>
+      <tr><td>Dashboard · Tareas de hoy</td><td class="muted">Materiales bajo mínimo: 8 → lista</td><td><span class="pill ok">8 bajo mínimo · 2 pedidos en camino</span> → botón <b>Pedir</b></td></tr>
+      <tr><td>Stock bajo / Materiales</td><td class="muted">solo lista</td><td>botón <b>Pedir</b> por fila y Pedir todo lo marcado</td></tr>
+      <tr><td>Ficha del material</td><td class="muted">proveedor nunca relleno (0 de 23)</td><td>campo <b>Proveedor</b> con lista + ref. proveedor y paquete de N; al primer pedido se guarda solo</td></tr>
+      <tr><td>Menú Stock</td><td class="muted">Pedidos y recepción</td><td>Pedidos, con contador de pendientes de recibir</td></tr>
+      <tr><td>Recepción por escáner</td><td class="muted">—</td><td>escanear la referencia en el Mostrador con un pedido enviado abre el paso 3 de ese pedido</td></tr>
+    </table>
+    <div class="note">Se conservan el modelo (PedidoProveedor / líneas / recepciones idempotentes) y los endpoints de recepción; se añaden editar/cancelar líneas, pedido por proveedor y el envío por PDF/correo.</div>
+  </section>
+
+</div>
+<div class="notes">
+  <h3>Qué cambia de verdad</h3>
+  <ul>
+    <li><b>Del botón mágico al marcar y pedir:</b> se ven las referencias antes de crear nada, con cantidad sugerida (hasta el máximo, o paquetes completos con el nuevo campo unidades por paquete).</li>
+    <li><b>Un pedido por proveedor</b>, con el proveedor de la lista (17 ya dados de alta) y no escrito a mano. Los materiales aprenden su proveedor al primer pedido.</li>
+    <li><b>Borrador editable y cancelable</b> (hoy no se puede ni quitar una línea) y <b>envío real</b> (PDF + correo/WhatsApp).</li>
+    <li><b>Recepción con ha llegado todo</b> y lote/caducidad solo cuando hace falta.</li>
+    <li><b>Aviso de duplicados:</b> lo que ya está pedido no se vuelve a pedir sin querer.</li>
+  </ul>
+  <h3>Preguntas antes de implementar</h3>
+  <ul>
+    <li>¿Envío por correo desde MRD (con el SMTP que ya usa el email semanal) o basta el PDF + WhatsApp?</li>
+    <li>¿Cantidad sugerida hasta el <b>stock máximo</b> (si está definido) o 2 × mínimo cuando no hay máximo?</li>
+    <li>¿Quién puede pedir: solo admin/almacén (como hoy) o también el Encargado de Patio?</li>
+  </ul>
+</div>
+</body>
+</html>
