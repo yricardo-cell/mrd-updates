@@ -7402,6 +7402,8 @@ class MostradorOperacionRequest(BaseModel):
     fecha_devolucion_prevista: Optional[datetime] = None
     notas: str = Field(default="", max_length=1000)
     origen: str = Field(default="", max_length=160)
+    firma_datos: str = Field(default="", max_length=400000)   # firma en el Mostrador (2.7.61)
+    firma_nombre: str = Field(default="", max_length=100)
     # Solicitud del trabajador que se está entregando: al completar la salida
     # pasa sola a "entregada" y desaparece de la lista de pendientes.
     solicitud_id: Optional[int] = Field(default=None, gt=0)
@@ -7707,6 +7709,8 @@ def mostrador_operar(
     db: Session = Depends(get_db),
     request: Request = None,
 ):
+    if payload.firma_datos:
+        _decode_delivery_signature(payload.firma_datos)  # 400 si no es una imagen válida
     try:
         warehouse = _active_warehouse(db, user, request)
         if not warehouse:
@@ -7720,6 +7724,8 @@ def mostrador_operar(
             warehouse_id=warehouse.id, notes=payload.notas,
             expected_return=payload.fecha_devolucion_prevista,
             origin=payload.origen,
+            signature_data=payload.firma_datos,
+            signature_name=payload.firma_nombre,
         )
         if payload.solicitud_id and payload.accion == "salida":
             result["solicitud"] = _entregar_solicitud_por_mostrador(
@@ -8693,7 +8699,7 @@ def _nave_contenido(db: Session, ubicaciones) -> dict[int, list[dict]]:
             contenido[h.ubicacion_id].append({
                 "tipo": "herramienta", "id": h.id, "codigo": h.codigo or "", "nombre": h.nombre,
                 "estado": h.estado or "", "fuera": fuera, "quien": quien if fuera else "",
-                "desde": mov.fecha.strftime("%d/%m/%Y") if (fuera and mov is not None and mov.fecha) else "",
+                "desde": _utc_a_local(mov.fecha).strftime("%d/%m/%Y") if (fuera and mov is not None and mov.fecha) else "",
                 "prevista": prevista.strftime("%d/%m/%Y") if (fuera and prevista) else "",
                 "vencida": bool(fuera and prevista and prevista < ahora),
                 "cantidad": 1, "unidad": "ud", "url": f"/herramientas/{h.id}",
@@ -8782,6 +8788,315 @@ def _nave_sin_ubicacion(db: Session, warehouse_id: int) -> dict:
 
 def _nave_json(data) -> str:
     return json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+
+
+# ─── Quién tiene qué, resumen semanal, importar formaciones (2.7.61) ─────────
+
+def _utc_a_local(dt):
+    """Movimiento.fecha se guarda con CURRENT_TIMESTAMP (UTC) en SQLite; se muestra en hora local."""
+    if dt is None:
+        return None
+    return dt + (datetime.now() - datetime.utcnow())
+
+
+def _quien_tiene_que(db: Session, warehouse_id: int | None) -> dict:
+    """Herramientas fuera agrupadas por quién las tiene (persona u obra) y desde cuándo."""
+    q = db.query(Herramienta).filter(Herramienta.activa == True, Herramienta.estado.in_(["entregada", "en_obra", "en_transporte"]))
+    if warehouse_id:
+        q = q.filter(or_(Herramienta.almacen_id == warehouse_id, Herramienta.almacen_id.is_(None)))
+    herramientas = q.order_by(Herramienta.nombre).all()
+    ids = [h.id for h in herramientas]
+    ultima: dict[int, Movimiento] = {}
+    if ids:
+        for mov in db.query(Movimiento).filter(Movimiento.herramienta_id.in_(ids), Movimiento.tipo.in_(["entrega", "traslado"])).order_by(Movimiento.id.desc()).all():
+            ultima.setdefault(mov.herramienta_id, mov)
+    grupos: dict[str, dict] = {}
+    hoy = date.today()
+    for h in herramientas:
+        mov = ultima.get(h.id)
+        tid = h.responsable_id or (mov.trabajador_id if mov else None)
+        oid = h.obra_id or (mov.obra_id if mov else None)
+        t = db.get(Trabajador, tid) if tid else None
+        o = db.get(Obra, oid) if (oid and t is None) else None
+        if t is not None:
+            clave, nombre, tel = f"t{t.id}", t.nombre_completo, (t.telefono or "")
+        elif o is not None:
+            clave, nombre, tel = f"o{o.id}", f"Obra {o.nombre}", ""
+        else:
+            clave, nombre, tel = "x", "Sin responsable registrado", ""
+        g = grupos.setdefault(clave, {"clave": clave, "nombre": nombre, "telefono": tel, "n": 0, "valor": 0.0, "items": []})
+        desde = _utc_a_local(mov.fecha).date() if (mov is not None and mov.fecha) else None
+        valor = float(h.precio_compra or 0)
+        g["items"].append({"id": h.id, "nombre": h.nombre, "codigo": h.codigo or "", "desde": desde.strftime("%d/%m/%Y") if desde else "",
+                           "dias": (hoy - desde).days if desde else None, "valor": valor, "url": f"/herramientas/{h.id}", "estado": h.estado})
+        g["n"] += 1
+        g["valor"] += valor
+    lista = sorted(grupos.values(), key=lambda g: (-g["n"], g["nombre"]))
+    return {"grupos": lista, "total": len(herramientas), "valor_total": sum(g["valor"] for g in lista), "personas": sum(1 for g in lista if g["clave"] != "x")}
+
+
+@app.get("/informes/quien-tiene-que", response_class=HTMLResponse)
+def informe_quien_tiene_que(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Informe imprimible (2.7.61): quién tiene cada herramienta, desde cuándo y cuánto vale lo que lleva."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _active_warehouse(db, user, request)
+    datos = _quien_tiene_que(db, warehouse.id if warehouse else None)
+    for g in datos["grupos"]:
+        lineas = [f"- {i['nombre']} ({i['codigo']})" + (f" desde {i['desde']}" if i["desde"] else "") for i in g["items"]]
+        g["whatsapp_texto"] = f"Hola {g['nombre']}, según MRD Tool Control tienes estas herramientas:" + chr(10) + chr(10).join(lineas)
+        tel = re.sub(r"[^0-9]", "", g["telefono"] or "")
+        g["whatsapp_tel"] = ("34" + tel) if len(tel) == 9 else tel
+    return templates.TemplateResponse(request, "informe_quien_tiene_que.html", ctx_base(
+        request, user, db, almacen=warehouse, datos=datos, hoy=date.today().strftime("%d/%m/%Y"),
+    ))
+
+
+@app.get("/informes/quien-tiene-que/excel")
+def informe_quien_tiene_que_excel(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _active_warehouse(db, user, request)
+    datos = _quien_tiene_que(db, warehouse.id if warehouse else None)
+    filas = []
+    for g in datos["grupos"]:
+        for i in g["items"]:
+            filas.append([g["nombre"], g["telefono"], i["nombre"], i["codigo"], i["desde"], i["dias"] if i["dias"] is not None else "", round(i["valor"], 2)])
+    excel = exportar_tabla_excel("Quién tiene qué", ["Persona / obra", "Teléfono", "Herramienta", "Código", "Desde", "Días fuera", "Valor €"], filas, [28, 14, 34, 22, 12, 10, 12])
+    return Response(content=excel, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f"attachment; filename=quien_tiene_que_{date.today().isoformat()}.xlsx"})
+
+
+def _resumen_semanal_texto(db: Session, warehouse_id: int | None = None) -> tuple[str, str, dict]:
+    """Texto listo para WhatsApp o aviso: quién tiene qué, vencimientos, stock bajo, solicitudes, recuentos, sin hueco."""
+    hoy = date.today()
+    qtq = _quien_tiene_que(db, warehouse_id)
+    eventos = _calendario_eventos(db, warehouse_id)
+    vencidas = [e for e in eventos if date.fromisoformat(e["fecha"]) < hoy]
+    proximas = [e for e in eventos if hoy <= date.fromisoformat(e["fecha"]) <= hoy + timedelta(days=14)]
+    qm = db.query(Material).filter(Material.activo == True, Material.stock_minimo > 0)
+    if warehouse_id:
+        qm = qm.filter(or_(Material.almacen_id == warehouse_id, Material.almacen_id.is_(None)))
+    bajos = [m for m in qm.all() if (m.stock_actual or 0) <= (m.stock_minimo or 0)]
+    epi_bajo = db.query(StockEPI).filter(StockEPI.stock_minimo > 0, StockEPI.cantidad <= StockEPI.stock_minimo).count()
+    solicitudes = db.query(SolicitudTrabajador).filter(SolicitudTrabajador.estado.in_(["pendiente", "revision", "aprobada", "preparando", "lista"])).count()
+    recuentos = db.query(Ubicacion).filter(Ubicacion.ultimo_recuento_faltan > 0, Ubicacion.ultimo_recuento >= datetime.now() - timedelta(days=30)).all()
+    sin_hueco = _nave_sin_ubicacion(db, warehouse_id) if warehouse_id else {"herramientas": 0, "materiales": 0}
+    titulo = f"Resumen semanal MRD · semana {hoy.strftime('%V')} · {hoy.strftime('%d/%m/%Y')}"
+    L = [titulo, ""]
+    L.append(f"🔧 QUIÉN TIENE QUÉ: {qtq['total']} herramientas fuera, {qtq['personas']} personas u obras" + (f", {qtq['valor_total']:,.0f} € en la calle" if qtq["valor_total"] else ""))
+    for g in qtq["grupos"][:8]:
+        L.append(f"  • {g['nombre']}: {g['n']}" + (f" ({g['valor']:,.0f} €)" if g["valor"] else ""))
+    if len(qtq["grupos"]) > 8:
+        L.append(f"  … y {len(qtq['grupos']) - 8} más")
+    L.append("")
+    L.append(f"📅 VENCIMIENTOS: {len(vencidas)} vencidos, {len(proximas)} en los próximos 14 días")
+    for e in (vencidas + proximas)[:6]:
+        L.append(f"  • {e['titulo']} · {e['detalle']} · {date.fromisoformat(e['fecha']).strftime('%d/%m')}")
+    L.append("")
+    L.append(f"📦 STOCK BAJO: {len(bajos)} materiales, {epi_bajo} referencias de EPI")
+    for m in bajos[:6]:
+        L.append(f"  • {m.nombre}: {m.stock_actual or 0} {m.unidad or 'ud'} (mínimo {m.stock_minimo})")
+    L.append("")
+    L.append(f"📝 SOLICITUDES PENDIENTES: {solicitudes}")
+    if recuentos:
+        L.append(f"🔍 RECUENTOS CON FALTAS (30 días): {len(recuentos)}")
+        for u in recuentos[:5]:
+            L.append(f"  • {u.nombre}: faltan {u.ultimo_recuento_faltan}")
+    L.append(f"📍 SIN HUECO: {sin_hueco['herramientas']} herramientas, {sin_hueco['materiales']} materiales")
+    datos = {"fuera": qtq["total"], "personas": qtq["personas"], "vencidas": len(vencidas), "proximas": len(proximas),
+             "bajos": len(bajos), "epi_bajo": epi_bajo, "solicitudes": solicitudes, "recuentos": len(recuentos), "sin_hueco": sin_hueco["herramientas"]}
+    return titulo, chr(10).join(L), datos
+
+
+@app.get("/resumen-semanal", response_class=HTMLResponse)
+def resumen_semanal_page(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Resumen semanal (2.7.61) para mandar por WhatsApp o recibir por push."""
+    if user.rol not in ("admin", "almacen") and not tiene_permiso(user, "editar"):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _active_warehouse(db, user, request)
+    titulo, texto, datos = _resumen_semanal_texto(db, warehouse.id if warehouse else None)
+    return templates.TemplateResponse(request, "resumen_semanal.html", ctx_base(
+        request, user, db, almacen=warehouse, titulo=titulo, texto=texto, datos=datos,
+        whatsapp_url="https://wa.me/?text=" + urllib.parse.quote(texto),
+        push_activo=db.query(PushSuscripcion).filter(PushSuscripcion.trabajador_id.is_(None)).count(),
+    ))
+
+
+def _resumen_semanal_publicar(db: Session, forzar: bool = False) -> dict:
+    """Crea el aviso interno de la semana y lo manda por push a los navegadores de administración."""
+    hoy = date.today()
+    titulo, texto, datos = _resumen_semanal_texto(db, None)
+    clave = f"Resumen semanal {hoy.strftime('%G-%V')}"
+    if not forzar and db.query(Aviso).filter(Aviso.titulo == clave).first():
+        return {"ok": True, "repetido": True}
+    db.add(Aviso(titulo=clave, mensaje=texto, tipo="calendario", prioridad="media", enlace="/resumen-semanal"))
+    db.commit()
+    corto = f"{datos['fuera']} herramientas fuera · {datos['vencidas']} vencidos · {datos['bajos']} stock bajo · {datos['solicitudes']} solicitudes"
+    try:
+        from notificaciones import _enviar_webpush
+        error = _enviar_webpush(db, "Resumen semanal MRD", corto, "media", "/resumen-semanal")
+    except Exception as exc:  # pragma: no cover
+        error = str(exc)
+    return {"ok": True, "repetido": False, "push_error": error or "", "resumen": corto}
+
+
+@app.post("/api/resumen-semanal/push")
+def api_resumen_semanal_push(user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    if user.rol not in ("admin", "almacen") and not tiene_permiso(user, "editar"):
+        raise HTTPException(403, "Sin permiso")
+    return JSONResponse(_resumen_semanal_publicar(db, forzar=True))
+
+
+def _resumen_semanal_bg():
+    """Cada lunes (la primera vez que el bucle corre esa semana): aviso + push del resumen."""
+    try:
+        if date.today().weekday() != 0:
+            return
+        from database import SessionLocal as _SLr
+        db = _SLr()
+        try:
+            _resumen_semanal_publicar(db)
+        finally:
+            db.close()
+    except Exception as exc:  # pragma: no cover
+        mrd_logging.log_error(f"Resumen semanal: {exc}")
+
+
+# ─── Importar formaciones y reconocimientos desde Excel (2.7.61) ─────────────
+
+FORMACIONES_CABECERAS = ["Código trabajador", "Nombre trabajador", "Curso", "Tipo", "Entidad", "Fecha realización", "Fecha caducidad", "Nº certificado"]
+RECONOCIMIENTOS_CABECERAS = ["Código trabajador", "Nombre trabajador", "Fecha", "Resultado", "Fecha próxima", "Médico", "Centro"]
+
+
+def _fecha_celda(valor):
+    if valor is None or valor == "":
+        return None
+    if isinstance(valor, datetime):
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    texto = str(valor).strip()
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
+        try:
+            return datetime.strptime(texto, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _buscar_trabajador_import(db: Session, codigo, nombre) -> Trabajador | None:
+    codigo = str(codigo or "").strip()
+    if codigo:
+        t = db.query(Trabajador).filter(func.lower(Trabajador.codigo) == codigo.lower()).first()
+        if t:
+            return t
+        t = db.query(Trabajador).filter(func.lower(Trabajador.dni) == codigo.lower()).first()
+        if t:
+            return t
+    nombre = " ".join(str(nombre or "").split()).lower()
+    if nombre:
+        for t in db.query(Trabajador).all():
+            if " ".join(t.nombre_completo.split()).lower() == nombre:
+                return t
+    return None
+
+
+@app.get("/trabajadores/importar-formaciones", response_class=HTMLResponse)
+def importar_formaciones_page(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if not tiene_permiso(user, "editar"):
+        raise HTTPException(403, "Sin permiso")
+    return templates.TemplateResponse(request, "importar_formaciones.html", ctx_base(
+        request, user, db, cab_form=FORMACIONES_CABECERAS, cab_reco=RECONOCIMIENTOS_CABECERAS,
+        sin_reco=db.query(Trabajador).filter(Trabajador.activo == True, ~Trabajador.id.in_(db.query(ReconocimientoMedico.trabajador_id))).count(),
+        sin_form=db.query(Trabajador).filter(Trabajador.activo == True, ~Trabajador.id.in_(db.query(FormacionTrabajador.trabajador_id))).count(),
+    ))
+
+
+@app.get("/trabajadores/importar-formaciones/plantilla")
+def importar_formaciones_plantilla(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    from openpyxl import Workbook as _WBf
+    from openpyxl.styles import Font as _Fontf
+    wb = _WBf()
+    ws = wb.active
+    ws.title = "Formaciones"
+    ws.append(FORMACIONES_CABECERAS)
+    ws2 = wb.create_sheet("Reconocimientos")
+    ws2.append(RECONOCIMIENTOS_CABECERAS)
+    ejemplo = db.query(Trabajador).filter(Trabajador.activo == True).order_by(Trabajador.nombre).first()
+    cod, nom = (ejemplo.codigo or "", ejemplo.nombre_completo) if ejemplo else ("T-001", "Nombre Apellidos")
+    ws.append([cod, nom, "PRL 20 h", "PRL", "Fundación Laboral", "01/09/2026", "01/09/2029", ""])
+    ws2.append([cod, nom, "01/09/2026", "apto", "01/09/2027", "", ""])
+    for hoja, anchos in ((ws, [18, 28, 30, 14, 24, 16, 16, 16]), (ws2, [18, 28, 14, 12, 16, 22, 24])):
+        for i, w in enumerate(anchos, 1):
+            hoja.column_dimensions[chr(64 + i)].width = w
+            hoja.cell(row=1, column=i).font = _Fontf(bold=True)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return Response(content=buf.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": "attachment; filename=plantilla_formaciones_reconocimientos.xlsx"})
+
+
+@app.post("/api/trabajadores/importar-formaciones")
+async def api_importar_formaciones(archivo: UploadFile = File(...), user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Lee las hojas Formaciones y Reconocimientos de un Excel y crea los registros (salta los repetidos)."""
+    if not tiene_permiso(user, "editar"):
+        raise HTTPException(403, "Sin permiso")
+    from openpyxl import load_workbook as _lwf
+    contenido = await archivo.read()
+    try:
+        validar_tamaño_bytes(len(contenido), MAX_UPLOAD_MB)
+        wb = _lwf(io.BytesIO(contenido), data_only=True)
+    except ErrorArchivo as exc:
+        raise HTTPException(400, str(exc))
+    except Exception:
+        raise HTTPException(400, "El archivo no es un Excel (.xlsx) válido")
+    res = {"formaciones": 0, "reconocimientos": 0, "saltadas": 0, "errores": []}
+    for ws in wb.worksheets:
+        nombre_hoja = (ws.title or "").lower()
+        filas = [list(r) for r in ws.iter_rows(min_row=2, values_only=True) if r and any(c not in (None, "") for c in r)]
+        if "formac" in nombre_hoja:
+            for n, fila in enumerate(filas, 2):
+                fila += [None] * (8 - len(fila))
+                cod, nom, curso, tipo, entidad, f_real, f_cad, ncert = fila[:8]
+                t = _buscar_trabajador_import(db, cod, nom)
+                if not t:
+                    res["errores"].append(f"Formaciones fila {n}: trabajador no encontrado ({cod or nom})")
+                    continue
+                if not str(curso or "").strip():
+                    res["errores"].append(f"Formaciones fila {n}: falta el curso")
+                    continue
+                fr, fc = _fecha_celda(f_real), _fecha_celda(f_cad)
+                if db.query(FormacionTrabajador).filter(FormacionTrabajador.trabajador_id == t.id, func.lower(FormacionTrabajador.nombre_curso) == str(curso).strip().lower(), FormacionTrabajador.fecha_realizacion == fr).first():
+                    res["saltadas"] += 1
+                    continue
+                db.add(FormacionTrabajador(trabajador_id=t.id, nombre_curso=str(curso).strip()[:200], tipo=(str(tipo).strip()[:100] or None) if tipo else None,
+                                           entidad=(str(entidad).strip()[:200] or None) if entidad else None, fecha_realizacion=fr, fecha_caducidad=fc,
+                                           num_certificado=(str(ncert).strip()[:100] or None) if ncert else None, usuario_id=user.id))
+                res["formaciones"] += 1
+        elif "reconoc" in nombre_hoja:
+            for n, fila in enumerate(filas, 2):
+                fila += [None] * (7 - len(fila))
+                cod, nom, fecha, resultado, f_prox, medico, centro = fila[:7]
+                t = _buscar_trabajador_import(db, cod, nom)
+                if not t:
+                    res["errores"].append(f"Reconocimientos fila {n}: trabajador no encontrado ({cod or nom})")
+                    continue
+                f = _fecha_celda(fecha)
+                if not f:
+                    res["errores"].append(f"Reconocimientos fila {n}: fecha no válida")
+                    continue
+                if db.query(ReconocimientoMedico).filter(ReconocimientoMedico.trabajador_id == t.id, ReconocimientoMedico.fecha == f).first():
+                    res["saltadas"] += 1
+                    continue
+                db.add(ReconocimientoMedico(trabajador_id=t.id, fecha=f, resultado=(str(resultado).strip().lower()[:50] or "apto") if resultado else "apto",
+                                            fecha_proxima=_fecha_celda(f_prox), medico=(str(medico).strip()[:150] or None) if medico else None,
+                                            centro=(str(centro).strip()[:200] or None) if centro else None))
+                res["reconocimientos"] += 1
+    if res["formaciones"] or res["reconocimientos"]:
+        registrar_auditoria(db, "trabajadores", 0, "importar_formaciones", user.id, None, {k: v for k, v in res.items() if k != "errores"})
+    db.commit()
+    return JSONResponse({"ok": True, **res})
 
 
 # ─── Calendario de revisiones y caducidades (2.7.55) ─────────────────────────

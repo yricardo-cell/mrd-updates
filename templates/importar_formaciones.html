@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Importar formaciones{% endblock %}
+{% block breadcrumb %}
+<a href="/">Inicio</a>
+<span class="sep">/</span>
+<a href="/trabajadores">Trabajadores</a>
+<span class="sep">/</span>
+<span class="current">Importar formaciones</span>
+{% endblock %}
+{% block content %}
+<div class="page-header-row mb-3">
+  <div>
+    <h1 class="page-title"><i class="bi bi-mortarboard"></i> Importar formaciones y reconocimientos</h1>
+    <p class="page-subtitle">Un Excel con dos hojas y en minutos el Calendario avisa de caducidades y reconocimientos. Ahora mismo: {{ sin_form }} trabajadores sin formación y {{ sin_reco }} sin reconocimiento registrados.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/trabajadores/importar-formaciones/plantilla"><i class="bi bi-download"></i> Descargar plantilla</a>
+</div>
+<div class="row g-3">
+  <div class="col-lg-6"><div class="card"><div class="card-body">
+    <ol class="small">
+      <li>Descarga la plantilla y rellénala. Se identifica al trabajador por su <strong>código</strong> (o DNI) y, si no, por el nombre completo.</li>
+      <li>Hoja <strong>Formaciones</strong>: {{ cab_form|join(', ') }}. Fechas como dd/mm/aaaa.</li>
+      <li>Hoja <strong>Reconocimientos</strong>: {{ cab_reco|join(', ') }}.</li>
+      <li>Sube el archivo. Las filas repetidas (mismo trabajador, curso y fecha) se saltan.</li>
+    </ol>
+    <form id="form-imp" class="mt-2"><input type="file" id="archivo" class="form-control" accept=".xlsx" required><button class="btn btn-primary mt-2" type="submit"><i class="bi bi-upload"></i> Importar</button></form>
+    <div id="imp-estado" class="mt-3"></div>
+  </div></div></div>
+</div>
+<script>
+(()=>{const f=document.getElementById('form-imp'),e=document.getElementById('imp-estado');f.onsubmit=async ev=>{ev.preventDefault();const a=document.getElementById('archivo').files[0];if(!a)return;e.className='mt-3 text-muted';e.textContent='Importando…';const fd=new FormData();fd.append('archivo',a,a.name);
+  try{const r=await fetchCsrf('/api/trabajadores/importar-formaciones',{method:'POST',body:fd,headers:{Accept:'application/json'}});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo importar');
+    e.className='mt-3';e.innerHTML=`<div class="alert alert-success mb-2">Formaciones creadas: <strong>${d.formaciones}</strong> · Reconocimientos creados: <strong>${d.reconocimientos}</strong> · Repetidas saltadas: ${d.saltadas}</div>`+(d.errores.length?'<div class="alert alert-warning small mb-0"><strong>Filas con problemas:</strong><br>'+d.errores.map(x=>x.replace(/</g,'&lt;')).join('<br>')+'</div>':'')+'<a class="btn btn-outline-secondary btn-sm mt-2" href="/calendario">Ver en el Calendario</a>'}
+  catch(err){e.className='mt-3 text-danger';e.textContent=err.message}}})();
+</script>
+{% endblock %}

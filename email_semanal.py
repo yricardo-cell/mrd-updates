@@ -68,12 +68,20 @@ def generar_informe_html(db) -> tuple[str, dict]:
     hace_30 = datetime.now() - timedelta(days=30)
     prox_30 = hoy + timedelta(days=30)
 
-    # 1. Herramientas sin devolver >14 días
-    herr_fuera = db.query(Herramienta).filter(
+    # 1. Herramientas con plazo de devolución fijado y vencido. Estar fuera es lo
+    #    normal (las herramientas no vuelven salvo obra concreta): solo se avisa
+    #    si el usuario puso plazo y ya pasó (regla 06/09/2026).
+    herr_fuera = []
+    for h in db.query(Herramienta).filter(
         Herramienta.activa == True,
         Herramienta.estado.in_(["entregada", "en_obra"]),
-        Herramienta.updated_at < hace_14,
-    ).order_by(Herramienta.updated_at).limit(30).all()
+    ).all():
+        mov = db.query(Movimiento).filter(
+            Movimiento.herramienta_id == h.id, Movimiento.tipo == "entrega",
+        ).order_by(Movimiento.id.desc()).first()
+        if mov is not None and mov.fecha_devolucion_prevista and mov.fecha_devolucion_prevista < datetime.now():
+            herr_fuera.append(h)
+    herr_fuera = herr_fuera[:30]
 
     # 2. EPIs individuales a vencer en 30 días
     epis_vencer = db.query(EPIIndividual).filter(

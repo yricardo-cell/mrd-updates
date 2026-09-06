@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Resumen semanal{% endblock %}
+{% block breadcrumb %}
+<a href="/">Inicio</a>
+<span class="sep">/</span>
+<span class="current">Resumen semanal</span>
+{% endblock %}
+{% block content %}
+<div class="page-header-row mb-3">
+  <div>
+    <h1 class="page-title"><i class="bi bi-whatsapp"></i> Resumen semanal</h1>
+    <p class="page-subtitle">Lo que hay que saber esta semana en un texto listo para WhatsApp. Cada lunes se crea solo como aviso y llega por push a los navegadores de administración.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-success" href="{{ whatsapp_url }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> Enviar por WhatsApp</a>
+    <button class="btn btn-outline-secondary" type="button" id="btn-copiar"><i class="bi bi-clipboard"></i> Copiar</button>
+    <button class="btn btn-outline-secondary" type="button" id="btn-push"><i class="bi bi-bell"></i> Enviar push ahora</button>
+  </div>
+</div>
+<div class="row g-3">
+  <div class="col-lg-8"><div class="card"><div class="card-body"><pre id="texto" style="white-space:pre-wrap;font-family:inherit;font-size:.95rem;margin:0">{{ texto }}</pre></div></div></div>
+  <div class="col-lg-4">
+    <div class="card"><div class="card-body">
+      <div class="small text-muted mb-2">Enlaces rápidos</div>
+      <div class="d-grid gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="/informes/quien-tiene-que"><i class="bi bi-people"></i> Quién tiene qué ({{ datos.fuera }})</a>
+        <a class="btn btn-outline-secondary btn-sm" href="/calendario"><i class="bi bi-calendar3"></i> Calendario ({{ datos.vencidas }} vencidos)</a>
+        <a class="btn btn-outline-secondary btn-sm" href="/materiales/alertas"><i class="bi bi-exclamation-triangle"></i> Stock bajo ({{ datos.bajos }})</a>
+        <a class="btn btn-outline-secondary btn-sm" href="/solicitudes-trabajadores"><i class="bi bi-bag-check"></i> Solicitudes ({{ datos.solicitudes }})</a>
+        <a class="btn btn-outline-secondary btn-sm" href="/nave/colocar"><i class="bi bi-upc-scan"></i> Sin hueco ({{ datos.sin_hueco }})</a>
+      </div>
+      <div class="small text-muted mt-3">Push: {{ push_activo }} navegador(es) de administración suscritos. Actívalo en Avisos si es 0.</div>
+      <div class="small mt-2" id="push-estado"></div>
+    </div></div>
+  </div>
+</div>
+<script>
+(()=>{document.getElementById('btn-copiar').onclick=async()=>{try{await navigator.clipboard.writeText(document.getElementById('texto').textContent);document.getElementById('btn-copiar').textContent='Copiado'}catch(e){}};
+  document.getElementById('btn-push').onclick=async()=>{const e=document.getElementById('push-estado');e.textContent='Enviando…';try{const r=await fetchCsrf('/api/resumen-semanal/push',{method:'POST',headers:{Accept:'application/json'}});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo');e.className='small mt-2 '+(d.push_error?'text-warning':'text-success');e.textContent=d.push_error?('Aviso creado; push: '+d.push_error):'Aviso creado y push enviado.'}catch(err){e.className='small mt-2 text-danger';e.textContent=err.message}};
+})();
+</script>
+{% endblock %}

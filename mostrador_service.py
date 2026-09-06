@@ -661,6 +661,8 @@ def operate_counter(
     warehouse_id: int | None, notes: str = "",
     expected_return: datetime | None = None,
     origin: str = "",
+    signature_data: str = "",
+    signature_name: str = "",
 ) -> dict:
     """Valida y aplica un carrito mixto. Cualquier fallo revierte el carrito completo."""
     if action not in {"salida", "entrada"}:
@@ -837,6 +839,7 @@ def operate_counter(
         expected_return=expected_return, notes=notes, lines=results,
         document_type=action, warehouse_id=warehouse_id,
         origin_destination=(origin if action == "entrada" else destination),
+        signature_data=signature_data or "", signature_name=(signature_name or "").strip()[:100],
     )
     result = {
         "ok": True, "operacion_id": operation_id, "accion": action,
