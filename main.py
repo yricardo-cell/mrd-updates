@@ -13347,7 +13347,36 @@ def _svc_named_windows_state(service_name: str) -> str:
 
 
 def _svc_windows_state() -> str:
-    return _svc_named_windows_state(_SERVICE_NAME)
+    """Estado real de MRD para el panel /servicio.
+
+    MRD corre como tarea programada ("MRD Tool Control"), no como servicio
+    Windows: la consulta a sc.exe devolvía NOT_INSTALLED y el panel pintaba
+    "DESCONOCIDO" en rojo con el servidor funcionando, lo que llevaba a
+    reiniciarlo una y otra vez (06/09/2026). Este código responde desde el
+    propio servidor, así que el estado es RUNNING; el estado del servicio
+    Windows, si existe, se informa aparte en service_state."""
+    return "RUNNING"
+
+
+def _svc_estado_proceso_actual() -> dict:
+    """Datos del proceso que está respondiendo (cuando no hay fichero de
+    estado escrito por el servicio Windows)."""
+    info = {
+        "status": "running", "pid": os.getpid(), "port": int(os.getenv("MRD_PORT", "8000") or 8000),
+        "host": os.getenv("MRD_HOST", "0.0.0.0"), "workers": 1, "restart_count": 0, "version": VERSION,
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "service_state": _svc_named_windows_state(_SERVICE_NAME),
+        "supervisor": "tarea programada 'MRD Tool Control'" if os.getenv("MRD_SUPERVISADO") == "1" else "proceso directo",
+    }
+    try:
+        import psutil
+        started = datetime.fromtimestamp(psutil.Process().create_time())
+        info["start_time"] = started.isoformat(timespec="seconds")
+        info["uptime_seconds"] = int((datetime.now() - started).total_seconds())
+    except Exception:
+        info["start_time"] = None
+        info["uptime_seconds"] = None
+    return info
 
 
 # ─── Reinicio del servidor ────────────────────────────────────────────────────
@@ -13533,7 +13562,7 @@ def api_service_status(
     _db: Session = Depends(get_db),
 ):
     _svc_requiere_admin(user)
-    file_status = _svc_read_status()
+    file_status = _svc_read_status() or _svc_estado_proceso_actual()
     win_state   = _svc_windows_state()
     metrics     = _svc_get_metrics()
 
@@ -13835,7 +13864,7 @@ def api_recovery_status(
 ):
     """Estado consolidado para el Centro de recuperación."""
     _svc_requiere_admin(user)
-    file_status = _svc_read_status()
+    file_status = _svc_read_status() or _svc_estado_proceso_actual()
     win_state = _svc_windows_state()
 
     from service_health import check_port

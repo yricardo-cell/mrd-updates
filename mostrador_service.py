@@ -260,7 +260,52 @@ def resolve_counter_item(db: Session, raw_code: str, warehouse_id: int | None = 
     legacy_item = _resolve_legacy_counter_item(db, codes, code, warehouse_id)
     if legacy_item:
         return legacy_item
+    repaired = _resolve_por_digitos(db, code, warehouse_id)
+    if repaired:
+        return repaired
     raise CounterError(404, "QR no reconocido o articulo inactivo")
+
+
+_CODIGOS_POR_DIGITOS = (
+    (Herramienta, ("codigo", "num_serie"), "activa"),
+    (Maquinaria, ("codigo_interno", "codigo_barras", "num_serie"), "activa"),
+    (Material, ("codigo",), "activo"),
+    (StockEPI, ("codigo",), None),
+    (EPIIndividual, ("codigo_qr",), None),
+)
+
+
+def _resolve_por_digitos(db: Session, code: str, warehouse_id: int | None = None) -> dict | None:
+    """Lecturas que llegan solo con dígitos (2.7.41).
+
+    Algunos lectores HID en Android pierden las letras (van con Shift) y del
+    código solo llegan los dígitos: el 06/09/2026 fueron 37 de 218 lecturas y
+    todas correspondían a un único artículo. Si el valor es solo dígitos (10 o
+    más) y coincide exactamente con la secuencia de dígitos de un único código
+    activo, se resuelve ese artículo por la vía normal (mismo almacén, mismos
+    permisos) y se marca la lectura como reparada. Ante cualquier ambigüedad
+    no se adivina."""
+    if not code or not code.isdigit() or len(code) < 10:
+        return None
+    matches: set[str] = set()
+    for model, columns, active_attr in _CODIGOS_POR_DIGITOS:
+        for name in columns:
+            column = getattr(model, name)
+            statement = select(column).where(column.is_not(None), column != "")
+            if active_attr:
+                statement = statement.where(getattr(model, active_attr) == True)
+            for (value,) in db.execute(statement):
+                if re.sub(r"\D", "", str(value)) == code:
+                    matches.add(str(value).strip())
+    if len(matches) != 1:
+        return None
+    real_code = matches.pop()
+    try:
+        item = resolve_counter_item(db, real_code, warehouse_id)
+    except CounterError:
+        return None
+    item["lectura_reparada"] = code
+    return item
 
 
 def _legacy_match(

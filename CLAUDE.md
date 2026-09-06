@@ -19,6 +19,24 @@ o el grafo (`graphify-out/graph.json`) no está generado/actualizado.
 6. Al cerrar cada tanda de trabajo, actualizar `version.json` con el changelog
    correspondiente.
 
+## 2 bis. Entorno de pruebas obligatorio (desde el 06/09/2026)
+Ningún cambio de código se aplica directamente en producción
+(`C:\mrd tool\mrd-tool-control-2.5.0`, rama `master`, puerto 8000). El flujo es:
+1. Aplicar el cambio en el worktree de pruebas `C:\mrd tool\mrd-pruebas` (rama
+   `pruebas`), que tiene su propia copia de la base de datos en `data/` y su propio
+   `config/local.env` (puerto 8001, sin servidor de actualizaciones ni túnel, sin
+   `github.token` ni `cloudflare_dns.token`).
+2. Arrancarlo con `powershell -ExecutionPolicy Bypass -File INICIAR_PRUEBAS.ps1` y
+   probar el flujo real en `http://127.0.0.1:8001` (además de la suite de tests
+   ejecutada desde esa carpeta).
+3. Solo cuando uno o varios cambios funcionan en pruebas, pasarlos a `master`
+   (`git merge pruebas` desde producción), y entonces bump de versión, commit y
+   publicación como en el apartado 7.
+4. Producción no se reinicia por cada cambio: el usuario reinicia una vez con la
+   versión publicada. Cada reinicio cuesta unos 10 segundos de servicio.
+Para refrescar la base de datos de pruebas con la de producción, copiarla con la API
+de backup de SQLite (nunca copiando el fichero mientras se usa).
+
 ## 3. Protección de backups/
 Nunca proponer ni aplicar reglas de auto mode que permitan borrar contenido dentro de
 `backups/` (por ejemplo `rm` sobre `backups/*` o equivalentes). Los snapshots son la
