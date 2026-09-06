@@ -8679,10 +8679,13 @@ def scan_cambios(
 def informes(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     warehouse = _active_warehouse(db, user, request)
     analisis = generar_analisis_inteligente(db, warehouse.id if warehouse else None)
-    # Datos para Chart.js (JSON seguro)
+    # Mismo criterio que el Estado visual (2.7.44): activos contados de uno en
+    # uno y stock en unidades, sin mezclar; cada cifra enlaza a su lista.
+    resumen_real = _estado_inventario_real(db, warehouse.id if warehouse else None)
+    totales_activos = resumen_real["activos"]["totales"]
     chart_estados = {
-        "labels": list(analisis["herramientas"]["estados"].keys()),
-        "data": list(analisis["herramientas"]["estados"].values()),
+        "labels": ["Disponibles en nave", "Entregados / en obra", "Mantenimiento", "Fuera de servicio / baja"],
+        "data": [int(totales_activos.get(k, 0)) for k in ("disponible", "en_uso", "mantenimiento", "fuera_servicio")],
     }
     chart_mov = {
         "labels": [r["mes"] for r in analisis["movimientos"]["por_mes"]],
@@ -8691,6 +8694,7 @@ def informes(request: Request, user: Usuario = Depends(requiere_login), db: Sess
     return templates.TemplateResponse(request, "informes.html", ctx_base(
         request, user, db,
         analisis=analisis,
+        resumen=resumen_real,
         chart_estados_json=dumps_for_script(chart_estados),
         chart_mov_json=dumps_for_script(chart_mov),
     ))

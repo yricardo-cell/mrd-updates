@@ -37,6 +37,36 @@
 </div>
 {% endif %}
 
+{% if resumen is defined and resumen %}
+{% set a = resumen.activos %}{% set s = resumen.stock %}
+<!-- Estado real (mismo criterio que el Estado visual, 2.7.44) -->
+<section class="mrd-card mb-4" id="informes-estado-real">
+  <div class="mrd-card-header"><span><i class="bi bi-grid-1x2-fill me-1"></i> Estado real del inventario</span><small>Mismo criterio que el Estado visual · cada cifra abre su lista · <a href="/inventario/estado">ver completo</a></small></div>
+  <div class="mrd-card-body">
+    <div class="mrd-card-header px-0"><span><i class="bi bi-tools me-1"></i> Activos: se cuentan de uno en uno</span><small>{{ a.total }} en total (herramientas, maquinaria, EPI individual)</small></div>
+    <div class="inv-state-kpis">
+      <a class="inv-kpi is-green" href="/herramientas?estado=disponible"><span><i class="bi bi-check2-circle"></i></span><div><small>Disponibles en nave</small><strong>{{ a.totales.disponible }}</strong></div></a>
+      <a class="inv-kpi is-blue" href="/panel-salidas"><span><i class="bi bi-arrow-left-right"></i></span><div><small>Entregados / en obra</small><strong>{{ a.totales.en_uso }}</strong></div></a>
+      <a class="inv-kpi is-orange" href="/reparaciones"><span><i class="bi bi-wrench-adjustable-circle"></i></span><div><small>Mantenimiento</small><strong>{{ a.totales.mantenimiento }}</strong></div></a>
+      <a class="inv-kpi is-red" href="/herramientas?estado=baja"><span><i class="bi bi-x-octagon"></i></span><div><small>Fuera de servicio / baja</small><strong>{{ a.totales.fuera_servicio }}</strong></div></a>
+    </div>
+    <div class="table-responsive"><table class="table align-middle mb-3"><thead><tr><th>Familia</th><th>Total</th><th>En nave</th><th>Entregado / en obra</th><th>Mantenimiento</th><th>Baja</th></tr></thead><tbody>
+      <tr><td><a href="/herramientas"><i class="bi bi-tools me-1"></i>Herramientas</a></td><td><strong>{{ a.herramientas.total }}</strong></td><td><a href="/herramientas?estado=disponible">{{ a.herramientas.disponible }}</a></td><td><a href="/panel-salidas">{{ a.herramientas.en_uso }}</a></td><td><a href="/reparaciones">{{ a.herramientas.mantenimiento }}</a></td><td><a href="/herramientas?estado=baja">{{ a.herramientas.fuera_servicio }}</a></td></tr>
+      <tr><td><a href="/epis/individuales"><i class="bi bi-shield-check me-1"></i>EPI individual</a></td><td><strong>{{ a.epi_individual.total }}</strong></td><td><a href="/epis/individuales">{{ a.epi_individual.disponible }}</a></td><td><a href="/epis/individuales">{{ a.epi_individual.en_uso }}</a></td><td>{{ a.epi_individual.mantenimiento }}</td><td>{{ a.epi_individual.fuera_servicio }}</td></tr>
+      <tr><td><a href="/maquinaria"><i class="bi bi-truck-front me-1"></i>Maquinaria</a></td><td><strong>{{ a.maquinaria.total }}</strong></td><td><a href="/maquinaria">{{ a.maquinaria.disponible }}</a></td><td><a href="/maquinaria">{{ a.maquinaria.en_uso }}</a></td><td>{{ a.maquinaria.mantenimiento }}</td><td>{{ a.maquinaria.fuera_servicio }}</td></tr>
+    </tbody></table></div>
+    <div class="mrd-card-header px-0"><span><i class="bi bi-boxes me-1"></i> Stock: se cuenta en unidades</span><small>referencias y unidades, sin mezclar con los activos</small></div>
+    <div class="inv-state-kpis mb-0">
+      <a class="inv-kpi is-blue" href="/materiales"><span><i class="bi bi-boxes"></i></span><div><small>Materiales</small><strong>{{ s.materiales.referencias }}</strong><em>{{ '{:,}'.format(s.materiales.unidades).replace(',', '.') }} unidades</em></div></a>
+      <a class="inv-kpi is-orange" href="/materiales/alertas"><span><i class="bi bi-graph-down-arrow"></i></span><div><small>Materiales bajo mínimo</small><strong>{{ s.materiales.bajo_minimo }}</strong><em>referencias</em></div></a>
+      <a class="inv-kpi is-green" href="/epis/stock"><span><i class="bi bi-bag-fill"></i></span><div><small>Ropa en stock</small><strong>{{ '{:,}'.format(s.ropa.unidades).replace(',', '.') }}</strong><em>{{ s.ropa.referencias }} referencias</em></div></a>
+      <a class="inv-kpi is-green" href="/epis/stock"><span><i class="bi bi-shield-shaded"></i></span><div><small>EPI de stock</small><strong>{{ '{:,}'.format(s.epi_stock.unidades).replace(',', '.') }}</strong><em>{{ s.epi_stock.referencias }} referencias</em></div></a>
+    </div>
+    <p class="inv-state-updated mb-0 mt-2"><i class="bi bi-database-check"></i> Datos reales actualizados {{ resumen.actualizado }} · No se muestran cifras de ejemplo.</p>
+  </div>
+</section>
+{% endif %}
+
 <!-- KPI Grid -->
 <div class="analytics-grid">
   {% set kpis = [
@@ -87,7 +117,7 @@
 
   <!-- Estado herramientas -->
   <div class="card chart-card">
-    <div class="card-header"><div class="card-title"><i class="bi bi-pie-chart"></i> Estado inventario</div></div>
+    <div class="card-header"><div class="card-title"><i class="bi bi-pie-chart"></i> Estado de los activos</div><span class="table-meta">mismas cifras que el Estado visual</span></div>
     <div class="card-body analytics-state-chart">
       <canvas id="chartEstados" height="150"></canvas>
     </div>
@@ -243,7 +273,7 @@ function initCharts() {
       data: { labels: ce.labels, datasets: [{ data: ce.data, backgroundColor: COLORS, borderWidth: 0 }] },
       options: {
         cutout: '65%',
-        plugins: { legend: { position: 'bottom', labels: { font: { size: 9 }, padding: 6, boxWidth: 10 } } }
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 10, boxWidth: 12 } } }
       }
     });
   } else {
