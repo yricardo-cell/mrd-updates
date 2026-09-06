@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.57",
-    "nombre":  "MRD TOOL CONTROL -- Guardian (MRD Sentinel 1.5.0): bloqueo de emergencia con 503 a todo el mundo, incluida la LAN, salvo /health y acceso local; se levanta con el PIN por Telegram",
+    "version_actual":  "2.7.58",
+    "nombre":  "MRD TOOL CONTROL -- Alta express por escaner: pegatina QR, nombre, foto con camara y hueco en cuatro pasos desde el movil; varias iguales de golpe; acceso desde Herramientas y desde el escaner cuando el codigo no existe",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Guardian (MRD Sentinel 1.5.0): bloqueo de emergencia con 503 a todo el mundo, incluida la LAN, salvo /health y acceso local; se levanta con el PIN por Telegram"
+                    "Alta express por escaner: pegatina QR, nombre, foto con camara y hueco en cuatro pasos desde el movil; varias iguales de golpe; acceso desde Herramientas y desde el escaner cuando el codigo no existe"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.57.zip",
-    "sha256":  "3a05f84c44ee7da8314c43b6b0ede6d0c7680d099d763a21a0ada3a1dff1b07d"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.58.zip",
+    "sha256":  "01bb859bd960aff8e512eee9f9b6086ef56589caa9cec6e0dc187302c8d69ddc"
 }
