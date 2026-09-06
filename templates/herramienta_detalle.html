@@ -236,6 +236,12 @@
               {{ herramienta.responsable.nombre_completo if herramienta.responsable else '—' }}
             </div>
           </div>
+          {% if herramienta.maletin %}
+          <div class="info-item">
+            <div class="info-label">Va en el maletín</div>
+            <div class="info-value"><a href="/herramientas/{{ herramienta.maletin.id }}"><i class="bi bi-briefcase"></i> {{ herramienta.maletin.codigo }} · {{ herramienta.maletin.nombre }}</a></div>
+          </div>
+          {% endif %}
           {% if herramienta.fecha_proximo_mantenimiento %}
           <div class="info-item" style="border-top:1px solid var(--warning-light);background:var(--warning-light)">
             <div class="info-label" style="color:var(--warning)">Próx. mantenimiento</div>
@@ -250,6 +256,26 @@
           <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:.84rem;color:var(--text-2)">
             {{ herramienta.observaciones }}
           </div>
+        </div>
+        {% endif %}
+
+        {% if herramienta.es_maletin %}
+        <div style="margin-top:16px" id="contenido-maletin">
+          <div class="info-label" style="margin-bottom:6px"><i class="bi bi-briefcase"></i> Contenido del maletín
+            {% if contenido_maletin %}{% if maletin_incompleto %}<span class="badge text-bg-warning ms-2">Incompleto: alguna pieza no está con el maletín</span>{% else %}<span class="badge text-bg-success ms-2">Completo</span>{% endif %}{% endif %}
+          </div>
+          {% if contenido_maletin %}
+          <ul class="list-group">
+            {% for p in contenido_maletin %}
+            <li class="list-group-item d-flex justify-content-between align-items-center gap-2">
+              <a href="/herramientas/{{ p.id }}">{{ p.nombre }} <small class="text-muted">{{ p.codigo }}</small></a>
+              <span class="badge {{ 'text-bg-success' if p.estado == herramienta.estado else 'text-bg-warning' }}">{{ p.estado }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <div class="text-muted" style="font-size:.84rem">Vacío: en la ficha de cada herramienta elige "Va en el maletín" para meterla aquí.</div>
+          {% endif %}
         </div>
         {% endif %}
       </div>

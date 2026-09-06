@@ -2346,6 +2346,8 @@ def herramienta_detalle(
         .all()
     )
 
+    contenido_maletin = [p for p in h.contenido if p.activa] if getattr(h, "es_maletin", False) else []
+    maletin_incompleto = any(p.estado != h.estado or p.obra_id != h.obra_id for p in contenido_maletin)
     return templates.TemplateResponse(request, "herramienta_detalle.html", ctx_base(
         request, user,
         herramienta=h,
@@ -2362,6 +2364,8 @@ def herramienta_detalle(
         estados=ESTADOS_HERRAMIENTA,
         estados_info=ESTADOS,
         auditoria_logs=auditoria_logs,
+        contenido_maletin=contenido_maletin,
+        maletin_incompleto=maletin_incompleto,
     ))
 
 
@@ -2380,11 +2384,15 @@ def herramienta_editar_get(
     _require_warehouse_access(user, h.almacen_id)
     almacenes = visible_warehouses(db, user)
     proveedores = db.query(Proveedor).filter(Proveedor.activo == True).order_by(Proveedor.nombre).all()
+    maletines = db.query(Herramienta).filter(
+        Herramienta.activa == True, Herramienta.es_maletin == True, Herramienta.id != h.id,
+    ).order_by(Herramienta.nombre).all()
     return templates.TemplateResponse(request, "editar_herramienta.html", ctx_base(
         request, user,
         herramienta=h,
         almacenes=almacenes,
         proveedores=proveedores,
+        maletines=maletines,
         categorias=CATEGORIAS_DEFAULT,
         estados=ESTADOS_HERRAMIENTA,
     ))
@@ -2422,6 +2430,8 @@ async def herramienta_editar_post(
     ubicacion_texto: str = Form(""),
     foto: UploadFile = File(None),
     tipo_seguimiento: str = Form("individual"),
+    es_maletin: str = Form(""),
+    maletin_id: str = Form(""),
 ):
     if not tiene_permiso(user, "editar"):
         raise HTTPException(403, "Sin permiso")
@@ -2461,6 +2471,24 @@ async def herramienta_editar_post(
     _require_warehouse_access(user, nuevo_almacen_id)
     h.almacen_id = nuevo_almacen_id
     h.ubicacion_texto = ubicacion_texto or None
+    # Kits (2.7.39): un maletín no va dentro de otro; una pieza solo puede ir
+    # en una herramienta marcada como maletín.
+    h.es_maletin = bool(es_maletin)
+    if h.es_maletin:
+        h.maletin_id = None
+    elif maletin_id and maletin_id.isdigit():
+        maletin = db.query(Herramienta).filter(
+            Herramienta.id == int(maletin_id), Herramienta.activa == True,
+            Herramienta.es_maletin == True, Herramienta.id != h.id,
+        ).first()
+        if not maletin:
+            raise HTTPException(400, "El maletín indicado no existe o no está marcado como maletín")
+        h.maletin_id = maletin.id
+    else:
+        h.maletin_id = None
+    if not h.es_maletin:
+        for pieza in list(h.contenido):
+            pieza.maletin_id = None
 
     if foto and foto.filename:
         # Sprint 5.2: validar nombre, MIME y tamaño

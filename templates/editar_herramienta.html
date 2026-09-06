@@ -225,6 +225,27 @@
         </div>
       </div>
 
+      <!-- Kits (2.7.39): maletín y contenido -->
+      <div class="card">
+        <div class="card-header"><div class="card-title"><i class="bi bi-briefcase"></i> Maletín y kit</div></div>
+        <div class="card-body">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:10px;margin-bottom:12px">
+            <input type="checkbox" name="es_maletin" value="1" {% if herramienta.es_maletin %}checked{% endif %}>
+            <div><strong>Es un maletín</strong><div style="font-size:.78rem;color:var(--text-muted)">Contiene otras herramientas: al escanearlo en Mostrador Único entran o salen todas juntas.</div></div>
+          </label>
+          <div class="form-group">
+            <label class="form-label">Va en el maletín</label>
+            <select name="maletin_id" class="form-control" {% if herramienta.es_maletin %}disabled{% endif %}>
+              <option value="">Ninguno</option>
+              {% for m in maletines %}
+              <option value="{{ m.id }}" {% if herramienta.maletin_id == m.id %}selected{% endif %}>{{ m.codigo }} · {{ m.nombre }}</option>
+              {% endfor %}
+            </select>
+            {% if not maletines %}<div style="font-size:.78rem;color:var(--text-muted);margin-top:6px">Aún no hay maletines: marca "Es un maletín" en la ficha del maletín para que aparezca aquí.</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- Panel lateral -->

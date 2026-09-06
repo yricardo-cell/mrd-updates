@@ -579,6 +579,10 @@ class Herramienta(Base):
     vehiculo_id = Column(Integer, ForeignKey("vehiculos.id"), nullable=True)
     responsable_id = Column(Integer, ForeignKey("trabajadores.id"), nullable=True)
 
+    # ── Kits (2.7.39): maletín que contiene otras herramientas ──
+    es_maletin = Column(Boolean, nullable=False, default=False, server_default="0")
+    maletin_id = Column(Integer, ForeignKey("herramientas.id"), nullable=True)
+
     # ── Adquisición ───────────────────────────────────────────────────────────
     fecha_compra = Column(Date, nullable=True)
     proveedor_id = Column(Integer, ForeignKey("proveedores.id"), nullable=True)
@@ -618,6 +622,10 @@ class Herramienta(Base):
                             foreign_keys=[vehiculo_id])
     responsable = relationship("Trabajador", back_populates="herramientas",
                                foreign_keys=[responsable_id])
+    maletin = relationship("Herramienta", remote_side="Herramienta.id",
+                           foreign_keys=[maletin_id], back_populates="contenido")
+    contenido = relationship("Herramienta", foreign_keys=[maletin_id],
+                             back_populates="maletin", order_by="Herramienta.nombre")
     proveedor_rel = relationship("Proveedor", back_populates="herramientas",
                                  foreign_keys=[proveedor_id])
     movimientos = relationship("Movimiento", back_populates="herramienta",

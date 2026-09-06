@@ -56,6 +56,32 @@ def _code(value: str) -> str:
     return value
 
 
+def _tool_extra(db: Session, tool) -> dict:
+    """Datos de kit de una herramienta para el Mostrador: si es un maletín,
+    lista las piezas activas que van dentro para que el carrito las añada
+    juntas al escanearlo (2.7.39)."""
+    extra = {
+        "marca": tool.marca or "",
+        "tipo_seguimiento": getattr(tool, "tipo_seguimiento", "individual"),
+        "es_maletin": bool(getattr(tool, "es_maletin", False)),
+    }
+    if extra["es_maletin"]:
+        pieces = db.execute(select(Herramienta).where(
+            Herramienta.maletin_id == tool.id, Herramienta.activa == True,
+        ).order_by(Herramienta.nombre)).scalars().all()
+        extra["contenido"] = [
+            {
+                "tipo": "herramienta", "id": piece.id, "codigo": piece.codigo,
+                "nombre": piece.nombre, "estado": piece.estado, "permite_cantidad": False,
+                "url": f"/herramientas/{piece.id}", "dentro_de": tool.codigo,
+            }
+            for piece in pieces
+        ]
+    elif getattr(tool, "maletin_id", None):
+        extra["maletin_id"] = tool.maletin_id
+    return extra
+
+
 def resolve_counter_item(db: Session, raw_code: str, warehouse_id: int | None = None) -> dict:
     """Resuelve todo articulo operable sin modificar ningun dato."""
     legacy_code = _legacy_url_code(db, raw_code)
@@ -73,7 +99,7 @@ def resolve_counter_item(db: Session, raw_code: str, warehouse_id: int | None = 
     if tool:
         return _item(
             "herramienta", tool.id, tool.codigo, tool.nombre, tool.estado, False, 1,
-            marca=tool.marca or "", tipo_seguimiento=getattr(tool, "tipo_seguimiento", "individual"),
+            **_tool_extra(db, tool),
         )
 
     machine = db.execute(select(Maquinaria).where(
@@ -262,7 +288,7 @@ def _resolve_legacy_counter_item(
     if tool:
         return _item(
             "herramienta", tool.id, tool.codigo, tool.nombre, tool.estado, False, 1,
-            marca=tool.marca or "", tipo_seguimiento=getattr(tool, "tipo_seguimiento", "individual"),
+            **_tool_extra(db, tool),
         )
 
     machine = _legacy_match(
