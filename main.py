@@ -780,30 +780,42 @@ templates.env.tests["search"] = lambda value, pattern: bool(_re.search(pattern, 
 
 
 # ─── Startup ──────────────────────────────────────────────────────────────────
+def _alertas_no_retorno_herramientas(db) -> int:
+    """Estar fuera es lo normal (las herramientas no vuelven salvo obra concreta).
+    Solo se avisa cuando el usuario fijó un plazo de devolución y ya ha vencido."""
+    ahora = datetime.now()
+    creados = 0
+    herr = db.query(Herramienta).filter(
+        Herramienta.activa == True,
+        Herramienta.estado.notin_(["disponible", "en_almacen", "baja", "mantenimiento"]),
+    ).all()
+    for h in herr:
+        ultimo = db.query(Movimiento).filter(
+            Movimiento.herramienta_id == h.id,
+            Movimiento.tipo.in_(["entrega", "traslado"]),
+        ).order_by(Movimiento.id.desc()).first()
+        prevista = getattr(ultimo, "fecha_devolucion_prevista", None) if ultimo else None
+        if not prevista or prevista >= ahora:
+            continue
+        ya = db.query(Aviso).filter(
+            Aviso.titulo.like(f"No retorno herramienta {h.id}%"),
+            Aviso.leido == False, Aviso.archivado == False,
+        ).first()
+        if not ya:
+            db.add(Aviso(titulo=f"No retorno herramienta {h.id}: {h.nombre}",
+                         mensaje=f"'{h.nombre}' debía volver el {prevista.strftime('%d/%m/%Y')} y no ha vuelto.",
+                         tipo="alerta", prioridad="alta", enlace=f"/herramientas/{h.id}"))
+            creados += 1
+    return creados
+
+
 def _alertas_no_retorno():
     try:
         from database import SessionLocal as _SL2
         from datetime import datetime as _dt2, timedelta as _td2
         db = _SL2()
-        limite = _dt2.now() - _td2(days=14)
-        herr = db.query(Herramienta).filter(
-            Herramienta.activa == True,
-            Herramienta.estado.notin_(["disponible","baja","mantenimiento"]),
-        ).all()
-        for h in herr:
-            ultimo = db.query(Movimiento).filter(
-                Movimiento.herramienta_id == h.id,
-                Movimiento.tipo.in_(["entrega","traslado"]),
-            ).order_by(Movimiento.fecha.desc()).first()
-            if ultimo and ultimo.fecha < limite:
-                ya = db.query(Aviso).filter(
-                    Aviso.titulo.like(f"No retorno herramienta {h.id}%"),
-                    Aviso.leido == False, Aviso.archivado == False,
-                ).first()
-                if not ya:
-                    db.add(Aviso(titulo=f"No retorno herramienta {h.id}: {h.nombre}",
-                                 mensaje=f"'{h.nombre}' lleva mas de 14 dias sin retorno.",
-                                 tipo="alerta", prioridad="alta"))
+        limite = _dt2.now() - _td2(days=14)  # los vehículos conservan la regla de 14 días
+        _alertas_no_retorno_herramientas(db)
         vehs = db.query(MovimientoVehiculo).filter(
             MovimientoVehiculo.fecha_retorno == None,
             MovimientoVehiculo.fecha_salida < limite,
@@ -8599,6 +8611,277 @@ def _nave_json(data) -> str:
     return json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
 
 
+# ─── Calendario de revisiones y caducidades (2.7.55) ─────────────────────────
+
+CAL_CATEGORIAS = {
+    "epi": "EPI individual", "herramienta": "Herramientas y máquinas", "trabajador": "Trabajadores",
+    "lote": "Lotes con caducidad", "vehiculo": "Vehículos",
+}
+
+
+def _cal_fecha(valor) -> date | None:
+    if valor is None:
+        return None
+    return valor.date() if isinstance(valor, datetime) else valor
+
+
+def _calendario_eventos(db: Session, warehouse_id: int | None) -> list[dict]:
+    """Todo lo que vence, con la fecha que ya está guardada en cada ficha."""
+    eventos: list[dict] = []
+
+    def add(tipo, cat, obj_id, titulo, detalle, fecha, url, hecho=False):
+        f = _cal_fecha(fecha)
+        if not f:
+            return
+        eventos.append({"tipo": tipo, "cat": cat, "id": obj_id, "titulo": titulo, "detalle": detalle or "",
+                        "fecha": f.isoformat(), "url": url, "hecho": bool(hecho), "clave": f"{tipo}:{obj_id}"})
+
+    def en_almacen(col):
+        return [or_(col == warehouse_id, col.is_(None))] if warehouse_id else []
+
+    for e in db.query(EPIIndividual).filter(EPIIndividual.estado != "baja", EPIIndividual.proxima_revision.isnot(None),
+                                            *en_almacen(EPIIndividual.almacen_id)).all():
+        quien = e.trabajador.nombre_completo if getattr(e, "trabajador", None) else "en nave"
+        add("epi", "epi", e.id, f"{e.tipo} {e.codigo_fabricacion or ''}".strip(), f"Revisión · {'la tiene ' + quien if e.trabajador_id else quien}",
+            e.proxima_revision, f"/epis/individuales/{e.id}")
+    for h in db.query(Herramienta).filter(Herramienta.activa == True, Herramienta.fecha_proximo_mantenimiento.isnot(None),
+                                          *en_almacen(Herramienta.almacen_id)).all():
+        cada = f" · cada {h.intervalo_mantenimiento_dias} días" if h.intervalo_mantenimiento_dias else ""
+        add("herramienta", "herramienta", h.id, h.nombre, f"Mantenimiento{cada}", h.fecha_proximo_mantenimiento, f"/herramientas/{h.id}", True)
+    for mp in db.query(MantenimientoProgramado).filter(MantenimientoProgramado.estado.in_(["pendiente", "aplazado", "en_curso"])).all():
+        add("mantenimiento", "herramienta", mp.id, mp.nombre_activo, f"{(mp.tipo or 'preventivo').capitalize()} programado",
+            mp.fecha_programada, "/mantenimiento", True)
+    for m in db.query(Maquinaria).filter(Maquinaria.activa == True, Maquinaria.proxima_revision.isnot(None),
+                                         *en_almacen(Maquinaria.almacen_id)).all():
+        add("maquina", "herramienta", m.id, m.nombre, f"Revisión de máquina{' · ' + m.ubicacion if m.ubicacion else ''}",
+            m.proxima_revision, f"/maquinaria/{m.id}/pasaporte", True)
+    activos = {t.id: t for t in db.query(Trabajador).filter(Trabajador.activo == True).all()}
+    for f in db.query(FormacionTrabajador).filter(FormacionTrabajador.fecha_caducidad.isnot(None)).all():
+        t = activos.get(f.trabajador_id)
+        if t:
+            add("formacion", "trabajador", f.id, f"{t.nombre_completo} · {f.nombre_curso}", "Formación que caduca", f.fecha_caducidad, f"/trabajadores/{t.id}")
+    ultimo_reco: dict[int, ReconocimientoMedico] = {}
+    for r in db.query(ReconocimientoMedico).order_by(ReconocimientoMedico.fecha.desc(), ReconocimientoMedico.id.desc()).all():
+        ultimo_reco.setdefault(r.trabajador_id, r)
+    for tid, r in ultimo_reco.items():
+        t = activos.get(tid)
+        if t and r.fecha_proxima:
+            add("reconocimiento", "trabajador", r.id, f"{t.nombre_completo} · Reconocimiento médico", f"Último: {r.fecha.strftime('%d/%m/%Y')}",
+                r.fecha_proxima, f"/trabajadores/{t.id}")
+    for d in db.query(DocumentoTrabajador).filter(DocumentoTrabajador.fecha_caducidad.isnot(None)).all():
+        t = activos.get(d.trabajador_id)
+        if t:
+            add("documento", "trabajador", d.id, f"{t.nombre_completo} · {d.tipo}", "Documento que caduca", d.fecha_caducidad, f"/trabajadores/{t.id}")
+    for lote in db.query(LoteAlmacen).filter(LoteAlmacen.fecha_caducidad.isnot(None), LoteAlmacen.cantidad > 0,
+                                             *([LoteAlmacen.almacen_id == warehouse_id] if warehouse_id else [])).all():
+        add("lote", "lote", lote.id, f"Lote {lote.numero_lote}", f"{lote.tipo} · {lote.cantidad:g} ud", lote.fecha_caducidad, "/materiales")
+    for lv in db.query(LoteVariante).filter(LoteVariante.fecha_caducidad.isnot(None), LoteVariante.cantidad > 0).all():
+        ex = getattr(lv, "existencia", None)
+        var = getattr(ex, "variante", None) if ex is not None else None
+        cat = getattr(var, "catalogo", None) if var is not None else None
+        nombre = cat.nombre if cat is not None else f"Lote {lv.numero_lote}"
+        add("lote_epi", "lote", lv.id, f"{nombre} · lote {lv.numero_lote}", f"{lv.cantidad} ud", lv.fecha_caducidad, "/epis/stock")
+    for v in db.query(Vehiculo).filter(Vehiculo.activo == True, *en_almacen(Vehiculo.almacen_id)).all():
+        nombre = f"{v.marca or ''} {v.matricula}".strip()
+        add("itv", "vehiculo", v.id, nombre, "ITV", v.itv_hasta, "/vehiculos")
+        add("seguro", "vehiculo", v.id, nombre, "Seguro", v.seguro_hasta, "/vehiculos")
+        add("revision_vehiculo", "vehiculo", v.id, nombre, "Revisión", v.proxima_revision, "/vehiculos")
+    eventos.sort(key=lambda e: (e["fecha"], e["titulo"]))
+    return eventos
+
+
+def _calendario_resumen(eventos: list[dict], hoy: date) -> dict:
+    semana = hoy + timedelta(days=7)
+    mes = date(hoy.year + (hoy.month == 12), (hoy.month % 12) + 1, 1) - timedelta(days=1)
+    anio = hoy + timedelta(days=365)
+    fechas = [date.fromisoformat(e["fecha"]) for e in eventos]
+    return {
+        "vencidas": sum(1 for f in fechas if f < hoy),
+        "semana": sum(1 for f in fechas if hoy <= f <= semana),
+        "mes": sum(1 for f in fechas if hoy <= f <= mes),
+        "anio": sum(1 for f in fechas if hoy <= f <= anio),
+    }
+
+
+def _cal_permitido(user: Usuario) -> bool:
+    return user.rol in ("admin", "almacen", "encargado_patio") or tiene_permiso(user, "editar") or tiene_permiso(user, "stock_operar")
+
+
+@app.get("/calendario", response_class=HTMLResponse)
+def calendario_page(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Calendario de revisiones y caducidades (2.7.55): EPI individual,
+    mantenimiento de herramientas y máquinas, formaciones, reconocimientos,
+    documentos, lotes y vehículos, en una sola pantalla con mes y lista."""
+    if not _cal_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _active_warehouse(db, user, request)
+    wid = warehouse.id if warehouse else None
+    eventos = _calendario_eventos(db, wid)
+    hoy = date.today()
+    herramientas = db.query(Herramienta).filter(Herramienta.activa == True, *([or_(Herramienta.almacen_id == wid, Herramienta.almacen_id.is_(None))] if wid else [])).order_by(Herramienta.nombre).all()
+    maquinas = db.query(Maquinaria).filter(Maquinaria.activa == True).order_by(Maquinaria.nombre).all()
+    return templates.TemplateResponse(request, "calendario.html", ctx_base(
+        request, user, db, almacen=warehouse, eventos=eventos, eventos_json=_nave_json(eventos),
+        resumen=_calendario_resumen(eventos, hoy), hoy=hoy.isoformat(), categorias=CAL_CATEGORIAS,
+        herramientas=[{"id": h.id, "nombre": h.nombre, "codigo": h.codigo or ""} for h in herramientas],
+        maquinas=[{"id": m.id, "nombre": m.nombre} for m in maquinas],
+        puede_editar=tiene_permiso(user, "editar") or tiene_permiso(user, "stock_operar"),
+    ))
+
+
+@app.get("/api/calendario/eventos")
+def api_calendario_eventos(request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    if not _cal_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _active_warehouse(db, user, request)
+    eventos = _calendario_eventos(db, warehouse.id if warehouse else None)
+    return JSONResponse({"ok": True, "hoy": date.today().isoformat(), "eventos": eventos, "resumen": _calendario_resumen(eventos, date.today())})
+
+
+class CalendarioHechoRequest(BaseModel):
+    tipo: str
+    id: int
+
+
+class CalendarioProgramarRequest(BaseModel):
+    tipo: str
+    id: int
+    fecha: str
+    intervalo_dias: int | None = Field(None, ge=0, le=3650)
+
+
+@app.post("/api/calendario/hecho")
+def api_calendario_hecho(payload: CalendarioHechoRequest, request: Request = None,
+                         user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    """Marca una revisión como hecha y programa la siguiente con el intervalo."""
+    if not (tiene_permiso(user, "editar") or tiene_permiso(user, "stock_operar")):
+        raise HTTPException(403, "Sin permiso")
+    hoy = date.today()
+    siguiente = None
+    if payload.tipo == "herramienta":
+        h = db.get(Herramienta, payload.id)
+        if not h:
+            raise HTTPException(404, "Herramienta no encontrada")
+        anterior = h.fecha_proximo_mantenimiento
+        h.fecha_ultimo_mantenimiento = hoy
+        siguiente = hoy + timedelta(days=int(h.intervalo_mantenimiento_dias)) if h.intervalo_mantenimiento_dias else None
+        h.fecha_proximo_mantenimiento = siguiente
+        registrar_auditoria(db, "herramientas", h.id, "mantenimiento_hecho", user.id,
+                            {"proximo": str(anterior)}, {"ultimo": str(hoy), "proximo": str(siguiente)})
+    elif payload.tipo == "maquina":
+        m = db.get(Maquinaria, payload.id)
+        if not m:
+            raise HTTPException(404, "Máquina no encontrada")
+        anterior = m.proxima_revision
+        siguiente = hoy + timedelta(days=365)
+        m.proxima_revision = siguiente
+        registrar_auditoria(db, "maquinaria", m.id, "revision_hecha", user.id, {"proxima": str(anterior)}, {"proxima": str(siguiente)})
+    elif payload.tipo == "mantenimiento":
+        mp = db.get(MantenimientoProgramado, payload.id)
+        if not mp:
+            raise HTTPException(404, "Mantenimiento no encontrado")
+        mant_engine.completar_mantenimiento(mp_id=mp.id, db=db, fecha_realizada=datetime.now(), coste_real=None, notas="Hecho desde el calendario")
+        siguiente = hoy + timedelta(days=int(mp.intervalo_dias)) if mp.intervalo_dias else None
+    else:
+        raise HTTPException(400, "Este tipo se marca desde su ficha")
+    db.commit()
+    return JSONResponse({"ok": True, "siguiente": siguiente.isoformat() if siguiente else None})
+
+
+@app.post("/api/calendario/programar")
+def api_calendario_programar(payload: CalendarioProgramarRequest, request: Request = None,
+                             user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    """Programa la próxima revisión de una herramienta (con intervalo) o máquina."""
+    if not (tiene_permiso(user, "editar") or tiene_permiso(user, "stock_operar")):
+        raise HTTPException(403, "Sin permiso")
+    try:
+        fecha = date.fromisoformat(payload.fecha)
+    except ValueError:
+        raise HTTPException(400, "Fecha no válida")
+    if payload.tipo == "herramienta":
+        h = db.get(Herramienta, payload.id)
+        if not h:
+            raise HTTPException(404, "Herramienta no encontrada")
+        h.fecha_proximo_mantenimiento = fecha
+        if payload.intervalo_dias is not None:
+            h.intervalo_mantenimiento_dias = payload.intervalo_dias or None
+        registrar_auditoria(db, "herramientas", h.id, "programar_mantenimiento", user.id, None,
+                            {"proximo": str(fecha), "intervalo": h.intervalo_mantenimiento_dias})
+    elif payload.tipo == "maquina":
+        m = db.get(Maquinaria, payload.id)
+        if not m:
+            raise HTTPException(404, "Máquina no encontrada")
+        m.proxima_revision = fecha
+        registrar_auditoria(db, "maquinaria", m.id, "programar_revision", user.id, None, {"proxima": str(fecha)})
+    else:
+        raise HTTPException(400, "Tipo no válido")
+    db.commit()
+    return JSONResponse({"ok": True})
+
+
+def _ics_escape(texto: str) -> str:
+    return str(texto or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+
+@app.get("/calendario.ics")
+def calendario_ics(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Exporta lo que vence (30 días atrás, 365 adelante) al calendario del móvil."""
+    if not _cal_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _active_warehouse(db, user, request)
+    hoy = date.today()
+    lineas = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//MRD Tool Control//Calendario//ES", "CALSCALE:GREGORIAN",
+              "X-WR-CALNAME:MRD revisiones y caducidades"]
+    for e in _calendario_eventos(db, warehouse.id if warehouse else None):
+        f = date.fromisoformat(e["fecha"])
+        if f < hoy - timedelta(days=30) or f > hoy + timedelta(days=365):
+            continue
+        lineas += ["BEGIN:VEVENT", f"UID:mrd-{e['clave']}@mrd-tool-control", f"DTSTAMP:{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}",
+                   f"DTSTART;VALUE=DATE:{f.strftime('%Y%m%d')}", f"DTEND;VALUE=DATE:{(f + timedelta(days=1)).strftime('%Y%m%d')}",
+                   f"SUMMARY:{_ics_escape(e['titulo'] + ' · ' + e['detalle'])}", f"DESCRIPTION:{_ics_escape(CAL_CATEGORIAS.get(e['cat'], e['cat']))}",
+                   "END:VEVENT"]
+    lineas.append("END:VCALENDAR")
+    return Response("\r\n".join(lineas) + "\r\n", media_type="text/calendar; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=mrd-calendario.ics"})
+
+
+def _aviso_semanal_calendario(db: Session) -> Aviso | None:
+    """Una vez por semana: aviso interno con lo vencido y lo que vence en 14 días."""
+    hoy = date.today()
+    titulo = f"Vencimientos semana {hoy.strftime('%G-%V')}"
+    if db.query(Aviso).filter(Aviso.titulo == titulo).first():
+        return None
+    eventos = _calendario_eventos(db, None)
+    vencidas = [e for e in eventos if date.fromisoformat(e["fecha"]) < hoy]
+    proximas = [e for e in eventos if hoy <= date.fromisoformat(e["fecha"]) <= hoy + timedelta(days=14)]
+    if not vencidas and not proximas:
+        return None
+    lineas = []
+    if vencidas:
+        lineas.append(f"Vencidas ({len(vencidas)}):")
+        lineas += [f"  - {e['titulo']} · {e['detalle']} · {date.fromisoformat(e['fecha']).strftime('%d/%m/%Y')}" for e in vencidas[:15]]
+    if proximas:
+        lineas.append(f"Vencen en 14 días ({len(proximas)}):")
+        lineas += [f"  - {e['titulo']} · {e['detalle']} · {date.fromisoformat(e['fecha']).strftime('%d/%m/%Y')}" for e in proximas[:15]]
+    aviso = Aviso(titulo=titulo, mensaje="\n".join(lineas), tipo="calendario",
+                  prioridad="alta" if vencidas else "media", enlace="/calendario")
+    db.add(aviso)
+    db.commit()
+    return aviso
+
+
+def _aviso_semanal_calendario_bg():
+    try:
+        from database import SessionLocal as _SLc
+        db = _SLc()
+        try:
+            _aviso_semanal_calendario(db)
+        finally:
+            db.close()
+    except Exception as exc:  # pragma: no cover
+        mrd_logging.log_error(f"Aviso semanal de calendario: {exc}")
+
+
 @app.get("/nave", response_class=HTMLResponse)
 def vista_nave(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     """Vista de la nave (2.7.51): cada hueco real como una caja con color según
@@ -9752,11 +10035,17 @@ def puesta_a_punto(request: Request, user: Usuario = Depends(requiere_login), db
                  "filas": [(h.nombre, h.codigo, f"/nave/colocar?codigo={urllib.parse.quote(h.codigo or '')}") for h in _tools(Herramienta.ubicacion_id.is_(None))]},
                 {"nombre": "Sin marca ni modelo", "por_que": "Ayuda a distinguir herramientas iguales y a pedir repuestos.",
                  "filas": [(h.nombre, h.codigo, f"/herramientas/{h.id}/editar") for h in _tools(or_(Herramienta.marca.is_(None), Herramienta.marca == ""))]},
+                {"nombre": "Sin revisión ni intervalo de mantenimiento", "por_que": "Con una fecha e intervalo, el Calendario avisa solo de cuándo toca.",
+                 "filas": [(h.nombre, h.codigo, f"/calendario?programar=herramienta&id={h.id}") for h in _tools(Herramienta.fecha_proximo_mantenimiento.is_(None), Herramienta.intervalo_mantenimiento_dias.is_(None))]},
             ],
         },
         {
             "clave": "trabajadores", "titulo": "Trabajadores", "icono": "bi-people", "total": total_workers,
             "puntos": [
+                {"nombre": "Sin reconocimiento médico registrado", "por_que": "El Calendario avisa de cuándo toca el siguiente si se registra el último.",
+                 "filas": [(t.nombre_completo, t.codigo or "", f"/trabajadores/{t.id}") for t in _workers(~Trabajador.id.in_(db.query(ReconocimientoMedico.trabajador_id)))]},
+                {"nombre": "Sin formación registrada", "por_que": "Las formaciones con caducidad aparecen en el Calendario.",
+                 "filas": [(t.nombre_completo, t.codigo or "", f"/trabajadores/{t.id}") for t in _workers(~Trabajador.id.in_(db.query(FormacionTrabajador.trabajador_id)))]},
                 {"nombre": "Sin tallas de ropa o calzado", "por_que": "El Mostrador y el portal usan las tallas para dar el EPI correcto.",
                  "filas": [(t.nombre_completo, t.codigo or "", f"/mostrador?trabajador={t.id}&epi=1") for t in _workers(or_(Trabajador.talla_ropa.is_(None), Trabajador.talla_ropa == "", Trabajador.talla_calzado.is_(None), Trabajador.talla_calzado == ""))]},
                 {"nombre": "Sin PIN de portal", "por_que": "Sin PIN no pueden entrar en su portal ni recibir avisos.",

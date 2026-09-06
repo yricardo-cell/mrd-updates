@@ -48,7 +48,7 @@
     <span>{% if dash_hoy.devoluciones_vencidas > 0 %}entregas con fecha prevista pasada{% else %}nada atrasado hoy{% endif %}</span>
     <em>Ver plazos <i class="bi bi-arrow-right"></i></em>
   </a>
-  <a href="/epis/individuales" class="dash-task {% if dash_hoy.vencimientos > 0 %}is-warn{% else %}is-ok{% endif %}">
+  <a href="/calendario" class="dash-task {% if dash_hoy.vencimientos > 0 %}is-warn{% else %}is-ok{% endif %}">
     <small>Revisiones y vencimientos</small><strong>{{ dash_hoy.vencimientos }}</strong>
     <span>{{ dash_hoy.epis_vencidos }} EPI vencidos · {{ dash_hoy.epis_proximos }} EPI en 30 días · {{ dash_hoy.vehiculos_avisos }} avisos ITV/seguro</span>
     <em>Calendario <i class="bi bi-arrow-right"></i></em>

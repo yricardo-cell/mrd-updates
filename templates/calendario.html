@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Calendario de revisiones{% endblock %}
+{% block breadcrumb %}
+<a href="/">Inicio</a>
+<span class="sep">/</span>
+<span class="current">Calendario</span>
+{% endblock %}
+{% block content %}
+<style>
+.cal-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.cal-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.cal-chip{border:1px solid rgba(148,163,184,.5);border-radius:999px;padding:5px 11px;font-size:.82rem;cursor:pointer;background:transparent;color:var(--text-muted)}.cal-chip.on{border-color:#0891b2;color:#0891b2;font-weight:700}.cal-chip i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.cal-dow{font-size:.72rem;color:var(--text-muted);text-align:center;text-transform:uppercase;letter-spacing:.05em}
+.cal-day{min-height:64px;border:1px solid rgba(148,163,184,.35);border-radius:8px;padding:5px 6px;font-size:.8rem;position:relative;cursor:pointer;background:transparent}.cal-day.off{opacity:.35}.cal-day.hoy{border-color:#0891b2}.cal-day.sel{outline:2px solid #0891b2;outline-offset:1px}.cal-day.vencida{border-color:#dc2626}
+.cal-day .n{font-weight:700}.cal-dots{display:flex;gap:3px;flex-wrap:wrap;margin-top:4px}.cal-dots i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.cal-day .cnt{position:absolute;right:6px;top:5px;border-radius:999px;font-size:.7rem;padding:0 6px;font-weight:700;background:rgba(148,163,184,.25)}
+.cal-grupo h3{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin:12px 0 6px}
+.cal-item{display:flex;gap:10px;align-items:center;border:1px solid rgba(148,163,184,.35);border-radius:10px;padding:8px 10px;margin-bottom:6px}
+.cal-item .ic{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;color:#fff}
+.cal-item .t{flex:1;min-width:0}.cal-item .t b{display:block}.cal-item .t small{color:var(--text-muted)}
+.cal-item .d{text-align:right;font-size:.8rem;white-space:nowrap}.cal-item .d b{display:block}
+.form-cal{display:grid;grid-template-columns:1fr 1fr;gap:8px}.form-cal .full{grid-column:1/-1}.form-cal label{font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:2px}
+@media (max-width:600px){ .cal-day{min-height:52px;font-size:.72rem}}
+</style>
+<div class="page-header-row mb-3">
+  <div>
+    <h1 class="page-title"><i class="bi bi-calendar3"></i> Calendario de revisiones y caducidades</h1>
+    <p class="page-subtitle">Todo lo que vence en un sitio: EPI individual, mantenimiento de herramientas y máquinas, formaciones, reconocimientos, documentos, lotes y vehículos.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap"><a class="btn btn-outline-secondary" href="/calendario.ics"><i class="bi bi-calendar-plus"></i> Añadir a mi calendario (.ics)</a></div>
+</div>
+
+<div class="cal-kpis">
+  <div class="kpi-card"><div class="kpi-icon {{ 'red' if resumen.vencidas else 'green' }}"><i class="bi bi-exclamation-octagon"></i></div><div class="kpi-value" id="k-vencidas">{{ resumen.vencidas }}</div><div class="kpi-label">vencidas</div></div>
+  <div class="kpi-card"><div class="kpi-icon orange"><i class="bi bi-calendar-week"></i></div><div class="kpi-value" id="k-semana">{{ resumen.semana }}</div><div class="kpi-label">esta semana</div></div>
+  <div class="kpi-card"><div class="kpi-icon blue"><i class="bi bi-calendar-month"></i></div><div class="kpi-value" id="k-mes">{{ resumen.mes }}</div><div class="kpi-label">este mes</div></div>
+  <div class="kpi-card"><div class="kpi-icon blue"><i class="bi bi-calendar-range"></i></div><div class="kpi-value" id="k-anio">{{ resumen.anio }}</div><div class="kpi-label">en 12 meses</div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-body">
+        <div class="cal-chips" id="cal-chips"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+          <button class="btn btn-sm btn-outline-secondary" id="m-prev" type="button">‹</button>
+          <strong id="m-titulo" style="min-width:160px;text-align:center"></strong>
+          <button class="btn btn-sm btn-outline-secondary" id="m-next" type="button">›</button>
+          <button class="btn btn-sm btn-outline-secondary" id="m-hoy" type="button">Hoy</button>
+          <span style="flex:1"></span>
+          <button class="btn btn-sm btn-outline-secondary" id="m-todo" type="button" hidden>Ver todo</button>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+        <p class="small text-muted mt-2 mb-0">Toca un día para ver solo lo de ese día; la lista de al lado se queda ahí. {% if not eventos %}Todavía no hay fechas guardadas: usa "Programar revisión" o rellena las fichas.{% endif %}</p>
+      </div>
+    </div>
+    {% if puede_editar %}
+    <div class="card mt-3" id="card-programar">
+      <div class="card-header"><div class="card-title"><i class="bi bi-plus-lg"></i> Programar revisión</div></div>
+      <div class="card-body">
+        <form id="form-prog" class="form-cal" autocomplete="off">
+          <div><label>Qué</label><select class="form-select" name="tipo"><option value="herramienta">Herramienta</option><option value="maquina">Máquina</option></select></div>
+          <div><label>Fecha</label><input class="form-control" type="date" name="fecha" required></div>
+          <div class="full"><label>Cuál</label><select class="form-select" name="id" id="prog-id"></select></div>
+          <div><label>Repetir cada (días)</label><input class="form-control" type="number" name="intervalo_dias" min="0" placeholder="180 = cada 6 meses"></div>
+          <div class="d-flex align-items-end"><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check-lg"></i> Programar</button></div>
+          <div class="full small text-muted">Al marcar "Hecho" en la lista se apunta la fecha y se programa sola la siguiente con el intervalo.</div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-list-check"></i> Lo que vence</div><span class="table-meta" id="lista-meta"></span></div>
+      <div class="card-body" id="cal-lista"></div>
+    </div>
+  </div>
+</div>
+<script>
+(()=>{
+  let EV={{ eventos_json|safe }};let HOY='{{ hoy }}';const PUEDE={{ 'true' if puede_editar else 'false' }};
+  const HERR={{ herramientas|tojson }},MAQ={{ maquinas|tojson }};
+  const CATS={epi:['EPI individual','#f59e0b','bi-shield'],herramienta:['Herramientas y máquinas','#22d3ee','bi-tools'],trabajador:['Trabajadores','#a78bfa','bi-person-badge'],lote:['Lotes','#34d399','bi-box'],vehiculo:['Vehículos','#94a3b8','bi-truck']};
+  const on=new Set(['epi','herramienta','trabajador','lote']);let dia=null;
+  const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const fmt=iso=>{const [y,m,d]=iso.split('-');return `${d}/${m}/${y}`};
+  const hoyD=()=>new Date(HOY+'T00:00:00');const dias=iso=>Math.round((new Date(iso+'T00:00:00')-hoyD())/86400000);
+  let cur=new Date(HOY+'T00:00:00');cur.setDate(1);
+  function visibles(){return EV.filter(e=>on.has(e.cat))}
+  function chips(){const box=document.getElementById('cal-chips');box.innerHTML='';for(const [k,[n,c]] of Object.entries(CATS)){const b=document.createElement('button');b.type='button';b.className='cal-chip'+(on.has(k)?' on':'');b.innerHTML=`<i style="background:${c}"></i>${n} <span class="text-muted">(${EV.filter(e=>e.cat===k).length})</span>`;b.onclick=()=>{on.has(k)?on.delete(k):on.add(k);chips();grid();lista()};box.appendChild(b)}}
+  function grid(){const g=document.getElementById('cal-grid');const y=cur.getFullYear(),m=cur.getMonth();document.getElementById('m-titulo').textContent=cur.toLocaleDateString('es-ES',{month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase());
+    const first=new Date(y,m,1);let start=(first.getDay()+6)%7;const dim=new Date(y,m+1,0).getDate();const prevDim=new Date(y,m,0).getDate();
+    const porDia={};visibles().forEach(e=>{(porDia[e.fecha]=porDia[e.fecha]||[]).push(e)});
+    let html=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d=>`<div class="cal-dow">${d}</div>`).join('');
+    for(let i=start-1;i>=0;i--)html+=`<div class="cal-day off"><span class="n">${prevDim-i}</span></div>`;
+    for(let d=1;d<=dim;d++){const iso=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;const ev=porDia[iso]||[];const cats=[...new Set(ev.map(e=>e.cat))];
+      html+=`<div class="cal-day${iso===HOY?' hoy':''}${dia===iso?' sel':''}${ev.length&&iso<HOY?' vencida':''}" data-iso="${iso}"><span class="n">${d}</span>${ev.length?`<span class="cnt">${ev.length}</span>`:''}<div class="cal-dots">${cats.map(c=>`<i style="background:${CATS[c][1]}"></i>`).join('')}</div></div>`}
+    const total=start+dim;for(let i=1;i<=(7-total%7)%7;i++)html+=`<div class="cal-day off"><span class="n">${i}</span></div>`;
+    g.innerHTML=html;g.querySelectorAll('.cal-day[data-iso]').forEach(el=>el.onclick=()=>{dia=dia===el.dataset.iso?null:el.dataset.iso;document.getElementById('m-todo').hidden=!dia;grid();lista()})}
+  function item(e){const [n,c,ic]=CATS[e.cat]||['',"#64748b",'bi-dot'];const d=dias(e.fecha);const rel=d<0?`${-d} d de retraso`:(d===0?'Hoy':`+${d} d`);
+    return `<div class="cal-item" data-clave="${esc(e.clave)}"><div class="ic" style="background:${c}"><i class="bi ${ic}"></i></div><div class="t"><b><a href="${esc(e.url)}" class="text-reset">${esc(e.titulo)}</a></b><small>${esc(e.detalle)}</small></div><div class="d"><b class="${d<0?'text-danger':''}">${fmt(e.fecha)}</b>${rel}</div>${PUEDE&&e.hecho?`<button type="button" class="btn btn-sm btn-outline-success" data-hecho="${esc(e.tipo)}:${e.id}">Hecho</button>`:`<a class="btn btn-sm btn-outline-secondary" href="${esc(e.url)}">Ver</a>`}</div>`}
+  function lista(){const box=document.getElementById('cal-lista');let ev=visibles();const meta=document.getElementById('lista-meta');
+    if(dia){ev=ev.filter(e=>e.fecha===dia);meta.textContent=`${fmt(dia)} · ${ev.length}`;box.innerHTML=ev.length?ev.map(item).join(''):'<div class="text-muted small">Nada vence ese día.</div>'}
+    else{const sem=new Date(hoyD());sem.setDate(sem.getDate()+7);const fin=new Date(hoyD());fin.setMonth(fin.getMonth()+1,0);const grupos=[['Vencidas',e=>e.fecha<HOY,'text-danger'],['Esta semana',e=>e.fecha>=HOY&&new Date(e.fecha+'T00:00:00')<=sem,'text-warning'],['Este mes',e=>new Date(e.fecha+'T00:00:00')>sem&&new Date(e.fecha+'T00:00:00')<=fin,''],['Más adelante',e=>new Date(e.fecha+'T00:00:00')>fin,'']];
+      meta.textContent=`${ev.length} en total`;box.innerHTML=grupos.map(([t,f,cls])=>{const l=ev.filter(f);if(!l.length)return '';const max=t==='Más adelante'?30:200;return `<div class="cal-grupo"><h3 class="${cls}">${t} (${l.length})</h3>${l.slice(0,max).map(item).join('')}${l.length>max?`<div class="small text-muted">… y ${l.length-max} más (usa el mes o el filtro)</div>`:''}</div>`}).join('')||'<div class="text-muted small">No hay fechas guardadas. Programa una revisión o rellena las fichas.</div>'}
+    box.querySelectorAll('[data-hecho]').forEach(b=>b.onclick=async()=>{const [tipo,id]=b.dataset.hecho.split(':');if(!confirm('¿Marcar como hecha hoy? Se programará la siguiente con su intervalo.'))return;b.disabled=true;try{const r=await fetchCsrf('/api/calendario/hecho',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({tipo,id:Number(id)})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo');await reload();if(d.siguiente)alert('Hecho. Siguiente: '+fmt(d.siguiente))}catch(e){alert(e.message);b.disabled=false}})}
+  async function reload(){const r=await fetch('/api/calendario/eventos',{headers:{Accept:'application/json'}});const d=await r.json();EV=d.eventos;HOY=d.hoy;for(const k of ['vencidas','semana','mes','anio'])document.getElementById('k-'+k).textContent=d.resumen[k];chips();grid();lista()}
+  document.getElementById('m-prev').onclick=()=>{cur.setMonth(cur.getMonth()-1);grid()};document.getElementById('m-next').onclick=()=>{cur.setMonth(cur.getMonth()+1);grid()};
+  document.getElementById('m-hoy').onclick=()=>{cur=hoyD();cur.setDate(1);dia=null;document.getElementById('m-todo').hidden=true;grid();lista()};document.getElementById('m-todo').onclick=()=>{dia=null;document.getElementById('m-todo').hidden=true;grid();lista()};
+  const fp=document.getElementById('form-prog');
+  if(fp){const sel=document.getElementById('prog-id');const llenar=()=>{const l=fp.tipo.value==='herramienta'?HERR:MAQ;sel.innerHTML=l.map(x=>`<option value="${x.id}">${esc(x.nombre)}${x.codigo?' · '+esc(x.codigo):''}</option>`).join('')};fp.tipo.onchange=llenar;llenar();
+    const p=new URLSearchParams(location.search);if(p.get('programar')){fp.tipo.value=p.get('programar');llenar();if(p.get('id'))sel.value=p.get('id');document.getElementById('card-programar').scrollIntoView({block:'center'})}
+    fp.onsubmit=async ev=>{ev.preventDefault();try{const r=await fetchCsrf('/api/calendario/programar',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({tipo:fp.tipo.value,id:Number(sel.value),fecha:fp.fecha.value,intervalo_dias:fp.intervalo_dias.value===''?null:Number(fp.intervalo_dias.value)})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo programar');await reload();fp.fecha.value='';fp.intervalo_dias.value=''}catch(e){alert(e.message)}}}
+  chips();grid();lista();
+})();
+</script>
+{% endblock %}
