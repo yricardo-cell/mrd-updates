@@ -196,6 +196,34 @@
   </div>
 </div>
 
+<!-- ═══ AUTORREPARACIÓN 24/7 + DR4 ════════════════════════════════════════ -->
+<div class="mrd-card mb-3">
+  <div class="mrd-card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-shield-check me-2"></i>Autorreparación 24/7 + DR4</span>
+    <span id="repair-badge" class="badge bg-secondary">SIN COMPROBAR</span>
+  </div>
+  <div class="p-3">
+    <p class="text-muted small mb-3">
+      Vigila cada parte por separado y recupera únicamente la que falle. DR4 protege la base de datos
+      como último recurso y nunca se activa desde esta pantalla.
+    </p>
+    <div id="repair-components" class="row g-2 mb-3">
+      <div class="col-12 text-muted small">Todavía no hay un diagnóstico.</div>
+    </div>
+    <div id="repair-alert" class="alert py-2 mb-3 d-none" role="alert"></div>
+    <div class="d-flex gap-2 flex-wrap">
+      <button class="btn btn-sm btn-outline-primary" id="btn-repair-check" onclick="repairCenterRun('check')">
+        <i class="bi bi-search me-1"></i>Comprobar ahora
+      </button>
+      <button class="btn btn-sm btn-primary" id="btn-repair-run" onclick="repairCenterRun('repair')">
+        <i class="bi bi-tools me-1"></i>Reparar componentes
+      </button>
+      <span class="small text-muted align-self-center" id="repair-last-run"></span>
+      <span class="small align-self-center" id="sentinel-state"></span>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ LOGS RECIENTES ════════════════════════════════════════════════════ -->
 <div class="mrd-card">
   <div class="mrd-card-header d-flex align-items-center justify-content-between">
@@ -248,7 +276,7 @@ async function svcRefresh() {
   const icon = document.getElementById('icon-refresh');
   icon.classList.add('spin-anim');
   try {
-    await Promise.all([loadStatus(), loadHealth(), loadRecoveryStatus(), loadRecoveryHistory()]);
+    await Promise.all([loadStatus(), loadHealth(), loadRecoveryStatus(), loadRecoveryHistory(), loadRepairStatus()]);
     loadLog();
   } finally {
     icon.classList.remove('spin-anim');
@@ -436,6 +464,84 @@ async function loadRecoveryHistory() {
       `${items[0].result} (${items[0].duration_s}s)`;
   } catch (e) {
     list.innerHTML = '<div class="text-danger small p-2">Error al cargar historial</div>';
+  }
+}
+
+// ──── Autorreparación granular 24/7 + DR4 ─────────────────────────────────────
+const REPAIR_LABELS = {
+  nucleo: 'Aplicación principal', escaner_qr: 'QR y escáner', cache_pwa: 'Caché y actualización',
+  inventario_almacen: 'Inventario y almacén', portal_trabajador: 'Portal del trabajador',
+  etiquetas_albaranes: 'Etiquetas y albaranes', acceso_remoto: 'Acceso remoto', continuidad: 'Continuidad',
+  almacenamiento: 'Carpetas de trabajo', base_datos: 'Base de datos',
+  aplicacion_local: 'Acceso local', acceso_remoto_publico: 'Acceso remoto (público)',
+};
+
+function renderRepairStatus(d) {
+  const badge = document.getElementById('repair-badge');
+  const result = d.result || 'sin_estado';
+  const statusClass = result === 'ok' ? 'bg-success' : result === 'reparado' ? 'bg-primary' :
+    result === 'sin_estado' ? 'bg-secondary' : 'bg-warning text-dark';
+  badge.className = `badge ${statusClass}`;
+  badge.textContent = result === 'sin_estado' ? 'SIN COMPROBAR' : result.replace('_', ' ').toUpperCase();
+
+  const components = Object.entries(d.components || {});
+  document.getElementById('repair-components').innerHTML = components.length ? components.map(([name, value]) => {
+    const ok = value.status === 'ok';
+    const warning = value.status === 'warning';
+    const icon = ok ? 'bi-check-circle-fill text-success' :
+      warning ? 'bi-exclamation-triangle-fill text-warning' : 'bi-x-circle-fill text-danger';
+    return `<div class="col-12 col-md-6 col-xl-4">
+      <div class="border rounded p-2 h-100 small">
+        <div class="fw-semibold"><i class="bi ${icon} me-1"></i>${_escHtml(REPAIR_LABELS[name] || name)}</div>
+        <div class="text-muted mt-1">${_escHtml(value.detail || value.status)}</div>
+      </div>
+    </div>`;
+  }).join('') : '<div class="col-12 text-muted small">Todavía no hay un diagnóstico.</div>';
+
+  document.getElementById('repair-last-run').textContent = (d.timestamp ?
+    `Última comprobación: ${_fmt_dt(d.timestamp)}` : '') +
+    (d.dr4_manual_required ? ' · DR4: la base de datos requiere restauración manual' : '');
+  const sentinel = document.getElementById('sentinel-state');
+  const sentinelOk = d.sentinel_state === 'RUNNING';
+  sentinel.className = `small align-self-center ${sentinelOk ? 'text-success' : 'text-danger'}`;
+  sentinel.textContent = `Sentinel 9100: ${sentinelOk ? 'activo' : (d.sentinel_state || 'no disponible')}`;
+}
+
+async function loadRepairStatus() {
+  try {
+    const r = await fetch('/api/service/repair/status');
+    if (!r.ok) throw new Error(r.status);
+    renderRepairStatus(await r.json());
+  } catch (e) {
+    console.warn('Error cargando autorreparación:', e);
+  }
+}
+
+async function repairCenterRun(mode) {
+  const alertEl = document.getElementById('repair-alert');
+  const buttons = [document.getElementById('btn-repair-check'), document.getElementById('btn-repair-run')];
+  buttons.forEach(button => { button.disabled = true; });
+  alertEl.className = 'alert alert-info py-2 mb-3';
+  alertEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Comprobando cada componente…';
+  alertEl.classList.remove('d-none');
+  try {
+    const r = await fetch('/api/service/repair/run', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({mode}),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || `Error ${r.status}`);
+    renderRepairStatus(d);
+    const count = (d.repaired_files || []).length + (d.created_dirs || []).length;
+    alertEl.className = `alert ${d.ok ? 'alert-success' : 'alert-warning'} py-2 mb-3`;
+    alertEl.textContent = mode === 'repair' ?
+      (count ? `Reparación terminada: ${count} elemento(s) recuperado(s).` : 'Comprobación terminada: no había nada que reparar.') :
+      (d.ok ? 'Todos los componentes están correctos.' : 'Se han detectado problemas; puedes pulsar Reparar componentes.');
+  } catch (e) {
+    alertEl.className = 'alert alert-danger py-2 mb-3';
+    alertEl.textContent = e.message;
+  } finally {
+    buttons.forEach(button => { button.disabled = false; });
+    setTimeout(() => alertEl.classList.add('d-none'), 10000);
   }
 }
 

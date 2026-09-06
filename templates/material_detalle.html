@@ -119,10 +119,10 @@
       <tr>
         <td><small>{{ log.fecha.strftime("%d/%m/%Y %H:%M") if log.fecha else "---" }}</small></td>
         <td><small>{{ log.resumen or "---" }}</small></td>
-        <td><small>{{ "%.2f"|format(ant.precio_unidad) + " €" if ant.precio_unidad is not none else "---" }}</small></td>
-        <td><small>{{ "%.2f"|format(nvo.precio_unidad) + " €" if nvo.precio_unidad is not none else "---" }}</small></td>
-        <td><small>{{ ant.stock_minimo if ant.stock_minimo is not none else "---" }}</small></td>
-        <td><small>{{ nvo.stock_minimo if nvo.stock_minimo is not none else "---" }}</small></td>
+        <td><small>{{ "%.2f"|format(ant.get('precio_unidad')|float) + " €" if ant.get('precio_unidad') is not none else "---" }}</small></td>
+        <td><small>{{ "%.2f"|format(nvo.get('precio_unidad')|float) + " €" if nvo.get('precio_unidad') is not none else "---" }}</small></td>
+        <td><small>{{ ant.get('stock_minimo') if ant.get('stock_minimo') is not none else "---" }}</small></td>
+        <td><small>{{ nvo.get('stock_minimo') if nvo.get('stock_minimo') is not none else "---" }}</small></td>
         <td><small>{{ log.usuario.nombre if log.usuario else "Sistema" }}</small></td>
       </tr>
       {% endfor %}

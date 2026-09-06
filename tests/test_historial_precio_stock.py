@@ -86,3 +86,23 @@ def test_pagina_material_muestra_historial_de_valores(client, db):
     resp = client.get(f"/materiales/{mat.id}")
     assert resp.status_code == 200
     assert "Historial de cambios de precio" in resp.text
+
+
+def test_pagina_material_no_rompe_con_historial_de_auditoria_sin_precio_ni_stock(client, db):
+    """Entradas de auditoría de 'materiales' ajenas al editor de precio/stock
+    (p. ej. de una versión anterior del código, u otra acción registrada sobre
+    la misma tabla) pueden no traer las claves precio_unidad/stock_minimo, o
+    no traer datos_anteriores/datos_nuevos en absoluto. La plantilla debe
+    mostrar '---' en vez de devolver un 500."""
+    csrf = _login(client, db)
+    mat = _crear_material(db)
+    db.add(AuditoriaLog(
+        tabla="materiales", registro_id=mat.id, accion="crear",
+        datos_anteriores=None, datos_nuevos='{"nombre": "Cemento"}',
+        resumen="Alta de material",
+    ))
+    db.commit()
+
+    resp = client.get(f"/materiales/{mat.id}")
+    assert resp.status_code == 200
+    assert "Alta de material" in resp.text

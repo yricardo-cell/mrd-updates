@@ -14,9 +14,11 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 import shutil
 import sqlite3
+import tarfile
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -28,7 +30,93 @@ BASE_DIR    = Path(__file__).parent
 BACKUPS_DIR = BASE_DIR / "backups"
 BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Directorios de fotos que no viven en la BD SQLite y por tanto quedan fuera
+# del hot-backup de create_backup() salvo que se archiven aparte.
+UPLOADS_HERRAMIENTAS_DIR = BASE_DIR / "uploads" / "herramientas"
+UPLOADS_EPI_DIR          = BASE_DIR / "static" / "uploads" / "epis"
+
 _backup_lock = Lock()
+
+
+def _photo_sources():
+    """(prefijo, directorio) de cada carpeta de fotos a respaldar.
+
+    Se lee en cada llamada (no en import) para que los tests puedan
+    monkeypatchear UPLOADS_HERRAMIENTAS_DIR/UPLOADS_EPI_DIR sin recargar
+    el módulo.
+    """
+    return [
+        ("herramientas", UPLOADS_HERRAMIENTAS_DIR),
+        ("epis", UPLOADS_EPI_DIR),
+    ]
+
+
+def _photos_archive_path(base_name: str, backup_subdir: Path) -> Path:
+    return backup_subdir / f"{base_name}.photos.tar.gz"
+
+
+def _backup_group_key(filename: str) -> str:
+    """Nombre base común entre un backup .db[.gz][.enc] y su .photos.tar.gz
+    hermano, para que cleanup_old_backups() los trate como una sola unidad
+    de retención en vez de como ficheros independientes."""
+    name = re.sub(r"\.photos\.tar\.gz$", "", filename)
+    return re.sub(r"\.db(\.gz)?(\.enc)?$", "", name)
+
+
+def _archive_photos(base_name: str, backup_subdir: Path) -> dict | None:
+    """Empaqueta las fotos de herramientas/EPI en un .tar.gz junto al backup.
+
+    Devuelve None si ninguna de las dos carpetas tiene ficheros (evita crear
+    un archivo vacío), o un dict con filename/sha256/size_bytes si se creó.
+    """
+    sources = [(prefix, d) for prefix, d in _photo_sources() if d.exists() and any(d.rglob("*"))]
+    if not sources:
+        return None
+
+    archive_path = _photos_archive_path(base_name, backup_subdir)
+    tmp_path = archive_path.with_suffix(".tmp")
+    try:
+        with tarfile.open(tmp_path, "w:gz", compresslevel=6) as tar:
+            for prefix, directory in sources:
+                tar.add(directory, arcname=prefix)
+        tmp_path.replace(archive_path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+    return {
+        "filename":   archive_path.name,
+        "size_bytes": archive_path.stat().st_size,
+        "sha256":     _sha256_file(archive_path),
+    }
+
+
+def _restore_photos(archive_path: Path) -> dict:
+    """Extrae el .tar.gz de fotos a las rutas UPLOADS_HERRAMIENTAS_DIR/UPLOADS_EPI_DIR actuales."""
+    targets = dict(_photo_sources())
+    restored = 0
+    with tarfile.open(archive_path, "r:gz") as tar:
+        for member in tar.getmembers():
+            if "/" not in member.name:
+                continue
+            prefix, rel = member.name.split("/", 1)
+            target_dir = targets.get(prefix)
+            if target_dir is None or not rel:
+                continue
+            dest = (target_dir / rel).resolve()
+            # Defensa en profundidad contra path traversal en el .tar.gz
+            if not dest.is_relative_to(target_dir.resolve()):
+                continue
+            if member.isdir():
+                dest.mkdir(parents=True, exist_ok=True)
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            fobj = tar.extractfile(member)
+            if fobj is None:
+                continue
+            dest.write_bytes(fobj.read())
+            restored += 1
+    return {"restored_files": restored}
 
 # ─── Configuración ────────────────────────────────────────────────────────────
 def _get_config() -> dict:
@@ -148,7 +236,17 @@ def create_backup(
 
             size_bytes = backup_path.stat().st_size
             sha256     = _sha256_file(backup_path)
-            elapsed    = round((time.perf_counter() - t0) * 1000)
+
+            # Fotos de herramientas y EPI: no viven en la BD, se archivan
+            # en un .tar.gz hermano. Fallo aquí no debe invalidar el backup
+            # de la BD, que es la parte crítica.
+            photos_meta = None
+            try:
+                photos_meta = _archive_photos(base_name, backup_subdir)
+            except Exception as exc:
+                logger.warning("No se pudieron archivar las fotos del backup: %s", exc)
+
+            elapsed = round((time.perf_counter() - t0) * 1000)
 
             # Guardar metadatos
             meta = {
@@ -162,7 +260,12 @@ def create_backup(
                 "encrypted":  encrypt,
                 "created_at": datetime.utcnow().isoformat(timespec="seconds"),
                 "elapsed_ms": elapsed,
+                "photos_included":  photos_meta is not None,
             }
+            if photos_meta:
+                meta["photos_filename"]   = photos_meta["filename"]
+                meta["photos_sha256"]     = photos_meta["sha256"]
+                meta["photos_size_bytes"] = photos_meta["size_bytes"]
             _save_meta(meta)
             logger.info("Backup creado: %s (%.1f KB, %d ms)", backup_path.name, size_bytes/1024, elapsed)
 
@@ -327,6 +430,17 @@ def restore_backup(
             db_path.parent.mkdir(parents=True, exist_ok=True)
             db_path.write_bytes(raw)
 
+            # Restaurar fotos de herramientas/EPI si el backup las incluye.
+            # Fallo aquí no debe invalidar la restauración de la BD, que ya
+            # se completó y es la parte crítica.
+            photos_result = None
+            photos_archive = _photos_archive_path(_backup_group_key(path.name), path.parent)
+            if photos_archive.exists():
+                try:
+                    photos_result = _restore_photos(photos_archive)
+                except Exception as exc:
+                    logger.warning("No se pudieron restaurar las fotos del backup: %s", exc)
+
             elapsed = round((time.perf_counter() - t0) * 1000)
             logger.info("Restaurado: %s → %s (%d ms)", path.name, db_path, elapsed)
             return {
@@ -335,6 +449,7 @@ def restore_backup(
                 "from_backup": path.name,
                 "pre_backup":  pre_bk.get("filename"),
                 "elapsed_ms":  elapsed,
+                "photos_restored": photos_result.get("restored_files") if photos_result else 0,
             }
         except Exception as exc:
             logger.error("Error restaurando: %s", exc)
@@ -409,16 +524,31 @@ def cleanup_old_backups() -> dict:
         subdir = BACKUPS_DIR / tipo
         if not subdir.exists():
             continue
-        files = sorted(subdir.glob("*"), key=lambda f: f.stat().st_mtime, reverse=True)
-        for old in files[keep:]:
-            try:
-                size = old.stat().st_size
-                old.unlink()
-                freed   += size
-                deleted += 1
-                logger.info("Backup eliminado: %s", old.name)
-            except Exception:
-                pass
+
+        # Agrupar cada backup con su .photos.tar.gz hermano (si existe) para
+        # que la retención cuente copias de seguridad completas, no ficheros
+        # sueltos: de lo contrario "keep" ficheros equivale a la mitad de
+        # backups reales una vez hay fotos, y una pareja puede partirse por
+        # el corte dejando una BD sin fotos o unas fotos sin su BD.
+        groups: dict = {}
+        for f in subdir.glob("*"):
+            groups.setdefault(_backup_group_key(f.name), []).append(f)
+
+        ordered_groups = sorted(
+            groups.values(),
+            key=lambda group: max(f.stat().st_mtime for f in group),
+            reverse=True,
+        )
+        for group in ordered_groups[keep:]:
+            for old in group:
+                try:
+                    size = old.stat().st_size
+                    old.unlink()
+                    freed   += size
+                    deleted += 1
+                    logger.info("Backup eliminado: %s", old.name)
+                except Exception:
+                    pass
 
     return {"deleted": deleted, "freed_bytes": freed, "freed_mb": round(freed / 1024**2, 2)}
 

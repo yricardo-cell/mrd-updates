@@ -30,6 +30,7 @@ from security import generar_csrf_token
 ROOT = Path(__file__).resolve().parents[1]
 WATCHDOG = ROOT / "scripts" / "operations" / "watchdog_mrd.ps1"
 INSTALLER = ROOT / "scripts" / "operations" / "install_continuity_24x7.ps1"
+REPAIR_CENTER = ROOT / "scripts" / "operations" / "repair_center.py"
 
 
 # ─── Aislamiento entre tests ───────────────────────────────────────────────────
@@ -43,6 +44,8 @@ def _reset_recovery_state():
         main._RESTART_LOCK.release()
     if main._RECOVERY_LOCK.locked():
         main._RECOVERY_LOCK.release()
+    if main._REPAIR_LOCK.locked():
+        main._REPAIR_LOCK.release()
     main._RESTART_STATE["in_progress"] = False
     main._RESTART_STATE["started_at"] = None
     main._RECOVERY_STATE["in_progress"] = False
@@ -52,6 +55,8 @@ def _reset_recovery_state():
         main._RESTART_LOCK.release()
     if main._RECOVERY_LOCK.locked():
         main._RECOVERY_LOCK.release()
+    if main._REPAIR_LOCK.locked():
+        main._REPAIR_LOCK.release()
 
 
 @pytest.fixture
@@ -61,6 +66,8 @@ def _sandbox_recovery_files(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "_RECOVERY_HISTORY_FILE", tmp_path / ".recovery_history.json")
     monkeypatch.setattr(main, "_SVC_RESTART_FLAG", tmp_path / ".service_restart")
     monkeypatch.setattr(main, "_SVC_STATUS_FILE", tmp_path / ".service_status")
+    monkeypatch.setattr(main, "_REPAIR_STATUS_FILE", tmp_path / "repair-status.json")
+    monkeypatch.setattr(main, "_REPAIR_STATE_ROOT", tmp_path / "repair-state")
     return tmp_path
 
 
@@ -520,7 +527,7 @@ class TestWatchdogNivel2:
 
     def test_recupera_mrd_antes_que_cloudflare(self):
         source = WATCHDOG.read_text(encoding="utf-8")
-        idx_app = source.index("$app = Get-ServiceSafely $AppServiceName")
+        idx_app = source.index("$appTarget = Get-AppTarget")
         idx_tunnel = source.index("$tunnel = Get-ServiceSafely $TunnelServiceName")
         assert idx_app < idx_tunnel
 
@@ -538,6 +545,14 @@ class TestWatchdogNivel2:
         for patron in ("taskkill", "Stop-Process", "killall"):
             assert patron not in source
 
+    def test_repair_center_solo_escribe_si_el_diagnostico_encuentra_un_fallo(self):
+        source = WATCHDOG.read_text(encoding="utf-8")
+        assert '$repairMode = if ($Apply) { "repair" } else { "check" }' in source
+        idx_default_call = source.index("$repair = Invoke-RepairCenter\n")
+        idx_conditional_apply = source.index("Invoke-RepairCenter -Apply\n")
+        idx_condition = source.index("$repair.remaining_errors.Count -gt 0")
+        assert idx_default_call < idx_condition < idx_conditional_apply
+
     def test_installer_pasa_parametros_explicitos_a_la_tarea_programada(self):
         source = INSTALLER.read_text(encoding="utf-8")
         assert "-AppServiceName" in source
@@ -551,6 +566,102 @@ class TestWatchdogNivel2:
         source = INSTALLER.read_text(encoding="utf-8")
         assert 'C:\\mrd tool\\mrd-tool-control-2.5.0' in source
 
+    def test_watchdog_integra_reparacion_granular_y_dr4_protegida(self):
+        source = WATCHDOG.read_text(encoding="utf-8")
+        assert "repair_center.py" in source
+        assert "--allow-dr4" in source
+        assert "--service-confirmed-stopped" in source
+        dr4_block = source[source.index("DR4 confirmado:"):]
+        assert dr4_block.index("Stop-AppSafely $appTarget") < dr4_block.index("Invoke-RepairCenter -Apply -AllowDR4")
+        assert "Test-AppRunning $appTarget" in dr4_block
+        assert "Test-HttpHealth $HealthUrl" in dr4_block
+        assert "finally" in source
+
+    def test_instalador_sella_linea_base_antes_de_activar_vigilante(self):
+        source = INSTALLER.read_text(encoding="utf-8")
+        assert "--mode seal" in source
+        assert source.index("--mode seal") < source.index("Register-ScheduledTask")
+        assert "$externalWatchdog" in source
+        assert "$externalRepairScript" in source
+
+
+class TestRepairCenterApi:
+
+    def test_estado_requiere_admin(self, client, db):
+        _crear_no_admin(db)
+        _login(client, "consulta-recovery")
+        assert client.get("/api/service/repair/status").status_code == 403
+
+    def test_estado_inicial_seguro(self, client, db, _sandbox_recovery_files):
+        _crear_admin(db)
+        _login(client, "admin-recovery")
+        response = client.get("/api/service/repair/status")
+        assert response.status_code == 200
+        assert response.json()["result"] == "sin_estado"
+        assert response.json()["dr4_ready"] is False
+
+    @pytest.mark.parametrize("mode", ["check", "repair"])
+    def test_ejecuta_solo_modos_seguros_desde_web(
+        self, mode, client, db, monkeypatch, _sandbox_recovery_files,
+    ):
+        _crear_admin(db)
+        _login(client, "admin-recovery")
+        headers = _csrf_headers(client)
+        script = _sandbox_recovery_files / "repair_center.py"
+        script.write_text("# prueba")
+        monkeypatch.setattr(main, "_REPAIR_SCRIPT", script)
+        calls = []
+
+        class Done:
+            returncode = 0
+            stderr = ""
+            stdout = '{"ok": true, "result": "ok", "repaired_files": [], "dr4_ready": false}\n'
+
+        monkeypatch.setattr(main._subprocess, "run", lambda command, **kwargs: calls.append(command) or Done())
+        response = client.post("/api/service/repair/run", json={"mode": mode}, headers=headers)
+        assert response.status_code == 200
+        assert calls and "--allow-dr4" not in calls[0]
+        assert "--service-confirmed-stopped" not in calls[0]
+        assert calls[0][-3:] == ["--mode", mode, "--json"]
+
+    def test_modo_dr4_no_se_expone_en_web(self, client, db, _sandbox_recovery_files):
+        _crear_admin(db)
+        _login(client, "admin-recovery")
+        response = client.post(
+            "/api/service/repair/run", json={"mode": "dr4"}, headers=_csrf_headers(client),
+        )
+        assert response.status_code == 422
+
+    def test_panel_muestra_modulo_y_acciones(self):
+        source = (ROOT / "templates" / "servicio.html").read_text(encoding="utf-8")
+        assert "Autorreparación 24/7 + DR4" in source
+        assert "/api/service/repair/status" in source
+        assert "/api/service/repair/run" in source
+
+    def test_servicio_expone_y_renderiza_sentinel_state(
+        self, client, db, monkeypatch, _sandbox_recovery_files,
+    ):
+        """Regresión: el indicador de Sentinel en /servicio (#sentinel-state,
+        añadido en v2.7.25) no tenía prueba que verificara que la API expone
+        sentinel_state ni que la plantilla lo renderiza con la lógica
+        sentinelOk (detectado en la auditoría de regresión 2.7.18→2.7.25)."""
+        _crear_admin(db)
+        _login(client, "admin-recovery")
+        monkeypatch.setattr(
+            main, "_svc_named_windows_state",
+            lambda name: "RUNNING" if name == "MRDSentinel" else "UNKNOWN",
+        )
+
+        response = client.get("/api/service/repair/status")
+
+        assert response.status_code == 200
+        assert response.json()["sentinel_state"] == "RUNNING"
+
+        source = (ROOT / "templates" / "servicio.html").read_text(encoding="utf-8")
+        assert 'id="sentinel-state"' in source
+        assert "d.sentinel_state === 'RUNNING'" in source
+        assert "Sentinel 9100:" in source
+
 
 class TestSinComandosDestructivosGlobales:
     """Ningún componente del sistema de recuperación puede cerrar procesos
@@ -561,6 +672,7 @@ class TestSinComandosDestructivosGlobales:
         ROOT / "cloudflare_tunnel.py",
         WATCHDOG,
         INSTALLER,
+        REPAIR_CENTER,
     ]
 
     @pytest.mark.parametrize("patron", ["taskkill", "Stop-Process", "killall", "pkill "])

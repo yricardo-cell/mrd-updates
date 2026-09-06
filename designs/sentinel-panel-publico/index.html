@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MRD Sentinel — Mockup panel público</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --surface:#ffffff; --surface-2:#f8f9fb;
+    --border:#e2e8f0; --border-2:#cbd5e0;
+    --text:#1a202c; --text-2:#4a5568; --text-muted:#718096;
+    --primary:#0891b2; --primary-hover:#0e7490;
+    --success:#16a34a; --success-light:#dcfce7;
+    --warning:#ca8a04; --warning-light:#fef9c3;
+    --danger:#dc2626; --danger-light:#fee2e2;
+    --gray:#64748b; --gray-light:#f1f5f9;
+    --navy:#1A3155; --navy-2:#2B4C7A; --orange:#E07B00;
+    --radius:8px; --radius-lg:12px;
+    --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+    --shadow-lg:0 4px 16px rgba(0,0,0,.10);
+    --font: system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text); font:16px/1.45 var(--font);
+    min-height:100dvh;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  .wrap{max-width:720px;margin:0 auto}
+
+  /* Cabecera */
+  header{display:flex;align-items:center;gap:12px;padding:8px 4px 18px}
+  header svg{flex:none}
+  h1{font-size:19px;margin:0 0 2px;color:var(--text)}
+  .subtitle{font-size:13px;color:var(--text-muted);margin:0}
+  header .titles{margin-left:2px}
+
+  /* Indicador grande */
+  .banner{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow); padding:22px 20px; text-align:center; margin-bottom:16px;
+  }
+  .banner .dot{
+    width:14px;height:14px;border-radius:50%;display:inline-block;margin-right:8px;vertical-align:middle;
+  }
+  .banner.ok{border-color:var(--success-light)}
+  .banner.bad{border-color:var(--danger-light)}
+  .banner .dot.ok{background:var(--success)}
+  .banner .dot.bad{background:var(--danger)}
+  .banner .title{font-size:22px;font-weight:700;margin:0}
+  .banner .title.ok{color:var(--success)}
+  .banner .title.bad{color:var(--danger)}
+  .banner .meta{font-size:13px;color:var(--text-muted);margin-top:6px}
+
+  /* Tarjetas */
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
+  @media(min-width:640px){.grid{grid-template-columns:repeat(4,1fr)}}
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow); padding:14px;
+  }
+  .card .icon{font-size:20px;line-height:1;margin-bottom:8px}
+  .card .label{font-size:12.5px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+  .card .value{margin-top:6px;display:flex;align-items:center;gap:6px;font-size:14.5px;font-weight:700}
+  .badge{width:9px;height:9px;border-radius:50%;flex:none}
+  .badge.ok{background:var(--success)}
+  .badge.warn{background:var(--warning)}
+  .badge.bad{background:var(--danger)}
+  .badge.neutral{background:var(--gray)}
+  .value.ok{color:var(--success)}
+  .value.warn{color:var(--warning)}
+  .value.bad{color:var(--danger)}
+  .value.neutral{color:var(--text-2)}
+  .card.check .value{font-weight:600;color:var(--text-2)}
+
+  /* Botón actualizar */
+  .refresh{
+    width:100%; border:0; border-radius:var(--radius-lg); padding:15px;
+    background:var(--primary); color:#fff; font:inherit; font-weight:700; font-size:15px;
+    display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;
+    transition:background .15s ease-out;
+  }
+  .refresh:hover{background:var(--primary-hover)}
+  .refresh:active{transform:translateY(1px)}
+  .refresh svg{transition:transform .2s ease-out}
+  .refresh.spinning svg{animation:spin .6s linear infinite}
+  @media(prefers-reduced-motion:reduce){.refresh.spinning svg{animation:none}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  footer{margin-top:16px;text-align:center;font-size:12.5px;color:var(--text-muted)}
+
+  .demo-toggle{
+    margin:0 0 14px; text-align:center;
+  }
+  .demo-toggle button{
+    font:inherit;font-size:12.5px;background:none;border:1px solid var(--border-2);
+    color:var(--text-2);border-radius:999px;padding:6px 12px;cursor:pointer;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <svg viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg" width="38" height="38" aria-hidden="true">
+      <defs>
+        <linearGradient id="mrd-bg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#2B4C7A"/>
+          <stop offset="100%" stop-color="#1A3155"/>
+        </linearGradient>
+        <clipPath id="mrd-clip"><rect width="42" height="42" rx="10"/></clipPath>
+      </defs>
+      <rect width="42" height="42" rx="10" fill="url(#mrd-bg)"/>
+      <rect y="32" width="42" height="10" fill="#E07B00" clip-path="url(#mrd-clip)"/>
+      <rect y="31" width="42" height="1" fill="#c26a00" opacity="0.6" clip-path="url(#mrd-clip)"/>
+      <rect x="6"  y="10" width="5" height="19" rx="1.5" fill="white" opacity="0.95"/>
+      <rect x="13" y="14" width="5" height="15" rx="1.5" fill="white" opacity="0.80"/>
+      <rect x="20" y="10" width="5" height="19" rx="1.5" fill="white" opacity="0.95"/>
+      <rect x="27" y="13" width="5" height="16" rx="1.5" fill="white" opacity="0.80"/>
+      <rect x="6" y="10" width="26" height="3" rx="1.5" fill="white" opacity="0.95"/>
+    </svg>
+    <div class="titles">
+      <h1>MRD Sentinel</h1>
+      <p class="subtitle">Estado del sistema · vista pública</p>
+    </div>
+  </header>
+
+  <div class="demo-toggle">
+    <button type="button" onclick="toggleDemo()">Ver ejemplo con incidencia (solo mockup)</button>
+  </div>
+
+  <section class="banner ok" id="banner">
+    <p class="title ok" id="bannerTitle"><span class="dot ok" id="bannerDot"></span>Sistema funcionando</p>
+    <p class="meta">Todo revisado hace un momento</p>
+  </section>
+
+  <div class="grid" id="cards">
+    <div class="card" data-key="app">
+      <div class="icon">🖥️</div>
+      <div class="label">Aplicación MRD</div>
+      <div class="value ok"><span class="badge ok"></span>Todo en orden</div>
+    </div>
+    <div class="card" data-key="db">
+      <div class="icon">🗄️</div>
+      <div class="label">Base de datos</div>
+      <div class="value ok"><span class="badge ok"></span>Todo en orden</div>
+    </div>
+    <div class="card" data-key="scan">
+      <div class="icon">📷</div>
+      <div class="label">Escáner y QR</div>
+      <div class="value ok"><span class="badge ok"></span>Todo en orden</div>
+    </div>
+    <div class="card" data-key="remote">
+      <div class="icon">🌐</div>
+      <div class="label">Acceso remoto</div>
+      <div class="value ok"><span class="badge ok"></span>Todo en orden</div>
+    </div>
+    <div class="card" data-key="tunnelA">
+      <div class="icon">🔗</div>
+      <div class="label">Túnel principal (A)</div>
+      <div class="value ok"><span class="badge ok"></span>Todo en orden</div>
+    </div>
+    <div class="card" data-key="tunnelB">
+      <div class="icon">🔄</div>
+      <div class="label">Túnel de respaldo (B)</div>
+      <div class="value ok"><span class="badge ok"></span>Todo en orden</div>
+    </div>
+    <div class="card" data-key="sentinel">
+      <div class="icon">🛡️</div>
+      <div class="label">Sentinel</div>
+      <div class="value ok"><span class="badge ok"></span>Activo</div>
+    </div>
+    <div class="card check" data-key="last">
+      <div class="icon">🕒</div>
+      <div class="label">Última comprobación</div>
+      <div class="value neutral">Hace 1 minuto</div>
+    </div>
+  </div>
+
+  <button class="refresh" id="refreshBtn" type="button" aria-label="Actualizar estado del panel" onclick="doRefresh()">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+      <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
+    </svg>
+    Actualizar estado
+  </button>
+
+  <footer>Vista de solo lectura · sin datos técnicos ni acciones de reparación</footer>
+</div>
+
+<script>
+  function doRefresh(){
+    const btn = document.getElementById('refreshBtn');
+    btn.classList.add('spinning');
+    btn.disabled = true;
+    setTimeout(()=>{ btn.classList.remove('spinning'); btn.disabled=false; }, 600);
+  }
+
+  let demo = false;
+  function toggleDemo(){
+    demo = !demo;
+    const banner = document.getElementById('banner');
+    const title = document.getElementById('bannerTitle');
+    const cards = document.querySelectorAll('#cards .card');
+
+    if(demo){
+      banner.className = 'banner bad';
+      title.className = 'title bad';
+      title.innerHTML = '<span class="dot bad" id="bannerDot"></span>Necesita atención';
+      banner.querySelector('.meta').textContent = 'Revisando automáticamente';
+      cards.forEach(c=>{
+        const v = c.querySelector('.value');
+        if(c.dataset.key === 'db'){ v.className='value bad'; v.innerHTML='<span class="badge bad"></span>Necesita atención'; }
+        else if(c.dataset.key === 'tunnelB'){ v.className='value warn'; v.innerHTML='<span class="badge warn"></span>Revisando'; }
+      });
+    } else {
+      banner.className = 'banner ok';
+      title.className = 'title ok';
+      title.innerHTML = '<span class="dot ok" id="bannerDot"></span>Sistema funcionando';
+      banner.querySelector('.meta').textContent = 'Todo revisado hace un momento';
+      cards.forEach(c=>{
+        const v = c.querySelector('.value');
+        if(c.dataset.key === 'db' || c.dataset.key === 'tunnelB'){ v.className='value ok'; v.innerHTML='<span class="badge ok"></span>Todo en orden'; }
+      });
+    }
+  }
+</script>
+</body>
+</html>

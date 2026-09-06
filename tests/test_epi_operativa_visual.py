@@ -224,10 +224,28 @@ def test_mostrador_ofrece_camara_en_movil_y_albaran_automatico():
 
 
 def test_pwa_se_sirve_desde_raiz_y_puede_controlar_toda_la_app(client):
+    import json
+
+    from config import VERSION
+
     response = client.get("/sw.js")
     assert response.status_code == 200
     assert response.headers["service-worker-allowed"] == "/"
-    assert "mrd-static-v2.7.24" in response.text
+
+    root = Path(__file__).resolve().parents[1]
+    version_actual = json.loads((root / "version.json").read_text(encoding="utf-8"))["version_actual"]
+
+    cache_match = re.search(r"CACHE_NAME = 'mrd-static-v([^']+)'", response.text)
+    assert cache_match, "CACHE_NAME no encontrado en la respuesta de /sw.js"
+    cache_version = cache_match.group(1)
+
+    # Compara version.json, CACHE_NAME servido y config.VERSION entre sí (no
+    # contra un literal fijo) para que un bump de versión no rompa esta prueba
+    # y para seguir detectando una CACHE_NAME desincronizada.
+    assert version_actual == cache_version == VERSION, (
+        f"version.json={version_actual!r} CACHE_NAME={cache_version!r} "
+        f"config.VERSION={VERSION!r} deben coincidir tras cada bump de version"
+    )
 
 
 def test_listado_herramientas_usa_miniaturas_y_carga_diferida():

@@ -372,13 +372,27 @@ def test_contrato_tallas_no_crea_automaticas_y_solo_acepta_explicitas(db):
 
 
 def test_pwa_publica_detector_y_version_candidata_real():
+    import re
+
+    from config import VERSION
+
     sw = (ROOT / "static/js/sw.js").read_text(encoding="utf-8")
     base = (ROOT / "templates/base.html").read_text(encoding="utf-8")
     version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
-    assert version["version_actual"] == "2.7.24"
+    version_actual = version["version_actual"]
+
+    cache_match = re.search(r"CACHE_NAME = 'mrd-static-v([^']+)'", sw)
+    assert cache_match, "CACHE_NAME no encontrado en sw.js"
+    cache_version = cache_match.group(1)
+
+    # VERSION (config.py) es lo que Jinja inyecta como {{ version }} en base.html;
+    # comparar aquí equivale a comprobar lo que la PWA expone en pantalla/cache-busting.
+    assert version_actual == cache_version == VERSION, (
+        f"version.json={version_actual!r} CACHE_NAME={cache_version!r} "
+        f"config.VERSION={VERSION!r} deben coincidir tras cada bump de version"
+    )
     assert version["estado"] == "estable"
     assert "/static/js/scanner_hid.js" in sw
-    assert "mrd-static-v2.7.24" in sw
     assert 'scanner_hid.js?v={{ version }}"></script>' in base
 
 

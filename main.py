@@ -26,6 +26,7 @@ from fastapi import (
 )
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware  # Sprint 5.8
+from starlette.concurrency import run_in_threadpool
 from fastapi.responses import (
     HTMLResponse, RedirectResponse, JSONResponse, FileResponse,
     PlainTextResponse, StreamingResponse,
@@ -8556,7 +8557,8 @@ def scan_cambios(
 # ─── Importación Excel ────────────────────────────────────────────────────────
 @app.get("/informes", response_class=HTMLResponse)
 def informes(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
-    analisis = generar_analisis_inteligente(db)
+    warehouse = _active_warehouse(db, user, request)
+    analisis = generar_analisis_inteligente(db, warehouse.id if warehouse else None)
     # Datos para Chart.js (JSON seguro)
     chart_estados = {
         "labels": list(analisis["herramientas"]["estados"].keys()),
@@ -13032,6 +13034,17 @@ _RECOVERY_LOCK = threading.Lock()
 _RECOVERY_STATE: dict = {"in_progress": False, "started_at": None}
 _RECOVERY_HISTORY_FILE = _SVC_BASE / ".recovery_history.json"
 _RECOVERY_HISTORY_MAX = 20
+_REPAIR_SCRIPT = _SVC_BASE / "scripts" / "operations" / "repair_center.py"
+_REPAIR_STATE_ROOT = (
+    _Path(os.environ.get("ProgramData", r"C:\ProgramData"))
+    / "MRDToolControl" / "repair-center"
+)
+_REPAIR_STATUS_FILE = _REPAIR_STATE_ROOT / "status.json"
+_REPAIR_LOCK = threading.Lock()
+
+
+class RepairCenterRunRequest(BaseModel):
+    mode: Literal["check", "repair"] = "check"
 
 
 def _svc_requiere_admin(user: Usuario):
@@ -13120,11 +13133,11 @@ def _recovery_log_event(
     })
 
 
-def _svc_windows_state() -> str:
+def _svc_named_windows_state(service_name: str) -> str:
     """Consulta estado del servicio Windows via sc.exe. Devuelve RUNNING/STOPPED/etc."""
     try:
         result = _subprocess.run(
-            ["sc.exe", "query", _SERVICE_NAME],
+            ["sc.exe", "query", service_name],
             capture_output=True, text=True, timeout=5
         )
         if "RUNNING" in result.stdout:
@@ -13138,6 +13151,10 @@ def _svc_windows_state() -> str:
         return "NOT_WINDOWS"
     except Exception:
         return "UNKNOWN"
+
+
+def _svc_windows_state() -> str:
+    return _svc_named_windows_state(_SERVICE_NAME)
 
 
 # ─── Reinicio del servidor ────────────────────────────────────────────────────
@@ -13484,6 +13501,118 @@ def _recovery_watchdog_state() -> dict | None:
     except Exception:
         pass
     return None
+
+
+def _sentinel_state() -> str:
+    """Estado de MRD Sentinel. En este despliegue Sentinel corre como tarea
+    programada (no como servicio Windows), así que la señal fiable es su
+    propio /healthz en 127.0.0.1:9100; el servicio MRDSentinel solo se
+    consulta como respaldo si el puerto no responde."""
+    try:
+        import urllib.request as _sreq
+        with _sreq.urlopen("http://127.0.0.1:9100/healthz", timeout=2) as resp:
+            if resp.status == 200:
+                return "RUNNING"
+    except Exception:
+        pass
+    return _svc_named_windows_state("MRDSentinel")
+
+
+def _repair_center_status() -> dict:
+    """Lee el último diagnóstico del reparador externo sin ejecutar acciones."""
+    try:
+        if _REPAIR_STATUS_FILE.is_file():
+            value = _json_mod.loads(_REPAIR_STATUS_FILE.read_text(encoding="utf-8-sig"))
+            if isinstance(value, dict):
+                value["sentinel_state"] = _sentinel_state()
+                return value
+    except Exception:
+        pass
+    return {
+        "ok": False,
+        "result": "sin_estado",
+        "components": {},
+        "repaired_files": [],
+        "restart_required": False,
+        "dr4_ready": False,
+        "sentinel_state": _sentinel_state(),
+    }
+
+
+def _repair_center_command(mode: str) -> list[str]:
+    """Construye una orden cerrada: la web nunca puede activar DR4 ni pasar rutas."""
+    if mode not in {"check", "repair"}:
+        raise ValueError("Modo de reparación no permitido")
+    return [
+        _sys.executable, str(_REPAIR_SCRIPT),
+        "--root", str(_SVC_BASE),
+        "--state-root", str(_REPAIR_STATE_ROOT),
+        "--mode", mode,
+        "--json",
+    ]
+
+
+@app.get("/api/service/repair/status")
+def api_repair_center_status(
+    user: Usuario = Depends(requiere_login),
+    _db: Session = Depends(get_db),
+):
+    """Último resultado de la reparación granular 24/7 y estado de DR4."""
+    _svc_requiere_admin(user)
+    return _repair_center_status()
+
+
+@app.post("/api/service/repair/run")
+def api_repair_center_run(
+    payload: RepairCenterRunRequest,
+    request: Request,
+    user: Usuario = Depends(requiere_login),
+    _db: Session = Depends(get_db),
+):
+    """Comprueba o repara componentes sellados sin exponer la DR4 en la web."""
+    _svc_requiere_admin(user)
+    if not _REPAIR_SCRIPT.is_file():
+        raise HTTPException(404, "No se encontró el módulo de autorreparación 24/7.")
+    if not _REPAIR_LOCK.acquire(blocking=False):
+        raise HTTPException(409, "Ya hay una comprobación o reparación en curso.")
+
+    started = time.time()
+    try:
+        completed = _subprocess.run(
+            _repair_center_command(payload.mode),
+            cwd=str(_SVC_BASE), capture_output=True, text=True,
+            timeout=45, check=False,
+            creationflags=(
+                getattr(_subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+            ),
+        )
+        output_lines = [line.strip() for line in (completed.stdout or "").splitlines() if line.strip()]
+        try:
+            report = _json_mod.loads(output_lines[-1]) if output_lines else {}
+        except (ValueError, TypeError):
+            report = {}
+        if not isinstance(report, dict) or not report:
+            detail = (completed.stderr or completed.stdout or "Sin respuesta del reparador").strip()[-500:]
+            raise HTTPException(500, f"El módulo no devolvió un informe válido: {detail}")
+
+        repaired = report.get("repaired_files") or []
+        result = str(report.get("result") or "desconocido")
+        _recovery_log_event(
+            f"repair_center_{payload.mode}", user,
+            "ok" if report.get("ok") else "parcial",
+            time.time() - started,
+            f"result={result} repaired={len(repaired)} dr4_ready={bool(report.get('dr4_ready'))}",
+            request,
+        )
+        return report
+    except _subprocess.TimeoutExpired:
+        _recovery_log_event(
+            f"repair_center_{payload.mode}", user, "cancelado",
+            time.time() - started, "tiempo máximo excedido", request,
+        )
+        raise HTTPException(504, "La comprobación tardó demasiado y se canceló de forma segura.")
+    finally:
+        _REPAIR_LOCK.release()
 
 
 @app.get("/api/service/recovery/status")
@@ -13943,7 +14072,9 @@ async def api_bk_create(request: Request, user: Usuario = Depends(requiere_login
         label = str(body.get("label", ""))[:30]
     except Exception:
         label = ""
-    result = _bk.create_backup(tipo="manual", label=label or user.username)
+    # create_backup empaqueta también las fotos (cientos de MB) bajo un lock:
+    # fuera del event loop para no dejar a uvicorn sin atender /health.
+    result = await run_in_threadpool(_bk.create_backup, tipo="manual", label=label or user.username)
     _bk_audit(user, "create_manual", label)
     return result
 
@@ -13970,7 +14101,7 @@ async def api_bk_verify(request: Request, user: Usuario = Depends(requiere_login
     if not found:
         raise HTTPException(status_code=404, detail="Backup no encontrado")
 
-    result = _bk.verify_backup(str(found))
+    result = await run_in_threadpool(_bk.verify_backup, str(found))
     _bk_audit(user, "verify", filename)
     return result
 
@@ -13997,7 +14128,7 @@ async def api_bk_restore(request: Request, user: Usuario = Depends(requiere_logi
     if not found:
         raise HTTPException(status_code=404, detail="Backup no encontrado")
 
-    result = _bk.restore_backup(str(found), dry_run=dry_run)
+    result = await run_in_threadpool(_bk.restore_backup, str(found), dry_run=dry_run)
     _bk_audit(user, "restore" + ("_dry" if dry_run else ""), filename)
     return result
 

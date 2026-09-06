@@ -7,6 +7,7 @@ import json
 import shutil
 import sqlite3
 import sys
+import tarfile
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -41,6 +42,10 @@ class TestBackupManager:
         monkeypatch.setattr(bk, "BACKUPS_DIR", tmp_path / "backups")
         (tmp_path / "backups").mkdir()
         monkeypatch.setattr(bk, "_META_FILE", tmp_path / "backups" / "backup_history.json")
+        # Aislar las carpetas de fotos de las reales (uploads/herramientas
+        # tiene fotos de producción) para que ningún test las lea ni escriba.
+        monkeypatch.setattr(bk, "UPLOADS_HERRAMIENTAS_DIR", tmp_path / "uploads" / "herramientas")
+        monkeypatch.setattr(bk, "UPLOADS_EPI_DIR", tmp_path / "static_uploads" / "epis")
         return tmp_path
 
     def test_imports_ok(self):
@@ -113,6 +118,44 @@ class TestBackupManager:
         assert "deleted"    in result
         assert "freed_bytes" in result
         assert "freed_mb"   in result
+
+    def test_cleanup_conserva_pareja_bd_fotos_como_una_sola_unidad(self, tmp_path, monkeypatch):
+        """Regresión: un backup con .db.gz + .photos.tar.gz debe contar como
+        una sola copia de retención, y ambos ficheros deben sobrevivir o
+        borrarse juntos (nunca solo uno de los dos)."""
+        import backup_manager as bk
+
+        monkeypatch.setenv("MRD_BACKUP_RETAIN_DAILY", "2")
+        subdir = bk.BACKUPS_DIR / "daily"
+        subdir.mkdir(parents=True, exist_ok=True)
+
+        import time as time_mod
+        pares = []
+        for i in range(4):
+            base = f"2026090{i}_000000_daily"
+            db_file = subdir / f"{base}.db.gz"
+            photos_file = subdir / f"{base}.photos.tar.gz"
+            db_file.write_bytes(b"db")
+            photos_file.write_bytes(b"photos")
+            # mtimes distintos y crecientes para un orden determinista
+            ts = time_mod.time() + i
+            os_utime = __import__("os").utime
+            os_utime(db_file, (ts, ts))
+            os_utime(photos_file, (ts, ts))
+            pares.append((db_file, photos_file))
+
+        result = bk.cleanup_old_backups()
+
+        # Con retención=2, deben sobrevivir las 2 parejas más recientes (i=2,3)
+        # completas, y borrarse las 2 más antiguas (i=0,1) completas.
+        for i, (db_file, photos_file) in enumerate(pares):
+            if i < 2:
+                assert not db_file.exists(), f"pareja {i}: .db.gz debía borrarse"
+                assert not photos_file.exists(), f"pareja {i}: .photos.tar.gz debía borrarse"
+            else:
+                assert db_file.exists(), f"pareja {i}: .db.gz debía conservarse"
+                assert photos_file.exists(), f"pareja {i}: .photos.tar.gz debía conservarse"
+        assert result["deleted"] == 4
 
     def test_verify_nonexistent_file(self):
         from backup_manager import verify_backup
@@ -211,6 +254,53 @@ class TestBackupManager:
 
         assert created == ["daily", "weekly", "monthly"]
         assert result["errors"] == []
+
+    def test_backup_incluye_fotos_herramientas_y_epi_y_restore_las_recupera(self, tmp_path, monkeypatch):
+        """Regresión: create_backup() debe archivar uploads/herramientas y
+        static/uploads/epis, y restore_backup() debe devolverlas a su ruta."""
+        import backup_manager as bk
+
+        db_path = tmp_path / "fotos.db"
+        con = sqlite3.connect(str(db_path))
+        con.execute("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+        con.commit()
+        con.close()
+
+        import config as cfg_mod
+        original = cfg_mod.DATABASE_URL
+        cfg_mod.DATABASE_URL = f"sqlite:///{db_path}"
+
+        herramientas_dir = bk.UPLOADS_HERRAMIENTAS_DIR
+        epis_dir = bk.UPLOADS_EPI_DIR
+        herramientas_dir.mkdir(parents=True, exist_ok=True)
+        epis_dir.mkdir(parents=True, exist_ok=True)
+        (herramientas_dir / "taladro.jpg").write_bytes(b"foto-taladro")
+        (epis_dir / "casco.jpg").write_bytes(b"foto-casco")
+
+        try:
+            result = bk.create_backup(tipo="manual", label="fotos", compress=True, encrypt=False)
+            assert result["ok"] is True
+            assert result["photos_included"] is True
+
+            photos_archive = Path(result["path"]).parent / result["photos_filename"]
+            assert photos_archive.exists()
+
+            with tarfile.open(photos_archive, "r:gz") as tar:
+                names = tar.getnames()
+            assert "herramientas/taladro.jpg" in names
+            assert "epis/casco.jpg" in names
+
+            # Borrar las fotos originales para comprobar que restore las recupera
+            (herramientas_dir / "taladro.jpg").unlink()
+            (epis_dir / "casco.jpg").unlink()
+
+            restore_result = bk.restore_backup(result["path"])
+            assert restore_result["ok"] is True
+            assert restore_result["photos_restored"] == 2
+            assert (herramientas_dir / "taladro.jpg").read_bytes() == b"foto-taladro"
+            assert (epis_dir / "casco.jpg").read_bytes() == b"foto-casco"
+        finally:
+            cfg_mod.DATABASE_URL = original
 
     def test_scheduled_backups_skip_current_periods(self, monkeypatch, tmp_path):
         import backup_manager as bk

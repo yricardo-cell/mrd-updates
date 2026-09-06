@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#1A3155">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sentinel">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>MRD Sentinel — Mockup v2 (lista + olas + instalable)</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --surface:#ffffff;
+    --border:#e2e8f0; --border-2:#cbd5e0;
+    --text:#1a202c; --text-2:#4a5568; --text-muted:#718096;
+    --primary:#0891b2; --primary-hover:#0e7490;
+    --success:#16a34a; --success-light:#dcfce7;
+    --warning:#ca8a04; --warning-light:#fef9c3;
+    --danger:#dc2626; --danger-light:#fee2e2;
+    --navy:#1A3155; --navy-2:#2B4C7A; --orange:#E07B00;
+    --radius:8px; --radius-lg:14px;
+    --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+    --font: system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    position:relative;
+    color:var(--text); font:16px/1.45 var(--font);
+    min-height:100dvh;
+    padding: max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  }
+  /* Fondo de foto a pantalla completa: elemento fijo en vez de
+     background-attachment:fixed (poco fiable en navegadores móviles). */
+  body::before{
+    content:""; position:fixed; inset:0; z-index:-2;
+    background:url("img/fondo-mar-palmeras.jpg") center 15%/cover no-repeat;
+  }
+  body::after{
+    content:""; position:fixed; inset:0; z-index:-1;
+    background:rgba(255,255,255,.22);
+  }
+  .wrap{max-width:640px;margin:0 auto}
+
+  header{display:flex;align-items:center;gap:10px;padding:4px 4px 14px}
+  header svg{flex:none;border-radius:8px}
+  h1{font-size:18px;margin:0;color:var(--text)}
+  .subtitle{font-size:12.5px;color:var(--text-muted);margin:0}
+
+  .demo-toggle{margin:0 0 12px;text-align:center}
+  .demo-toggle button{
+    font:inherit;font-size:12.5px;background:none;border:1px solid var(--border-2);
+    color:var(--text-2);border-radius:999px;padding:6px 12px;cursor:pointer;
+  }
+
+  /* Hero "mar" — tarjeta de cristal sobre la foto de fondo */
+  .ocean-hero{
+    position:relative; overflow:hidden; isolation:isolate;
+    background:linear-gradient(180deg,rgba(255,255,255,.72) 0%,rgba(255,255,255,.55) 100%);
+    -webkit-backdrop-filter:blur(14px) saturate(140%); backdrop-filter:blur(14px) saturate(140%);
+    border:1px solid rgba(255,255,255,.65); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow); padding:26px 20px 40px; text-align:center; margin-bottom:16px;
+  }
+  .ocean-hero .content{position:relative;z-index:2}
+  .ocean-hero .dot{width:13px;height:13px;border-radius:50%;display:inline-block;margin-right:8px;vertical-align:middle}
+  .ocean-hero .title{font-size:21px;font-weight:700;margin:0}
+  .ocean-hero .title.ok{color:var(--success)}
+  .ocean-hero .title.bad{color:var(--danger)}
+  .ocean-hero .dot.ok{background:var(--success)}
+  .ocean-hero .dot.bad{background:var(--danger)}
+  .ocean-hero .meta{font-size:12.5px;color:var(--text-muted);margin-top:6px}
+
+  /* Color de las olas según estado: se define vía variables CSS para poder
+     animar background-color con transición suave al cambiar de estado. */
+  .ocean-hero.ok{ --wave-far:#8fb3cf; --wave-back:#2B4C7A; --wave-front:#0891b2; }
+  .ocean-hero.warn{ --wave-far:#e6cd9a; --wave-back:#9a6a08; --wave-front:#ca8a04; }
+  .ocean-hero.bad{ --wave-far:#e3a6a6; --wave-back:#8a2323; --wave-front:#dc2626; }
+
+  .wave-layer{
+    position:absolute; left:-10%; right:-10%; bottom:0;
+    -webkit-mask-repeat:repeat-x; mask-repeat:repeat-x;
+    transition:background-color .4s ease;
+    z-index:1;
+  }
+  .wave-layer.far{
+    height:50px; opacity:.22; background-color:var(--wave-far);
+    -webkit-mask-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='50' viewBox='0 0 220 50'><path d='M0,26 C55,14 165,38 220,26 L220,50 L0,50 Z' fill='%23000'/></svg>");
+    mask-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='50' viewBox='0 0 220 50'><path d='M0,26 C55,14 165,38 220,26 L220,50 L0,50 Z' fill='%23000'/></svg>");
+    -webkit-mask-size:220px 50px; mask-size:220px 50px;
+    animation:wave-scroll-far 24s linear infinite;
+  }
+  .wave-layer.back{
+    height:70px; opacity:.35; background-color:var(--wave-back);
+    -webkit-mask-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='70' viewBox='0 0 220 70'><path d='M0,38 C55,10 165,66 220,38 L220,70 L0,70 Z' fill='%23000'/></svg>");
+    mask-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='70' viewBox='0 0 220 70'><path d='M0,38 C55,10 165,66 220,38 L220,70 L0,70 Z' fill='%23000'/></svg>");
+    -webkit-mask-size:220px 70px; mask-size:220px 70px;
+    animation:wave-scroll-back 16s linear infinite;
+  }
+  .wave-layer.front{
+    height:56px; opacity:.55; background-color:var(--wave-front);
+    -webkit-mask-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='56' viewBox='0 0 220 56'><path d='M0,28 C55,6 165,50 220,28 L220,56 L0,56 Z' fill='%23000'/></svg>");
+    mask-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='56' viewBox='0 0 220 56'><path d='M0,28 C55,6 165,50 220,28 L220,56 L0,56 Z' fill='%23000'/></svg>");
+    -webkit-mask-size:220px 56px; mask-size:220px 56px;
+    animation:wave-scroll-front 9s linear infinite;
+  }
+  @keyframes wave-scroll-far{from{background-position-x:0}to{background-position-x:220px}}
+  @keyframes wave-scroll-back{from{background-position-x:0}to{background-position-x:220px}}
+  @keyframes wave-scroll-front{from{background-position-x:0}to{background-position-x:-220px}}
+  @media(prefers-reduced-motion:reduce){
+    .wave-layer{animation:none !important}
+  }
+  .ocean-hero.paused .wave-layer{animation-play-state:paused}
+
+  /* Brillo de cristal: barrido de luz diagonal, sutil y poco frecuente */
+  .ocean-hero::after,
+  .group::after{
+    content:""; position:absolute; top:-20%; left:-60%; width:38%; height:140%;
+    background:linear-gradient(115deg, transparent 0%, rgba(255,255,255,.55) 45%, transparent 88%);
+    transform:translateX(-10%); pointer-events:none; z-index:3;
+    animation:glass-shine 8s ease-in-out infinite;
+  }
+  .group:nth-of-type(3)::after{animation-delay:2.6s}
+  @keyframes glass-shine{
+    0%,6%{transform:translateX(-10%)}
+    22%{transform:translateX(340%)}
+    100%{transform:translateX(340%)}
+  }
+  @media(prefers-reduced-motion:reduce){
+    .ocean-hero::after,.group::after{animation:none;display:none}
+  }
+
+  /* Listas agrupadas — efecto cristal flotando sobre la foto de fondo */
+  .group{
+    position:relative; overflow:hidden;
+    background:rgba(255,255,255,.62);
+    -webkit-backdrop-filter:blur(14px) saturate(140%); backdrop-filter:blur(14px) saturate(140%);
+    border:1px solid rgba(255,255,255,.65); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow); margin-bottom:14px;
+  }
+  .group-title{margin:0;padding:12px 14px 4px;font-size:11.5px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
+  .row{display:flex;align-items:center;gap:10px;padding:12px 14px;border-top:1px solid rgba(226,232,240,.7)}
+  .group-title + .row{border-top:0}
+  .row .icon{font-size:18px;flex:none;width:22px;text-align:center}
+  .row .label{flex:1;font-size:14.5px;font-weight:600;color:var(--text)}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;
+    padding:4px 10px;border-radius:999px;white-space:nowrap}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+  .pill.ok{background:var(--success-light);color:var(--success)}
+  .pill.warn{background:var(--warning-light);color:var(--warning)}
+  .pill.bad{background:var(--danger-light);color:var(--danger)}
+  .pill.neutral{background:#f1f5f9;color:var(--text-2)}
+
+  .checked-row{display:flex;align-items:center;justify-content:center;gap:8px;
+    font-size:13px;color:var(--text-muted);margin:0 0 16px;
+    background:rgba(255,255,255,.72);
+    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    border-radius:999px;padding:8px 16px;width:fit-content;margin-left:auto;margin-right:auto}
+
+  .action-bar{display:grid;gap:10px}
+  @media(min-width:480px){.action-bar{grid-template-columns:1fr 1fr}}
+  .btn{border:0;border-radius:12px;padding:14px;font:inherit;font-weight:700;font-size:14.5px;
+    display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:background .15s ease-out}
+  .btn.primary{background:var(--primary);color:#fff}
+  .btn.primary:hover{background:var(--primary-hover)}
+  .btn.primary:active{transform:translateY(1px)}
+  .btn.ghost{background:#fff;color:var(--navy);border:1.5px solid var(--border-2)}
+  .btn.ghost:hover{border-color:var(--navy-2)}
+  .btn svg{transition:transform .2s ease-out}
+  .btn.spinning svg{animation:spin .6s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media(prefers-reduced-motion:reduce){.btn.spinning svg{animation:none}}
+
+  .ios-hint{font-size:12px;color:var(--text-muted);text-align:center;margin-top:8px}
+
+  footer{margin-top:16px;text-align:center;font-size:12px;color:var(--text-muted);
+    background:rgba(255,255,255,.72);
+    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    border-radius:999px;padding:8px 16px;width:fit-content;margin-left:auto;margin-right:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <svg viewBox="0 0 42 42" width="34" height="34" aria-hidden="true">
+      <defs>
+        <linearGradient id="mrd-bg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#2B4C7A"/><stop offset="100%" stop-color="#1A3155"/>
+        </linearGradient>
+        <clipPath id="mrd-clip"><rect width="42" height="42" rx="10"/></clipPath>
+      </defs>
+      <rect width="42" height="42" rx="10" fill="url(#mrd-bg)"/>
+      <rect y="32" width="42" height="10" fill="#E07B00" clip-path="url(#mrd-clip)"/>
+      <rect x="6" y="10" width="5" height="19" rx="1.5" fill="white" opacity="0.95"/>
+      <rect x="13" y="14" width="5" height="15" rx="1.5" fill="white" opacity="0.80"/>
+      <rect x="20" y="10" width="5" height="19" rx="1.5" fill="white" opacity="0.95"/>
+      <rect x="27" y="13" width="5" height="16" rx="1.5" fill="white" opacity="0.80"/>
+      <rect x="6" y="10" width="26" height="3" rx="1.5" fill="white" opacity="0.95"/>
+    </svg>
+    <div>
+      <h1>MRD Sentinel</h1>
+      <p class="subtitle">Estado del sistema · vista pública</p>
+    </div>
+  </header>
+
+  <div class="demo-toggle">
+    <button type="button" onclick="toggleDemo()">Ver ejemplo con incidencia (solo mockup)</button>
+  </div>
+
+  <section class="ocean-hero ok" id="hero">
+    <div class="wave-layer far"></div>
+    <div class="wave-layer back"></div>
+    <div class="wave-layer front"></div>
+    <div class="content">
+      <p class="title ok" id="heroTitle"><span class="dot ok"></span>Sistema funcionando</p>
+      <p class="meta">Todo revisado hace un momento</p>
+    </div>
+  </section>
+
+  <section class="group" aria-label="Aplicación">
+    <h2 class="group-title">Aplicación</h2>
+    <div class="row"><div class="icon">🖥️</div><div class="label">Aplicación MRD</div>
+      <span class="pill ok" data-k="app"><span class="dot"></span>Todo en orden</span></div>
+    <div class="row"><div class="icon">🗄️</div><div class="label">Base de datos</div>
+      <span class="pill ok" data-k="db"><span class="dot"></span>Todo en orden</span></div>
+    <div class="row"><div class="icon">📷</div><div class="label">Escáner y QR</div>
+      <span class="pill ok" data-k="scan"><span class="dot"></span>Todo en orden</span></div>
+  </section>
+
+  <section class="group" aria-label="Conectividad">
+    <h2 class="group-title">Conectividad</h2>
+    <div class="row"><div class="icon">🌐</div><div class="label">Acceso remoto</div>
+      <span class="pill ok" data-k="remote"><span class="dot"></span>Todo en orden</span></div>
+    <div class="row"><div class="icon">🔗</div><div class="label">Túnel principal (A)</div>
+      <span class="pill ok" data-k="tunnelA"><span class="dot"></span>Todo en orden</span></div>
+    <div class="row"><div class="icon">🔄</div><div class="label">Túnel de respaldo (B)</div>
+      <span class="pill ok" data-k="tunnelB"><span class="dot"></span>Todo en orden</span></div>
+    <div class="row"><div class="icon">🛡️</div><div class="label">Sentinel</div>
+      <span class="pill ok" data-k="sentinel"><span class="dot"></span>Activo</span></div>
+  </section>
+
+  <p class="checked-row">🕒 Última comprobación: <strong>&nbsp;hace 1 minuto</strong></p>
+
+  <div class="action-bar">
+    <button class="btn primary" id="refreshBtn" type="button" aria-label="Actualizar estado del panel" onclick="doRefresh()">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+        <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
+      </svg>
+      Actualizar estado
+    </button>
+    <button class="btn ghost" id="installBtn" type="button" aria-label="Instalar la aplicación en el móvil" hidden onclick="doInstall()">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/>
+      </svg>
+      Instalar en el móvil
+    </button>
+  </div>
+  <p class="ios-hint" id="iosHint" hidden>En iPhone/iPad: toca «Compartir» y luego «Añadir a pantalla de inicio».</p>
+
+  <footer>Vista de solo lectura · sin datos técnicos ni acciones de reparación</footer>
+</div>
+
+<script>
+  function doRefresh(){
+    const btn = document.getElementById('refreshBtn');
+    btn.classList.add('spinning'); btn.disabled = true;
+    setTimeout(()=>{ btn.classList.remove('spinning'); btn.disabled=false; }, 600);
+  }
+
+  // Instalación PWA real (Chrome/Edge/Android)
+  let deferredPrompt = null;
+  const installBtn = document.getElementById('installBtn');
+  window.addEventListener('beforeinstallprompt', (e)=>{
+    e.preventDefault(); deferredPrompt = e; installBtn.hidden = false;
+  });
+  window.addEventListener('appinstalled', ()=>{ installBtn.hidden = true; deferredPrompt = null; });
+  async function doInstall(){
+    if(!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null; installBtn.hidden = true;
+  }
+  // iOS Safari no dispara beforeinstallprompt: mostramos instrucción manual
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  if(isIos && !isStandalone){ document.getElementById('iosHint').hidden = false; }
+
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+
+  // Pausar la animación del oleaje si el bloque no está visible
+  const hero = document.getElementById('hero');
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(([entry])=>{
+      hero.classList.toggle('paused', !entry.isIntersecting);
+    }).observe(hero);
+  }
+
+  let demo = false;
+  function toggleDemo(){
+    demo = !demo;
+    const title = document.getElementById('heroTitle');
+    if(demo){
+      hero.classList.remove('ok'); hero.classList.add('bad');
+      title.className='title bad'; title.innerHTML='<span class="dot bad"></span>Necesita atención';
+      hero.querySelector('.meta').textContent = 'Revisando automáticamente';
+      setPill('db','bad','Necesita atención');
+      setPill('tunnelB','warn','Revisando');
+    } else {
+      hero.classList.remove('bad'); hero.classList.add('ok');
+      title.className='title ok'; title.innerHTML='<span class="dot ok"></span>Sistema funcionando';
+      hero.querySelector('.meta').textContent = 'Todo revisado hace un momento';
+      setPill('db','ok','Todo en orden');
+      setPill('tunnelB','ok','Todo en orden');
+    }
+  }
+  function setPill(key, state, text){
+    const el = document.querySelector('.pill[data-k="'+key+'"]');
+    el.className = 'pill '+state;
+    el.innerHTML = '<span class="dot"></span>'+text;
+  }
+</script>
+</body>
+</html>

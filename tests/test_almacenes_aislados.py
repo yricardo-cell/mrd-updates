@@ -1,10 +1,22 @@
+from datetime import datetime
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from starlette.requests import Request
 
-from models import Almacen, Base, Herramienta, Trabajador, Usuario
+from main import informes
+from models import Almacen, Base, Herramienta, Movimiento, Trabajador, Usuario
 from mostrador_service import CounterError, operate_counter, resolve_counter_item, search_counter_items
 from warehouse_service import can_access_warehouse, get_user_warehouse, visible_warehouses
+
+
+def _request(path):
+    return Request({
+        "type": "http", "method": "GET", "path": path,
+        "headers": [], "query_string": b"", "client": ("127.0.0.1", 1234),
+        "server": ("testserver", 80), "scheme": "http",
+    })
 
 
 def _db(tmp_path):
@@ -88,4 +100,22 @@ def test_mostrador_rechaza_un_activo_de_otro_almacen_sin_cambios(tmp_path):
     db.rollback()
     assert denied.value.status_code == 409
     assert db.get(Herramienta, madrid_tool.id).estado == "disponible"
+
+
+def test_informes_no_mezcla_movimientos_de_otro_almacen(tmp_path):
+    db = _db(tmp_path)
+    madrid, barcelona, _admin, patio_bcn, _worker_bcn, madrid_tool, barcelona_tool = _seed(db)
+
+    ahora = datetime.now()
+    db.add_all([
+        Movimiento(tipo="entrega", estado_nuevo="entregada", herramienta_id=madrid_tool.id, fecha=ahora),
+        Movimiento(tipo="entrega", estado_nuevo="entregada", herramienta_id=madrid_tool.id, fecha=ahora),
+        Movimiento(tipo="entrega", estado_nuevo="entregada", herramienta_id=barcelona_tool.id, fecha=ahora),
+    ])
+    db.commit()
+
+    response = informes(_request("/informes"), patio_bcn, db)
+
+    movimientos_mes_actual = response.context["analisis"]["movimientos"]["por_mes"][-1]["total"]
+    assert movimientos_mes_actual == 1
 

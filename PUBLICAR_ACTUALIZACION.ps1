@@ -124,10 +124,11 @@ $robocopyArgs = @(
     "/XD", "venv", "__pycache__", ".git", ".claude", ".agents", "logs", "temp",
            "cache", "releases", "backups", "updates", ".mypy_cache",
            ".pytest_cache", "para_subir_github", "data", "uploads",
-           "private_config", "graphify-out", "repair_stage",
+           "private_config", "graphify-out", "repair_stage", ".ruff_cache",
     "/XF", "*.log", "*.bak", "*.bak_edit", "desktop.ini", "*.pyc",
            "*.exe", "*.db", "*.db-wal", "*.db-shm",
            "local.env", "*.token", "vapid_keys.json", ".service_restart",
+           ".recovery_history.json",
     "/NFL", "/NDL", "/NJH", "/NJS"
 )
 & robocopy @robocopyArgs | Out-Null

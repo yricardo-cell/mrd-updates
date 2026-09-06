@@ -1,0 +1,10 @@
+﻿tunnel: 2062a067-7525-4312-9ed0-7c8ee39199f4
+credentials-file: C:\ProgramData\cloudflared\2062a067-7525-4312-9ed0-7c8ee39199f4.json
+protocol: http2
+metrics: 127.0.0.1:20251
+ingress:
+  - hostname: app.iasmrd.com
+    service: http://localhost:8000
+  - hostname: sentinel.iasmrd.com
+    service: http://127.0.0.1:9100
+  - service: http_status:404
