@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.58",
-    "nombre":  "MRD TOOL CONTROL -- Alta express por escaner: pegatina QR, nombre, foto con camara y hueco en cuatro pasos desde el movil; varias iguales de golpe; acceso desde Herramientas y desde el escaner cuando el codigo no existe",
+    "version_actual":  "2.7.59",
+    "nombre":  "MRD TOOL CONTROL -- Recuento por hueco: escanear el hueco y lo que hay, lo no escaneado queda como que falta con aviso y fecha en la Vista de la nave; enlaces para imprimir las etiquetas QR de los huecos",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Alta express por escaner: pegatina QR, nombre, foto con camara y hueco en cuatro pasos desde el movil; varias iguales de golpe; acceso desde Herramientas y desde el escaner cuando el codigo no existe"
+                    "Recuento por hueco: escanear el hueco y lo que hay, lo no escaneado queda como que falta con aviso y fecha en la Vista de la nave; enlaces para imprimir las etiquetas QR de los huecos"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.58.zip",
-    "sha256":  "01bb859bd960aff8e512eee9f9b6086ef56589caa9cec6e0dc187302c8d69ddc"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.59.zip",
+    "sha256":  "f8a05c934da5f66fd04830493904bc254b6d7cd4003d07b22c110d45bed70bbf"
 }
