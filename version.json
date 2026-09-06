@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.51",
-    "nombre":  "MRD TOOL CONTROL -- Vista de la nave y Colocar por escaner: cada hueco como caja con color y numero de cosas, buscador Donde esta, colocar escaneando hueco y articulos, hueco al devolver en Mostrador; alertas de retraso solo con plazo fijado",
+    "version_actual":  "2.7.53",
+    "nombre":  "MRD TOOL CONTROL -- Continuidad 24x7: failover seguro con comprobacion real del tunel B, tunel B como tarea SYSTEM, Sentinel comprueba /ready de los tuneles, recarga del token de Cloudflare y cambio de contrasena del panel de Sentinel",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Vista de la nave y Colocar por escaner: cada hueco como caja con color y numero de cosas, buscador Donde esta, colocar escaneando hueco y articulos, hueco al devolver en Mostrador; alertas de retraso solo con plazo fijado"
+                    "Continuidad 24x7: failover seguro con comprobacion real del tunel B, tunel B como tarea SYSTEM, Sentinel comprueba /ready de los tuneles, recarga del token de Cloudflare y cambio de contrasena del panel de Sentinel"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.51.zip",
-    "sha256":  "f29cbdd74a2f76b93536414ce0355f971e643c5268845f7ffe3a0d1b2f7d76de"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.53.zip",
+    "sha256":  "9c0079d621b07333ce8f79724e823dcb4e5ab287f80a699da98d4e65d1564e25"
 }
