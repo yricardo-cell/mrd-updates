@@ -65,3 +65,5 @@ def test_alta_express_crea_varias_con_foto_y_hueco(client, db):
     assert r.status_code == 409 and "Ya existe" in r.json()["detail"]
     r = client.post("/api/herramientas/alta-express", data={"nombre": "X"}, headers=h)
     assert r.status_code == 400
+    r = client.post("/api/herramientas/alta-express", data={"nombre": "Bien", "ubicacion_id": "abc"}, headers=h)
+    assert r.status_code == 400

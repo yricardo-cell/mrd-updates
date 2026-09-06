@@ -2329,6 +2329,8 @@ async def api_herramienta_alta_express(
     wid = warehouse.id if warehouse else None
     loc = None
     if (ubicacion_id or "").strip():
+        if not ubicacion_id.strip().isdigit():
+            raise HTTPException(400, "Hueco no válido")
         loc = db.get(Ubicacion, int(ubicacion_id))
         if not loc or not loc.activo or (wid and loc.almacen_id != wid):
             raise HTTPException(404, "Ese hueco no existe en este almacén")
