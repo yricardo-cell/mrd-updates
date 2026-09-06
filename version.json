@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.46",
-    "nombre":  "MRD TOOL CONTROL -- Portal del trabajador: seccion Tu EPI con tallas, kit basico y lo que falta",
+    "version_actual":  "2.7.47",
+    "nombre":  "MRD TOOL CONTROL -- En almacen cuenta las disponibles, pasaporte de costes por herramienta y bandeja completa del portal",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Portal del trabajador: seccion Tu EPI con tallas, kit basico y lo que falta"
+                    "En almacen cuenta las disponibles, pasaporte de costes por herramienta y bandeja completa del portal"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.46.zip",
-    "sha256":  "67d014905c8caed1708ef2a79ef030012fbdf8a0d49ca6a57f813eed5d6607e2"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.47.zip",
+    "sha256":  "0268c4226a28a1808d6c49df8c74f7a491220625fb89da49ca4d8bbdd17fb380"
 }
