@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.43",
-    "nombre":  "MRD TOOL CONTROL -- Iconos y contraste: letra base 15/16 px, minimo 12 px, grises 4,5:1, iconos mayores, badges rellenos, 44 px en movil",
+    "version_actual":  "2.7.44",
+    "nombre":  "MRD TOOL CONTROL -- Informes con el criterio del Estado visual: estado real de activos y stock con las mismas cifras",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Iconos y contraste: letra base 15/16 px, minimo 12 px, grises 4,5:1, iconos mayores, badges rellenos, 44 px en movil"
+                    "Informes con el criterio del Estado visual: estado real de activos y stock con las mismas cifras"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.43.zip",
-    "sha256":  "073519957715a4331650640ac76d4cdc135b0acd845d1ec1c64422ad4c2c152c"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.44.zip",
+    "sha256":  "88eae3990137f39f8d6b2925ea8e1613e64947a1bd3215f27a9abeccaa2bca74"
 }
