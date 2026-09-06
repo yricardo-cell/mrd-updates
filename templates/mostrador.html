@@ -122,6 +122,7 @@
      opState.className='scan-state ok';opState.replaceChildren(document.createTextNode(`Operación completada: ${Number(d.total_lineas)||0} líneas. `));
      const number=document.createElement('strong');number.textContent=String(d.albaran_numero||'');opState.appendChild(number);
      if(d.albaran_url){const url=new URL(String(d.albaran_url),location.origin);if(url.origin===location.origin&&url.pathname.startsWith('/')){const link=document.createElement('a');link.className='btn btn-sm btn-light ms-2';link.href=url.pathname+url.search;link.textContent='Abrir justificante';opState.appendChild(link)}}
+     if(d.accion==='entrada'){const conHueco=(d.lineas||[]).filter(l=>l.tipo==='herramienta'&&l.ubicacion);const sinHueco=(d.lineas||[]).filter(l=>l.tipo==='herramienta'&&!l.ubicacion);if(conHueco.length){const g=document.createElement('div');g.className='mt-1';g.textContent='Guárdalo en su sitio: '+conHueco.map(l=>`${l.nombre} → ${l.ubicacion}`).join(' · ');opState.appendChild(g)}if(sinHueco.length){const g=document.createElement('div');g.className='mt-1';g.textContent='Sin hueco asignado: '+sinHueco.map(l=>l.nombre).join(', ')+'. ';const a=document.createElement('a');a.className='btn btn-sm btn-outline-light ms-1';a.href='/nave/colocar?codigo='+encodeURIComponent(sinHueco[0].nombre);a.textContent='Colocar por escáner';g.appendChild(a);opState.appendChild(g)}}
      cart.clear();currentOperationId=null;render();
    }catch(e){
      if(e.authFailure){authRetryBanner(opState,()=>submitOperation(payload))}

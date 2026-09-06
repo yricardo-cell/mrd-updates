@@ -314,6 +314,7 @@
             <span class="nav-label">Estado visual</span>
           </a>
         </li>
+<li class="nav-item"><a href="/nave" class="{% if request.url.path.startswith('/nave') %}active{% endif %}"><i class="bi bi-grid-3x3-gap-fill"></i><span class="nav-label">Vista de la nave</span></a></li>
         {% endif %}
         {% if nav_user and nav_user.rol == 'admin' %}
         <li class="nav-item"><a href="/localizador" class="{% if '/localizador' in request.url.path %}active{% endif %}"><i class="bi bi-geo-alt-fill"></i><span class="nav-label">Localizador visual</span></a></li>

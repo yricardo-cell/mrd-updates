@@ -8465,6 +8465,262 @@ def visual_locator(
     ))
 
 
+# ─── Vista de la nave y Colocar por escáner (2.7.51) ─────────────────────────
+
+def _nave_permitido(user: Usuario) -> bool:
+    return user.rol in ("admin", "almacen", "encargado_patio") or tiene_permiso(user, "editar") \
+        or tiene_permiso(user, "stock_operar")
+
+
+def _nave_clave_natural(texto) -> tuple:
+    partes = re.split(r"(\d+)", str(texto or ""))
+    return tuple(int(p) if p.isdigit() else p.upper() for p in partes)
+
+
+def _nave_huecos(db: Session, warehouse_id: int) -> tuple[list[dict], dict]:
+    """Ubicaciones activas del almacén con lo que hay en cada una (herramientas,
+    materiales, EPI de stock y EPI individual) agrupadas por zona y fila."""
+    ubicaciones = db.query(Ubicacion).filter(
+        Ubicacion.almacen_id == warehouse_id, Ubicacion.activo == True,
+    ).all()
+    ids = [u.id for u in ubicaciones]
+    contenido: dict[int, list[dict]] = {u.id: [] for u in ubicaciones}
+    if ids:
+        herramientas = db.query(Herramienta).filter(Herramienta.activa == True, Herramienta.ubicacion_id.in_(ids)).order_by(Herramienta.nombre).all()
+        # Estar fuera es lo normal (las herramientas no vuelven salvo obra concreta):
+        # se enseña quién la tiene y desde cuándo; solo es alerta si el usuario
+        # puso un plazo de devolución y ya ha vencido.
+        fuera_ids = [h.id for h in herramientas if h.estado not in ("disponible", "en_almacen")]
+        # Solo las entregadas tienen "quién la tiene"; en mantenimiento o baja se enseña el estado.
+        entregadas = {h.id for h in herramientas if h.estado in ("entregada", "en_obra", "en_transporte")}
+        ultima_entrega: dict[int, Movimiento] = {}
+        if entregadas:
+            for mov in db.query(Movimiento).filter(Movimiento.herramienta_id.in_(list(entregadas)), Movimiento.tipo == "entrega").order_by(Movimiento.id.desc()).all():
+                ultima_entrega.setdefault(mov.herramienta_id, mov)
+        ahora = datetime.now()
+        for h in herramientas:
+            fuera = h.id in fuera_ids
+            mov = ultima_entrega.get(h.id) if h.id in entregadas else None
+            quien = ""
+            if mov is not None:
+                if mov.trabajador_id:
+                    t = db.get(Trabajador, mov.trabajador_id)
+                    quien = t.nombre_completo if t else ""
+                elif mov.obra_id:
+                    o = db.get(Obra, mov.obra_id)
+                    quien = f"obra {o.nombre}" if o else ""
+                quien = quien or (mov.destino or "")
+            prevista = mov.fecha_devolucion_prevista if mov is not None else None
+            contenido[h.ubicacion_id].append({
+                "tipo": "herramienta", "id": h.id, "codigo": h.codigo or "", "nombre": h.nombre,
+                "estado": h.estado or "", "fuera": fuera, "quien": quien if fuera else "",
+                "desde": mov.fecha.strftime("%d/%m/%Y") if (fuera and mov is not None and mov.fecha) else "",
+                "prevista": prevista.strftime("%d/%m/%Y") if (fuera and prevista) else "",
+                "vencida": bool(fuera and prevista and prevista < ahora),
+                "cantidad": 1, "unidad": "ud", "url": f"/herramientas/{h.id}",
+            })
+        for m in db.query(Material).filter(Material.activo == True, Material.ubicacion_id.in_(ids)).order_by(Material.nombre).all():
+            contenido[m.ubicacion_id].append({
+                "tipo": "material", "id": m.id, "codigo": m.codigo or "", "nombre": m.nombre,
+                "cantidad": m.stock_actual or 0, "unidad": m.unidad or "ud",
+                "bajo_minimo": bool(m.stock_minimo and (m.stock_actual or 0) <= m.stock_minimo),
+                "url": f"/materiales/{m.id}",
+            })
+        for s in db.query(StockEPI).filter(StockEPI.ubicacion_id.in_(ids)).order_by(StockEPI.nombre).all():
+            contenido[s.ubicacion_id].append({
+                "tipo": "stock_epi", "id": s.id, "codigo": s.codigo or "", "nombre": s.nombre_display,
+                "cantidad": s.cantidad or 0, "unidad": "ud", "bajo_minimo": bool(s.bajo_minimo),
+                "url": "/epis/stock",
+            })
+        for e in db.query(EPIIndividual).filter(EPIIndividual.ubicacion_id.in_(ids), EPIIndividual.estado != "baja").all():
+            contenido[e.ubicacion_id].append({
+                "tipo": "epi_individual", "id": e.id,
+                "codigo": e.codigo_qr or e.referencia_interna or e.codigo_fabricacion or "",
+                "nombre": e.tipo, "estado": e.estado or "", "fuera": e.trabajador_id is not None,
+                "cantidad": 1, "unidad": "ud", "url": f"/epis/individuales/{e.id}",
+            })
+    filas_map: dict[tuple, dict] = {}
+    resumen = {"huecos": len(ubicaciones), "ocupados": 0, "articulos": 0, "alertas": 0}
+    for u in ubicaciones:
+        items = contenido[u.id]
+        alerta = any(i.get("vencida") or i.get("bajo_minimo") for i in items)
+        if not items:
+            clase = "vacio"
+        elif alerta:
+            clase = "alerta"
+        elif any(i["tipo"] == "herramienta" for i in items):
+            clase = "lleno"
+        else:
+            clase = "stock"
+        if items:
+            resumen["ocupados"] += 1
+        resumen["articulos"] += len(items)
+        resumen["alertas"] += 1 if alerta else 0
+        zona = (u.zona or "").strip() or "Sin zona"
+        fila = (u.estanteria or u.pasillo or u.nombre or "").strip()
+        clave = (zona, fila)
+        filas_map.setdefault(clave, {"zona": zona, "fila": fila, "huecos": []})
+        filas_map[clave]["huecos"].append({
+            "id": u.id, "nombre": u.nombre, "codigo": u.codigo or "", "ruta": u.ruta_completa,
+            "posicion": u.posicion or u.balda or "", "clase": clase, "n": len(items),
+            "items": items,
+        })
+    filas = sorted(filas_map.values(), key=lambda f: (_nave_clave_natural(f["zona"]), _nave_clave_natural(f["fila"])))
+    for f in filas:
+        f["huecos"].sort(key=lambda h: (_nave_clave_natural(h["posicion"]), _nave_clave_natural(h["nombre"])))
+    return filas, resumen
+
+
+def _nave_sin_ubicacion(db: Session, warehouse_id: int) -> dict:
+    return {
+        "herramientas": db.query(Herramienta).filter(
+            Herramienta.activa == True, Herramienta.ubicacion_id.is_(None),
+            or_(Herramienta.almacen_id == warehouse_id, Herramienta.almacen_id.is_(None)),
+        ).count(),
+        "materiales": db.query(Material).filter(
+            Material.activo == True, Material.ubicacion_id.is_(None),
+            or_(Material.almacen_id == warehouse_id, Material.almacen_id.is_(None)),
+        ).count(),
+    }
+
+
+def _nave_json(data) -> str:
+    return json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+
+
+@app.get("/nave", response_class=HTMLResponse)
+def vista_nave(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Vista de la nave (2.7.51): cada hueco real como una caja con color según
+    lo que contiene; al pulsarla se ve la lista. Buscador "¿Dónde está…?"."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _operation_warehouse(request, user, db)
+    filas, resumen = _nave_huecos(db, warehouse.id)
+    return templates.TemplateResponse(request, "vista_nave.html", ctx_base(
+        request, user, db, almacen=warehouse, filas=filas, resumen=resumen,
+        sin_ubicacion=_nave_sin_ubicacion(db, warehouse.id), filas_json=_nave_json(filas),
+    ))
+
+
+@app.get("/nave/colocar", response_class=HTMLResponse)
+def nave_colocar_page(
+    request: Request, ubicacion: int | None = None, codigo: str = "",
+    user: Usuario = Depends(requiere_login), db: Session = Depends(get_db),
+):
+    """Colocar por escáner (2.7.51): escanea el hueco y después las cosas."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _operation_warehouse(request, user, db)
+    huecos = db.query(Ubicacion).filter(Ubicacion.almacen_id == warehouse.id, Ubicacion.activo == True).all()
+    huecos.sort(key=lambda u: (_nave_clave_natural(u.zona), _nave_clave_natural(u.estanteria), _nave_clave_natural(u.posicion), _nave_clave_natural(u.nombre)))
+    actual = next((u for u in huecos if u.id == ubicacion), None) if ubicacion else None
+    return templates.TemplateResponse(request, "nave_colocar.html", ctx_base(
+        request, user, db, almacen=warehouse, huecos=huecos, hueco_actual=actual,
+        codigo_pendiente=(codigo or "").strip()[:128], sin_ubicacion=_nave_sin_ubicacion(db, warehouse.id),
+    ))
+
+
+def _nave_objeto(db: Session, tipo: str, item_id: int):
+    modelo = {"herramienta": Herramienta, "material": Material, "stock_epi": StockEPI, "epi_individual": EPIIndividual}.get(tipo)
+    return db.get(modelo, item_id) if modelo else None
+
+
+@app.get("/api/nave/donde")
+def api_nave_donde(
+    q: str = Query(..., min_length=1, max_length=128), request: Request = None,
+    user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db),
+):
+    """¿Dónde está…? Resuelve un código o busca por nombre y devuelve el hueco."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _active_warehouse(db, user, request)
+    wid = warehouse.id if warehouse else None
+    encontrados: list[dict] = []
+    try:
+        encontrados = [resolve_counter_item(db, q, warehouse_id=wid)]
+    except CounterError:
+        encontrados = []
+    if not encontrados:
+        try:
+            encontrados = search_counter_items(db, q, limit=8, warehouse_id=wid)
+        except CounterError:
+            encontrados = []
+    resultados = []
+    for item in encontrados:
+        tipo = item.get("tipo")
+        if tipo == "ubicacion":
+            resultados.append({"tipo": tipo, "id": item["id"], "codigo": item.get("codigo") or "", "nombre": item.get("nombre") or "",
+                               "ubicacion_id": item["id"], "ubicacion": item.get("nombre") or "", "ruta": item.get("ruta") or ""})
+            continue
+        obj = _nave_objeto(db, tipo, int(item.get("id") or 0))
+        loc = db.get(Ubicacion, obj.ubicacion_id) if obj is not None and getattr(obj, "ubicacion_id", None) else None
+        resultados.append({
+            "tipo": tipo, "id": item.get("id"), "codigo": item.get("codigo") or "", "nombre": item.get("nombre") or "",
+            "estado": item.get("estado") or "", "ubicacion_id": loc.id if loc else None,
+            "ubicacion": loc.nombre if loc else "", "ruta": loc.ruta_completa if loc else "",
+            "colocable": obj is not None,
+        })
+    if not resultados:
+        # También se puede preguntar por el propio hueco ("A2", "CONTENEDOR B1").
+        q_hueco = db.query(Ubicacion).filter(Ubicacion.activo == True, Ubicacion.nombre.ilike(f"%{q.strip()}%"))
+        if wid:
+            q_hueco = q_hueco.filter(Ubicacion.almacen_id == wid)
+        for u in q_hueco.order_by(Ubicacion.nombre).limit(8).all():
+            resultados.append({"tipo": "ubicacion", "id": u.id, "codigo": u.codigo or "", "nombre": u.nombre,
+                               "ubicacion_id": u.id, "ubicacion": u.nombre, "ruta": u.ruta_completa})
+    return JSONResponse({"ok": True, "resultados": resultados})
+
+
+class ColocarRequest(BaseModel):
+    codigo: str = Field(..., min_length=1, max_length=128)
+    ubicacion_id: int | None = None
+
+
+@app.post("/api/nave/colocar")
+def api_nave_colocar(
+    payload: ColocarRequest, request: Request = None,
+    user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db),
+):
+    """Un escaneo: si es un hueco lo selecciona; si es un artículo y hay hueco
+    elegido, lo coloca allí (mueve si estaba en otro) y lo deja en auditoría."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _active_warehouse(db, user, request)
+    wid = warehouse.id if warehouse else None
+    try:
+        item = resolve_counter_item(db, payload.codigo, warehouse_id=wid)
+    except CounterError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+    tipo = item.get("tipo")
+    if tipo == "ubicacion":
+        loc = db.get(Ubicacion, int(item["id"]))
+        return JSONResponse({"ok": True, "tipo": "ubicacion", "id": loc.id, "nombre": loc.nombre, "ruta": loc.ruta_completa})
+    if not payload.ubicacion_id:
+        raise HTTPException(400, "Escanea primero el hueco donde lo vas a guardar")
+    loc = db.get(Ubicacion, payload.ubicacion_id)
+    if not loc or not loc.activo or (wid and loc.almacen_id != wid):
+        raise HTTPException(404, "Ese hueco no existe en este almacén")
+    obj = _nave_objeto(db, tipo, int(item.get("id") or 0))
+    if obj is None:
+        raise HTTPException(400, "Este tipo de artículo no se coloca en huecos")
+    anterior = db.get(Ubicacion, obj.ubicacion_id) if obj.ubicacion_id else None
+    if anterior and anterior.id == loc.id:
+        return JSONResponse({"ok": True, "tipo": tipo, "id": obj.id, "codigo": item.get("codigo") or "",
+                             "nombre": item.get("nombre") or "", "ubicacion": loc.nombre, "ubicacion_id": loc.id,
+                             "anterior": None, "ya_estaba": True})
+    obj.ubicacion_id = loc.id
+    if getattr(obj, "almacen_id", None) is None and wid:
+        obj.almacen_id = wid
+    tabla = {"herramienta": "herramientas", "material": "materiales", "stock_epi": "stock_epis", "epi_individual": "epis_individuales"}[tipo]
+    registrar_auditoria(db, tabla, obj.id, "colocar", user.id,
+                        {"ubicacion_id": anterior.id if anterior else None},
+                        {"ubicacion_id": loc.id, "ubicacion": loc.nombre})
+    db.commit()
+    return JSONResponse({"ok": True, "tipo": tipo, "id": obj.id, "codigo": item.get("codigo") or "",
+                         "nombre": item.get("nombre") or "", "ubicacion": loc.nombre, "ubicacion_id": loc.id,
+                         "anterior": anterior.nombre if anterior else None, "ya_estaba": False})
+
+
 def _daily_snapshot(db: Session, warehouse_id: int, day: date) -> dict:
     start = datetime.combine(day, datetime.min.time())
     end = start + timedelta(days=1)
@@ -9138,8 +9394,8 @@ def puesta_a_punto(request: Request, user: Usuario = Depends(requiere_login), db
                  "filas": [(h.nombre, h.codigo, f"/herramientas/{h.id}") for h in _tools(Herramienta.foto_path.is_(None))]},
                 {"nombre": "Sin precio de compra", "por_que": "Sin precio no hay pasaporte de costes ni valor de lo que está fuera.",
                  "filas": [(h.nombre, h.codigo, f"/herramientas/{h.id}/editar") for h in _tools(or_(Herramienta.precio_compra.is_(None), Herramienta.precio_compra == 0))]},
-                {"nombre": "Sin ubicación en el almacén", "por_que": "Sin ubicación, el localizador y el inventario guiado no saben dónde buscar.",
-                 "filas": [(h.nombre, h.codigo, f"/herramientas/{h.id}/editar") for h in _tools(Herramienta.ubicacion_id.is_(None))]},
+                {"nombre": "Sin ubicación en el almacén", "por_que": "Sin hueco, la Vista de la nave no sabe dónde está. Cada fila abre Colocar por escáner.",
+                 "filas": [(h.nombre, h.codigo, f"/nave/colocar?codigo={urllib.parse.quote(h.codigo or '')}") for h in _tools(Herramienta.ubicacion_id.is_(None))]},
                 {"nombre": "Sin marca ni modelo", "por_que": "Ayuda a distinguir herramientas iguales y a pedir repuestos.",
                  "filas": [(h.nombre, h.codigo, f"/herramientas/{h.id}/editar") for h in _tools(or_(Herramienta.marca.is_(None), Herramienta.marca == ""))]},
             ],

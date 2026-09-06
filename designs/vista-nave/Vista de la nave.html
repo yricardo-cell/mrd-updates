@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MRD · Maqueta: Vista de la nave (qué tengo y dónde)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  :root{--bg:#0b1220;--surface:#111a2e;--surface2:#16213a;--border:#22304d;--text:#e2e8f0;--muted:#94a3b8;--cyan:#22d3ee;--green:#34d399;--amber:#f59e0b;--red:#f87171}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 28px 8px}header h1{margin:0 0 4px;font-size:21px}header p{margin:0;color:var(--muted);max-width:1100px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:18px;padding:8px 28px 28px}
+  .screen{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px}
+  .screen h2{margin:0 0 2px;font-size:17px}.screen .sub{color:var(--muted);font-size:13px;margin:0 0 12px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .pill{background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:12.5px}
+  .pill.ok{border-color:var(--green);color:var(--green)}.pill.warn{border-color:var(--amber);color:var(--amber)}
+  .btn{border:0;border-radius:9px;padding:9px 13px;font:inherit;font-weight:700;cursor:pointer}
+  .btn.primary{background:var(--cyan);color:#0b1220}.btn.ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .field input{background:#0b1220;border:1px solid var(--border);color:#fff;border-radius:8px;padding:9px 11px;font:inherit;width:100%}
+  .nave{position:relative;background:linear-gradient(180deg,#0e1730,#0b1220);border:1px solid var(--border);border-radius:14px;padding:16px 18px 18px;overflow:auto}
+  .zona h3{margin:0 0 8px;font-size:13px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+  .iso{display:grid;grid-template-columns:34px repeat(10,46px);gap:14px 8px;align-items:center;padding:6px 0 10px;width:max-content}
+  .iso .fila{font-size:12px;font-weight:700;color:var(--muted)}
+  .box{width:46px;height:36px;position:relative;border-radius:4px;background:#1e293b;border:1px solid #334155;box-shadow:5px 5px 0 #0f172a,6px 6px 0 #334155;transition:transform .15s}
+  .box:hover{transform:translate(-2px,-2px)}
+  .box span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#e2e8f0}
+  .box.lleno{background:#0e7490;border-color:#22d3ee;box-shadow:5px 5px 0 #083344,6px 6px 0 #22d3ee}.box.stock{background:#166534;border-color:#34d399;box-shadow:5px 5px 0 #052e16,6px 6px 0 #34d399}.box.alerta{background:#9a3412;border-color:#f59e0b;box-shadow:5px 5px 0 #431407,6px 6px 0 #f59e0b}.box.sel{outline:3px solid #fff;outline-offset:2px}
+  .leyenda{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:12.5px;color:var(--muted)}.leyenda i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  .panel{background:#0b1220;border:1px solid var(--border);border-radius:12px;padding:12px;margin-top:12px}
+  .panel ul{list-style:none;margin:0;padding:0}.panel li{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)}
+  .note{background:#1c2740;border-left:3px solid var(--cyan);padding:8px 12px;border-radius:8px;font-size:13px;margin-top:10px}
+  .steps{display:grid;gap:8px}.step{display:flex;gap:10px;align-items:flex-start;background:#0b1220;border:1px solid var(--border);border-radius:10px;padding:10px}.step b{background:var(--cyan);color:#0b1220;border-radius:999px;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+  .notes{padding:0 28px 40px;max-width:1100px}.notes h3{font-size:15px;margin:18px 0 6px}.notes ul{padding-left:18px}.notes li{margin:4px 0}
+  code{background:#1c2740;padding:1px 5px;border-radius:4px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Vista de la nave: qué tengo y dónde lo tengo</h1>
+  <p>Hoy ya existen 231 huecos creados ("CONTENEDOR A1…K20"), un plano de la nave con zonas y un buscador "Llévame hasta el artículo", pero <b>ninguna herramienta ni material tiene hueco asignado</b>, así que nada se puede localizar. La propuesta tiene dos partes: <b>colocar por escáner</b> (rápido, sin teclear) y una <b>vista en relieve de la nave</b> donde cada hueco se ve lleno o vacío y al pulsarlo enseña lo que contiene.</p>
+</header>
+<div class="grid">
+
+  <section class="screen">
+    <h2><i class="bi bi-box-seam"></i> 1 · Vista de la nave</h2>
+    <p class="sub">Cada caja es un hueco real (contenedor, balda, estantería). Color según contenido; número = cuántas cosas hay. Pulsa uno y ves la lista.</p>
+    <div class="row" style="margin-bottom:10px"><div class="field" style="flex:1"><input value="¿Dónde está…?  (nombre, código o escanea)" readonly></div><button class="btn primary">Buscar</button></div>
+    <div class="nave">
+      <div class="zona"><h3>Contenedor · filas A–C (huecos 1–10) · la real llega hasta K20</h3>
+        <div class="iso">
+          <div class="fila">A</div><div class="box lleno"><span>3</span></div><div class="box lleno sel"><span>5</span></div><div class="box"><span></span></div><div class="box stock"><span>12</span></div><div class="box lleno"><span>1</span></div><div class="box"><span></span></div><div class="box alerta"><span>!</span></div><div class="box stock"><span>40</span></div><div class="box"><span></span></div><div class="box lleno"><span>2</span></div>
+          <div class="fila">B</div><div class="box lleno"><span>4</span></div><div class="box"><span></span></div><div class="box"><span></span></div><div class="box stock"><span>6</span></div><div class="box lleno"><span>2</span></div><div class="box lleno"><span>1</span></div><div class="box"><span></span></div><div class="box"><span></span></div><div class="box stock"><span>18</span></div><div class="box"><span></span></div>
+          <div class="fila">C</div><div class="box"><span></span></div><div class="box lleno"><span>7</span></div><div class="box lleno"><span>3</span></div><div class="box"><span></span></div><div class="box"><span></span></div><div class="box stock"><span>9</span></div><div class="box alerta"><span>!</span></div><div class="box"><span></span></div><div class="box lleno"><span>2</span></div><div class="box"><span></span></div>
+        </div>
+      </div>
+      <div class="leyenda"><span><i style="background:#0e7490"></i>Herramientas</span><span><i style="background:#166534"></i>Stock (material / EPI)</span><span><i style="background:#9a3412"></i>Falta algo que debería estar aquí</span><span><i style="background:#1e293b"></i>Vacío</span></div>
+    </div>
+    <div class="panel"><strong><i class="bi bi-geo-alt-fill"></i> CONTENEDOR A2 · 5 cosas</strong>
+      <ul>
+        <li><span>Taladro Hilti TE-6 · HER-0451</span><span class="pill ok">en nave</span></li>
+        <li><span>Batería 36V nº 1 · HER-0452</span><span class="pill ok">en nave</span></li>
+        <li><span>Cargador C4/36 · HER-0454</span><span class="pill ok">en nave</span></li>
+        <li><span>Radial 230 · HER-0398</span><span class="pill warn">entregada a Erick (vuelve aquí)</span></li>
+        <li><span>Discos corte 230 · MAT-0031</span><span class="pill">14 ud</span></li>
+      </ul>
+      <div class="row" style="margin-top:8px"><button class="btn ghost">Imprimir etiqueta QR del hueco</button><button class="btn ghost">Colocar aquí</button></div>
+    </div>
+    <div class="note">El buscador ilumina el hueco en la vista y dice "CONTENEDOR A2 · fila A, hueco 2". En el móvil la vista pasa a lista por fila con los mismos colores.</div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-upc-scan"></i> 2 · Colocar por escáner (para rellenar los 133 huecos vacíos)</h2>
+    <p class="sub">Con la pistola o el móvil, sin teclear: escaneas el QR del hueco y después todo lo que metes en él.</p>
+    <div class="steps">
+      <div class="step"><b>1</b><div><strong>Escanea el hueco</strong><br><small>Cada contenedor ya tiene QR (etiquetas por zona). "CONTENEDOR A2 seleccionado".</small></div></div>
+      <div class="step"><b>2</b><div><strong>Escanea las cosas</strong><br><small>Cada herramienta, material o EPI escaneado pasa a ese hueco al instante y suena la confirmación. Si ya estaba en otro hueco, se mueve.</small></div></div>
+      <div class="step"><b>3</b><div><strong>Siguiente hueco</strong><br><small>Escaneas otro hueco y sigues. Al final, resumen: "23 cosas colocadas en 4 huecos".</small></div></div>
+    </div>
+    <div class="panel"><strong>Ahora colocando en CONTENEDOR A2</strong>
+      <div class="field" style="margin:8px 0"><input value="Escanea o escribe el código…" readonly></div>
+      <ul><li><span>Taladro Hilti TE-6 · HER-0451</span><span class="pill ok">colocado</span></li><li><span>Batería 36V nº 1 · HER-0452</span><span class="pill ok">colocado (antes en A1)</span></li></ul>
+    </div>
+    <div class="note">Además: "Puesta a punto → Sin ubicación" enlaza aquí. Cuando una herramienta vuelve por el Mostrador, la pantalla dice "guárdala en CONTENEDOR A2".</div>
+  </section>
+</div>
+<div class="notes">
+  <h3>Qué cambia por dentro</h3>
+  <ul>
+    <li>Nueva pantalla <b>Vista de la nave</b> (menú Stock): usa las ubicaciones ya existentes; cuenta herramientas, materiales y EPI de stock por hueco (campo <code>ubicacion_id</code> que ya tienen los tres modelos). Relieve con CSS, sin librerías 3D; lista en móvil.</li>
+    <li>Nueva pantalla <b>Colocar</b>: escaneo de hueco + escaneo de artículos; cada escaneo asigna <code>ubicacion_id</code> y queda en auditoría. Reutiliza el resolvedor del Mostrador (no se toca el escáner).</li>
+    <li>El Mostrador, al devolver una herramienta, muestra su hueco.</li>
+    <li>Sin cambios de esquema. Se implementa y prueba en el entorno de pruebas y se publica como una sola versión (2.7.51).</li>
+  </ul>
+</div>
+</body>
+</html>

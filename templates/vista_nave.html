@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Vista de la nave{% endblock %}
+{% block breadcrumb %}
+<a href="/">Inicio</a>
+<span class="sep">/</span>
+<span class="current">Vista de la nave</span>
+{% endblock %}
+{% block content %}
+<style>
+.nave-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.nave-fila{display:grid;grid-template-columns:44px 1fr;align-items:center;gap:10px;padding:10px 0 12px;border-bottom:1px solid rgba(148,163,184,.25)}
+.nave-fila-nombre{font-weight:800;color:var(--text-muted);font-size:.95rem}
+.nave-zona{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:700;margin:14px 0 4px}
+.nave-huecos{display:flex;flex-wrap:wrap;gap:14px 10px}
+.hueco{width:52px;height:40px;border:1px solid #94a3b8;border-radius:5px;background:#cbd5e1;color:#1e293b;box-shadow:5px 5px 0 #94a3b8,6px 6px 0 #64748b;position:relative;cursor:pointer;transition:transform .15s;font-weight:800;font-size:.85rem;display:flex;align-items:center;justify-content:center;padding:0}
+.hueco:hover,.hueco:focus-visible{transform:translate(-2px,-2px);outline:none}
+.hueco.lleno{background:#0e7490;border-color:#22d3ee;color:#fff;box-shadow:5px 5px 0 #083344,6px 6px 0 #22d3ee}
+.hueco.stock{background:#166534;border-color:#34d399;color:#fff;box-shadow:5px 5px 0 #052e16,6px 6px 0 #34d399}
+.hueco.alerta{background:#9a3412;border-color:#f59e0b;color:#fff;box-shadow:5px 5px 0 #431407,6px 6px 0 #f59e0b}
+.hueco.sel{outline:3px solid #2563eb;outline-offset:3px}
+.hueco small{position:absolute;left:4px;top:1px;font-size:.62rem;font-weight:700;opacity:.85}
+.nave-leyenda{display:flex;gap:14px;flex-wrap:wrap;font-size:.85rem;color:var(--text-muted);margin-top:14px}
+.nave-leyenda i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+#hueco-panel{position:sticky;top:12px}
+#hueco-lista .list-group-item{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+@media (max-width:600px){.hueco{width:44px;height:36px}.nave-huecos{gap:12px 8px}#hueco-panel{position:static}}
+</style>
+<div class="page-header-row mb-3">
+  <div>
+    <h1 class="page-title"><i class="bi bi-grid-3x3-gap-fill"></i> Vista de la nave</h1>
+    <p class="page-subtitle">{{ almacen.nombre }} · Cada caja es un hueco real. El color dice qué hay y el número cuántas cosas. Pulsa una caja para ver la lista.</p>
+  </div>
+  <a class="btn btn-primary" href="/nave/colocar"><i class="bi bi-upc-scan"></i> Colocar por escáner</a>
+</div>
+
+<div class="nave-kpis">
+  <div class="kpi-card"><div class="kpi-icon blue"><i class="bi bi-grid-3x3-gap"></i></div><div class="kpi-value">{{ resumen.huecos }}</div><div class="kpi-label">huecos</div></div>
+  <div class="kpi-card"><div class="kpi-icon green"><i class="bi bi-box-seam"></i></div><div class="kpi-value">{{ resumen.ocupados }}</div><div class="kpi-label">con algo dentro</div></div>
+  <div class="kpi-card"><div class="kpi-icon blue"><i class="bi bi-tools"></i></div><div class="kpi-value">{{ resumen.articulos }}</div><div class="kpi-label">artículos ubicados</div></div>
+  <a class="kpi-card" href="/nave/colocar" style="text-decoration:none"><div class="kpi-icon {{ 'green' if (sin_ubicacion.herramientas + sin_ubicacion.materiales) == 0 else 'orange' }}"><i class="bi bi-question-circle"></i></div><div class="kpi-value">{{ sin_ubicacion.herramientas + sin_ubicacion.materiales }}</div><div class="kpi-label">sin hueco (herramientas {{ sin_ubicacion.herramientas }} · materiales {{ sin_ubicacion.materiales }})</div></a>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-body">
+        <div class="input-group mb-2">
+          <input id="nave-buscar" class="form-control form-control-lg" placeholder="¿Dónde está…?  nombre, código o escanea" autocomplete="off">
+          <button id="nave-buscar-btn" class="btn btn-primary" type="button"><i class="bi bi-search"></i> Buscar</button>
+        </div>
+        <div id="nave-estado" class="small text-muted mb-2"></div>
+        {% if not filas %}
+        <div class="alert alert-info">Este almacén no tiene huecos creados. Créalos en <a href="/almacenes/{{ almacen.id }}/mapa">Plano de la nave</a> (por filas y posiciones) y vuelve aquí.</div>
+        {% endif %}
+        {% set ns = namespace(zona=None) %}
+        {% for f in filas %}
+          {% if f.zona != ns.zona %}{% set ns.zona = f.zona %}<div class="nave-zona">{{ f.zona }}</div>{% endif %}
+          <div class="nave-fila">
+            <div class="nave-fila-nombre">{{ f.fila }}</div>
+            <div class="nave-huecos">
+              {% for h in f.huecos %}
+              <button type="button" class="hueco {{ h.clase }}" data-id="{{ h.id }}" title="{{ h.nombre }} · {{ h.n }} cosas" aria-label="{{ h.nombre }}, {{ h.n }} artículos"><small>{{ h.posicion }}</small>{% if h.n %}{{ h.n }}{% endif %}</button>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+        <div class="nave-leyenda"><span><i style="background:#0e7490"></i>Herramientas</span><span><i style="background:#166534"></i>Stock (material / EPI)</span><span><i style="background:#9a3412"></i>Algo debía haber vuelto (plazo puesto) o está bajo mínimo</span><span><i style="background:#cbd5e1;border:1px solid #94a3b8"></i>Vacío</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card" id="hueco-panel">
+      <div class="card-header"><div class="card-title" id="hueco-titulo"><i class="bi bi-geo-alt-fill"></i> Pulsa un hueco</div></div>
+      <div class="card-body">
+        <p class="small text-muted" id="hueco-ruta">Verás aquí lo que contiene y podrás colocar más cosas o imprimir su etiqueta QR.</p>
+        <div class="list-group list-group-flush" id="hueco-lista"></div>
+        <div class="d-flex gap-2 flex-wrap mt-3" id="hueco-acciones" hidden>
+          <a id="hueco-colocar" class="btn btn-primary btn-sm" href="#"><i class="bi bi-upc-scan"></i> Colocar aquí</a>
+          <a id="hueco-qr" class="btn btn-outline-secondary btn-sm" href="#" target="_blank" rel="noopener"><i class="bi bi-qr-code"></i> Etiqueta QR</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(()=>{
+  const FILAS={{ filas_json|safe }};
+  const ALMACEN_ID={{ almacen.id }};
+  const byId={};FILAS.forEach(f=>f.huecos.forEach(h=>{byId[h.id]=h}));
+  const input=document.getElementById('nave-buscar'),estado=document.getElementById('nave-estado');
+  const titulo=document.getElementById('hueco-titulo'),ruta=document.getElementById('hueco-ruta'),lista=document.getElementById('hueco-lista'),acciones=document.getElementById('hueco-acciones');
+  const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const TIPOS={herramienta:'Herramienta',material:'Material',stock_epi:'EPI de stock',epi_individual:'EPI individual'};
+  function badge(i){if(i.fuera)return `<span class="badge ${i.vencida?'badge-danger':'badge-info'}">${i.quien?'la tiene '+esc(i.quien):esc(i.estado||'fuera')}${i.desde?' desde '+esc(i.desde):''}${i.vencida?' · debía volver el '+esc(i.prevista):''}</span>`;if(i.bajo_minimo)return `<span class="badge badge-danger">bajo mínimo · ${esc(i.cantidad)} ${esc(i.unidad)}</span>`;if(i.tipo==='herramienta'||i.tipo==='epi_individual')return '<span class="badge badge-success">en nave</span>';return `<span class="badge badge-info">${esc(i.cantidad)} ${esc(i.unidad)}</span>`}
+  function render(h){titulo.innerHTML=`<i class="bi bi-geo-alt-fill"></i> ${esc(h.nombre)} · ${h.items.length} ${h.items.length===1?'cosa':'cosas'}`;ruta.textContent=h.ruta||'';
+    lista.innerHTML=h.items.length?h.items.map(i=>`<a class="list-group-item list-group-item-action" href="${esc(i.url)}"><span><strong>${esc(i.nombre)}</strong><br><small class="text-muted">${esc(TIPOS[i.tipo]||i.tipo)}${i.codigo?' · '+esc(i.codigo):''}</small></span>${badge(i)}</a>`).join(''):'<div class="text-muted small py-2">Vacío. Pulsa "Colocar aquí" y escanea lo que metas.</div>';
+    document.getElementById('hueco-colocar').href='/nave/colocar?ubicacion='+h.id;document.getElementById('hueco-qr').href=`/almacenes/${ALMACEN_ID}/ubicaciones/${h.id}/qr`;acciones.hidden=false}
+  function select(id){document.querySelectorAll('.hueco.sel').forEach(e=>e.classList.remove('sel'));const el=document.querySelector(`.hueco[data-id="${id}"]`);const h=byId[id];if(!h)return;if(el){el.classList.add('sel');el.scrollIntoView({block:'center',behavior:'smooth'})}render(h)}
+  document.querySelectorAll('.hueco').forEach(el=>el.addEventListener('click',()=>select(+el.dataset.id)));
+  function renderResultados(res){titulo.innerHTML='<i class="bi bi-search"></i> Resultados';ruta.textContent='';acciones.hidden=true;
+    lista.innerHTML=res.map(r=>{const donde=r.ubicacion_id?`<button type="button" class="btn btn-sm btn-primary" data-sel="${r.ubicacion_id}"><i class="bi bi-geo-alt-fill"></i> ${esc(r.ubicacion)}</button>`:(r.colocable?`<a class="btn btn-sm btn-outline-warning" href="/nave/colocar?codigo=${encodeURIComponent(r.codigo||r.nombre)}">Sin hueco · Colocar</a>`:'<span class="badge badge-secondary">sin hueco</span>');return `<div class="list-group-item"><span><strong>${esc(r.nombre)}</strong><br><small class="text-muted">${esc(TIPOS[r.tipo]||r.tipo)}${r.codigo?' · '+esc(r.codigo):''}${r.estado?' · '+esc(r.estado):''}</small></span>${donde}</div>`}).join('');
+    lista.querySelectorAll('[data-sel]').forEach(b=>b.onclick=()=>select(+b.dataset.sel))}
+  async function buscar(){const q=input.value.trim();if(!q)return;estado.textContent='Buscando…';try{const r=await fetch('/api/nave/donde?q='+encodeURIComponent(q),{headers:{Accept:'application/json'}});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo buscar');const res=d.resultados||[];if(!res.length){estado.textContent='No se ha encontrado nada con "'+q+'".';return}
+    if(res.length===1&&res[0].ubicacion_id){select(res[0].ubicacion_id);estado.textContent=`${res[0].nombre}: ${res[0].ubicacion}${res[0].ruta?' ('+res[0].ruta+')':''}`;return}
+    estado.textContent=res.length+' resultado(s).';renderResultados(res)}catch(e){estado.textContent=e.message}}
+  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar()}});document.getElementById('nave-buscar-btn').onclick=buscar;
+  document.addEventListener('mrd:scanner-code',e=>{e.preventDefault();input.value=e.detail.code;buscar()});
+  const pre=new URLSearchParams(location.search);if(pre.get('ubicacion')&&byId[+pre.get('ubicacion')])select(+pre.get('ubicacion'));if(pre.get('buscar')){input.value=pre.get('buscar');buscar()}
+})();
+</script>
+{% endblock %}

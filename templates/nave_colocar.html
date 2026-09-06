@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Colocar por escáner{% endblock %}
+{% block breadcrumb %}
+<a href="/">Inicio</a>
+<span class="sep">/</span>
+<a href="/nave">Vista de la nave</a>
+<span class="sep">/</span>
+<span class="current">Colocar</span>
+{% endblock %}
+{% block content %}
+<style>
+.colocar-hueco{border:2px dashed rgba(148,163,184,.6);border-radius:14px;padding:16px;text-align:center}
+.colocar-hueco.activo{border-style:solid;border-color:#22d3ee;background:rgba(34,211,238,.08)}
+.colocar-hueco h2{margin:0;font-size:1.35rem}
+.colocar-pasos{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.colocar-paso{display:flex;gap:10px;align-items:flex-start;border:1px solid rgba(148,163,184,.3);border-radius:10px;padding:10px}
+.colocar-paso b{background:#22d3ee;color:#0b1220;border-radius:999px;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+#colocados .list-group-item{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+</style>
+<div class="page-header-row mb-3">
+  <div>
+    <h1 class="page-title"><i class="bi bi-upc-scan"></i> Colocar por escáner</h1>
+    <p class="page-subtitle">{{ almacen.nombre }} · Escanea el QR del hueco y después cada cosa que metas en él. Sin teclear.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/nave"><i class="bi bi-grid-3x3-gap-fill"></i> Vista de la nave</a>
+</div>
+
+<div class="colocar-pasos mb-3">
+  <div class="colocar-paso"><b>1</b><div><strong>Escanea el hueco</strong><br><small class="text-muted">La etiqueta QR del contenedor, balda o estantería. O elígelo en la lista.</small></div></div>
+  <div class="colocar-paso"><b>2</b><div><strong>Escanea las cosas</strong><br><small class="text-muted">Herramientas, materiales o EPI. Cada escaneo se guarda al instante; si estaba en otro hueco, se mueve.</small></div></div>
+  <div class="colocar-paso"><b>3</b><div><strong>Siguiente hueco</strong><br><small class="text-muted">Escanea otro hueco y sigue. Quedan sin hueco: {{ sin_ubicacion.herramientas }} herramientas y {{ sin_ubicacion.materiales }} materiales.</small></div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-body">
+        <div id="hueco-box" class="colocar-hueco {% if hueco_actual %}activo{% endif %}" data-id="{{ hueco_actual.id if hueco_actual else '' }}">
+          <div class="small text-muted">Ahora colocando en</div>
+          <h2 id="hueco-nombre">{{ hueco_actual.nombre if hueco_actual else 'Escanea un hueco' }}</h2>
+          <div class="small text-muted" id="hueco-ruta">{{ hueco_actual.ruta_completa if hueco_actual else '' }}</div>
+        </div>
+        <div class="mt-2">
+          <select id="hueco-select" class="form-select">
+            <option value="">…o elige el hueco en la lista</option>
+            {% for u in huecos %}<option value="{{ u.id }}" data-ruta="{{ u.ruta_completa }}" {% if hueco_actual and u.id == hueco_actual.id %}selected{% endif %}>{{ u.nombre }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="input-group input-group-lg mt-3">
+          <input id="nave-scan" class="form-control" placeholder="Escanea o escribe el código…" autocomplete="off" autofocus>
+          <button id="nave-scan-btn" class="btn btn-primary" type="button"><i class="bi bi-check-lg"></i> Colocar</button>
+        </div>
+        <div id="scan-estado" class="scan-state small mt-2"></div>
+        {% if codigo_pendiente %}
+        <div class="alert alert-warning mt-2 mb-0" id="pendiente-aviso">Pendiente de colocar: <strong>{{ codigo_pendiente }}</strong>. Escanea o elige el hueco y se colocará solo.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-list-check"></i> Colocado en esta sesión</div><span class="table-meta" id="colocados-resumen">0 cosas</span></div>
+      <div class="card-body p-0"><div class="list-group list-group-flush" id="colocados"><div class="text-muted small p-3" id="colocados-vacio">Aquí irán apareciendo las cosas según las escanees.</div></div></div>
+    </div>
+  </div>
+</div>
+<script>
+(()=>{
+  const box=document.getElementById('hueco-box'),nombre=document.getElementById('hueco-nombre'),ruta=document.getElementById('hueco-ruta'),sel=document.getElementById('hueco-select');
+  const scan=document.getElementById('nave-scan'),estado=document.getElementById('scan-estado'),lista=document.getElementById('colocados'),resumen=document.getElementById('colocados-resumen');
+  const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const TIPOS={herramienta:'Herramienta',material:'Material',stock_epi:'EPI de stock',epi_individual:'EPI individual'};
+  let hueco=Number(box.dataset.id)||null,pendiente={{ codigo_pendiente|tojson }},busy=false,total=0;const huecosTocados=new Set();
+  function setHueco(id,n,r){hueco=id;nombre.textContent=n;ruta.textContent=r||'';box.classList.add('activo');if(sel.value!==String(id))sel.value=String(id);huecosTocados.add(id);estado.className='scan-state ok';estado.textContent='Hueco '+n+' seleccionado. Escanea lo que metas dentro.';if(pendiente){const p=pendiente;pendiente=null;const av=document.getElementById('pendiente-aviso');if(av)av.remove();procesar(p)}}
+  sel.onchange=()=>{const o=sel.selectedOptions[0];if(o&&o.value)setHueco(Number(o.value),o.textContent.trim(),o.dataset.ruta||'')};
+  function anota(d){document.getElementById('colocados-vacio')?.remove();total++;const el=document.createElement('div');el.className='list-group-item';el.innerHTML=`<span><strong>${esc(d.nombre)}</strong><br><small class="text-muted">${esc(TIPOS[d.tipo]||d.tipo)}${d.codigo?' · '+esc(d.codigo):''}</small></span><span class="badge ${d.ya_estaba?'badge-secondary':'badge-success'}">${d.ya_estaba?'ya estaba en '+esc(d.ubicacion):'colocado en '+esc(d.ubicacion)+(d.anterior?' (antes en '+esc(d.anterior)+')':'')}</span>`;lista.prepend(el);resumen.textContent=`${total} ${total===1?'cosa':'cosas'} en ${huecosTocados.size} hueco(s)`;if(navigator.vibrate)navigator.vibrate(60)}
+  async function procesar(raw){const code=String(raw||scan.value).trim();if(!code||busy)return;busy=true;scan.value='';estado.className='scan-state';estado.textContent='Identificando '+code+'…';
+    try{const r=await fetchCsrf('/api/nave/colocar',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({codigo:code,ubicacion_id:hueco})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No reconocido');
+      if(d.tipo==='ubicacion'){setHueco(d.id,d.nombre,d.ruta);return}
+      anota(d);estado.className='scan-state ok';estado.textContent=`${d.nombre} → ${d.ubicacion}${d.anterior?' (movido desde '+d.anterior+')':''}`}
+    catch(e){estado.className='scan-state err';estado.textContent=e.message}finally{busy=false;scan.focus()}}
+  scan.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();procesar()}});document.getElementById('nave-scan-btn').onclick=()=>procesar();
+  document.addEventListener('mrd:scanner-code',e=>{e.preventDefault();procesar(e.detail.code)});
+  if(hueco&&pendiente){const p=pendiente;pendiente=null;const av=document.getElementById('pendiente-aviso');if(av)av.remove();procesar(p)}
+})();
+</script>
+{% endblock %}

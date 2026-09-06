@@ -1809,6 +1809,14 @@ class AlbaranSalida(Base):
         return (fin - self.fecha_salida).days
 
     @property
+    def retorno_vencido(self):
+        """Solo hay retraso si se fijó fecha de retorno y ya pasó sin volver.
+        Estar fuera sin plazo es lo normal (2.7.51)."""
+        if self.tipo_documento == 'entrada' or self.fecha_retorno_real or not self.fecha_retorno_prevista:
+            return False
+        return self.fecha_retorno_prevista < datetime.utcnow()
+
+    @property
     def todo_retornado(self):
         return all(i.retornado for i in self.items) if self.items else False
 

@@ -30,7 +30,7 @@
     </thead>
     <tbody>
       {% for alb in albaranes %}
-      <tr class="{% if alb.estado == 'abierto' and alb.dias_fuera > 7 %}table-warning{% endif %}">
+      <tr class="{% if alb.estado == 'abierto' and alb.retorno_vencido %}table-warning{% endif %}">
         <td class="fw-bold font-monospace">{{ alb.numero }}</td>
         <td>{% if alb.tipo_documento == 'entrada' %}<span class="badge bg-success">Entrada</span>{% else %}<span class="badge bg-danger">Suministro / salida</span>{% endif %}</td>
         <td><small>{{ alb.fecha_salida.strftime("%d/%m/%Y %H:%M") }}</small></td>

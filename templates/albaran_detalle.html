@@ -43,7 +43,7 @@
   <div class="col-md-3">
     <div class="card text-center">
       <div class="card-body py-3">
-        <div class="h4 fw-bold {% if alb.dias_fuera > 7 %}text-warning{% endif %}">{{ alb.dias_fuera }}d</div>
+        <div class="h4 fw-bold {% if alb.retorno_vencido %}text-warning{% endif %}">{{ alb.dias_fuera }}d</div>
         <div class="small text-muted">Dias fuera</div>
       </div>
     </div>

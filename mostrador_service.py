@@ -744,9 +744,13 @@ def operate_counter(
             cached_tool = db.get(Herramienta, item_id)
             if cached_tool:
                 db.expire(cached_tool)
+            hueco_nombre = None
+            if action == "entrada" and cached_tool is not None and cached_tool.ubicacion_id:
+                hueco = db.get(Ubicacion, cached_tool.ubicacion_id)
+                hueco_nombre = hueco.nombre if hueco else None
             results.append({
                 "tipo": kind, "id": item_id, "nombre": moved.codigo, "cantidad": 1,
-                "movimiento_id": moved.movimiento_id,
+                "movimiento_id": moved.movimiento_id, "ubicacion": hueco_nombre,
             })
         elif kind in {"material", "stock_epi", "variante"}:
             delta = -quantity if action == "salida" else quantity
