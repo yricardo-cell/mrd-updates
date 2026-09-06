@@ -1,22 +1,60 @@
-{% extends "base.html" %}
-{% block title %}Pedidos a proveedor{% endblock %}
-{% block content %}
-<style>.ops-hero{background:linear-gradient(135deg,#1e3a5f,#0f766e);color:white;padding:22px;border-radius:18px}.ops-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:16px;margin-top:16px}@media(max-width:800px){.ops-grid{grid-template-columns:1fr}}</style>
-<section class="ops-hero"><h1><i class="bi bi-cart-check"></i> Pedidos · {{ almacen.nombre }}</h1><p>Reponer sin mezclar almacenes. Las recepciones admiten lotes y caducidad.</p></section>
-<div class="ops-grid">
- <section class="card"><div class="card-header"><strong>Crear propuesta</strong></div><div class="card-body">
-  <label class="form-label">Proveedor</label><input id="supplier" class="form-control mb-2" placeholder="Nombre del proveedor">
-  <label class="form-label">O escanea una referencia concreta</label><input id="purchase-code" class="form-control mb-2" autocomplete="off" placeholder="Código QR / pistola">
-  <label class="form-label">Cantidad</label><input id="purchase-qty" class="form-control mb-3" type="number" min="1" value="1">
-  <label class="d-flex gap-2 mb-3"><input id="include-low" type="checkbox" checked> Incluir todo el stock bajo</label>
-  <button id="create-order" class="btn btn-primary w-100">Crear pedido borrador</button><div id="order-state" class="small mt-2"></div>
- </div></section>
- <section class="card"><div class="card-header"><strong>Necesidades detectadas</strong><span class="badge bg-danger">{{ materiales_bajos|length + epis_bajos|length }}</span></div><div class="card-body">
- {% for item in materiales_bajos %}<div class="d-flex justify-content-between border-bottom py-2"><span><b>{{ item.nombre }}</b><small class="d-block text-muted">{{ item.codigo }}</small></span><span>{{ item.stock_actual }} / mín. {{ item.stock_minimo }}</span></div>{% endfor %}
- {% for item in epis_bajos %}<div class="d-flex justify-content-between border-bottom py-2"><span><b>{{ item.nombre_display }}</b><small class="d-block text-muted">{{ item.codigo }}</small></span><span>{{ item.cantidad }} / mín. {{ item.stock_minimo }}</span></div>{% endfor %}
- {% if not materiales_bajos and not epis_bajos %}<p class="text-success">No hay roturas de stock.</p>{% endif %}
- </div></section>
+{% extends "base.html" %}{% block title %}Pedidos a proveedor{% endblock %}{% block content %}
+<section class="ops-hero"><h1><i class="bi bi-cart-check"></i> Pedidos · {{ almacen.nombre }}</h1><p>1 · Marca lo que falta → 2 · Revisa el pedido → 3 · Recíbelo cuando llegue. Sin formularios largos.</p></section>
+<div class="d-flex gap-2 flex-wrap mb-3">
+  <span class="badge badge-warning">{{ necesidades|length }} referencias bajo mínimo</span>
+  <span class="badge badge-gray">{{ necesidades|selectattr('en_pedido')|list|length }} ya en un pedido abierto</span>
+  <a class="badge badge-primary" href="#pedidos">{{ pendientes_recibir }} pedidos pendientes de recibir</a>
 </div>
-<section class="card mt-3"><div class="card-header"><strong>Histórico de pedidos</strong></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Número</th><th>Proveedor</th><th>Fecha</th><th>Estado</th><th></th></tr></thead><tbody>{% for p in pedidos %}<tr><td><b>{{ p.numero }}</b></td><td>{{ p.proveedor or 'Sin indicar' }}</td><td>{{ p.fecha_pedido.strftime('%d/%m/%Y') }}</td><td><span class="badge bg-{% if p.estado == 'recibido' %}success{% elif p.estado == 'cancelado' %}secondary{% else %}warning{% endif %}">{{ p.estado }}</span></td><td><a class="btn btn-sm btn-outline-primary" href="/pedidos-proveedor/{{ p.id }}">Abrir</a></td></tr>{% else %}<tr><td colspan="5" class="text-muted">Todavía no hay pedidos.</td></tr>{% endfor %}</tbody></table></div></section>
-<script>document.getElementById('create-order').onclick=async()=>{const b=document.getElementById('create-order'),s=document.getElementById('order-state');b.disabled=true;s.textContent='Creando…';try{const r=await fetch('/api/pedidos-proveedor',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},redirect:'manual',body:JSON.stringify({proveedor:document.getElementById('supplier').value,incluir_stock_bajo:document.getElementById('include-low').checked,codigo:document.getElementById('purchase-code').value||null,cantidad:Number(document.getElementById('purchase-qty').value)||1})});if(r.status===0||r.type==='opaqueredirect'){location.href='/login';return}const d=await r.json();if(!r.ok)throw Error(d.detail||'No se pudo crear');location.href=d.url}catch(e){s.textContent=e.message;s.className='small mt-2 text-danger';b.disabled=false}};</script>
+
+<section class="card mb-3" id="que-falta">
+  <div class="card-header"><div class="card-title"><i class="bi bi-1-circle"></i> Qué falta</div><span class="table-meta">cantidad sugerida: hasta el doble del mínimo, en paquetes completos</span></div>
+  <div class="card-body">
+    {% if necesidades %}
+    <div class="table-responsive"><table class="mrd-table" id="tabla-necesidades"><thead><tr><th><input type="checkbox" id="marcar-todo" checked aria-label="Marcar todo"></th><th>Referencia</th><th>Stock</th><th>Pedir</th></tr></thead><tbody>
+      {% for n in necesidades %}
+      <tr class="necesidad" data-tipo="{{ n.tipo }}" data-id="{{ n.id }}" data-codigo="{{ n.codigo }}">
+        <td><input type="checkbox" class="marca" {% if not n.en_pedido or marcar == n.codigo %}checked{% endif %} {% if n.en_pedido %}data-en-pedido="{{ n.en_pedido }}"{% endif %}></td>
+        <td><strong>{{ n.nombre }}</strong> <small class="text-muted">{{ n.codigo }}</small>{% if n.en_pedido %}<br><span class="badge badge-gray">ya en {{ n.en_pedido }}</span>{% endif %}</td>
+        <td>{{ '%g' % n.stock }} / mín. {{ '%g' % n.minimo }}</td>
+        <td><div class="d-flex align-items-center gap-2"><input type="number" class="form-control form-control-sm cantidad" min="1" step="{{ n.paquete }}" value="{{ '%g' % n.sugerida }}" aria-label="Cantidad a pedir"><small class="text-muted">{% if n.paquete > 1 %}paq. de {{ n.paquete }}{% else %}{{ n.unidad }}{% endif %}</small></div></td>
+      </tr>
+      {% endfor %}
+    </tbody></table></div>
+    {% else %}<p class="text-success mb-0"><i class="bi bi-check-circle me-1"></i> No hay roturas de stock.</p>{% endif %}
+    <div class="row g-2 mt-3 align-items-end">
+      <div class="col-md-4"><label class="form-label" for="proveedor-sel">Proveedor</label><select id="proveedor-sel" class="form-select"><option value="">Elegir proveedor…</option>{% for p in proveedores %}<option value="{{ p.id }}">{{ p.nombre }}{% if p.telefono %} · {{ p.telefono }}{% endif %}</option>{% endfor %}<option value="otro">Otro (escribir nombre)</option></select></div>
+      <div class="col-md-3" id="proveedor-otro-wrap" hidden><label class="form-label" for="proveedor-otro">Nombre del proveedor</label><input id="proveedor-otro" class="form-control" maxlength="150"></div>
+      <div class="col-md-2"><label class="form-label" for="fecha-prevista">Fecha prevista</label><input id="fecha-prevista" type="date" class="form-control"></div>
+      <div class="col-md-3"><label class="form-label" for="anadir-codigo">Añadir por código</label><div class="d-flex gap-2"><input id="anadir-codigo" class="form-control" placeholder="QR / pistola" autocomplete="off"><input id="anadir-cantidad" type="number" class="form-control" min="1" value="1" aria-label="Cantidad"></div></div>
+    </div>
+    <div class="d-flex gap-2 align-items-center mt-3 flex-wrap"><button id="crear-pedido" class="btn btn-primary"><i class="bi bi-cart-plus me-1"></i> Crear pedido con lo marcado</button><span id="resumen-marcado" class="text-muted small"></span><span id="order-state" class="small"></span></div>
+  </div>
+</section>
+
+<section class="card" id="pedidos">
+  <div class="card-header"><div class="card-title"><i class="bi bi-clock-history"></i> Pedidos</div><span class="table-meta">{{ pedidos|length }} en total</span></div>
+  <div class="table-responsive"><table class="mrd-table mb-0"><thead><tr><th>Número</th><th>Proveedor</th><th>Fecha</th><th>Líneas</th><th>Estado</th><th></th></tr></thead><tbody>
+    {% for p in pedidos %}<tr><td><b>{{ p.numero }}</b></td><td>{{ p.proveedor or 'Sin indicar' }}</td><td>{{ p.fecha_pedido.strftime('%d/%m/%Y') }}</td><td>{{ p.lineas|length }}</td><td><span class="badge {{ 'badge-warning' if p.estado in ('enviado','parcial') else ('badge-success' if p.estado == 'recibido' else 'badge-gray') }}">{{ p.estado }}</span></td><td><a class="btn btn-sm btn-outline-primary" href="/pedidos-proveedor/{{ p.id }}">{{ 'Recibir' if p.estado in ('enviado','parcial') else 'Abrir' }}</a></td></tr>{% else %}<tr><td colspan="6" class="text-muted">Todavía no hay pedidos.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+<script>
+(()=>{const csrf=()=>(document.cookie.split('; ').find(v=>v.startsWith('mrd_csrf='))||'').split('=').slice(1).join('');
+const filas=[...document.querySelectorAll('tr.necesidad')],resumen=document.getElementById('resumen-marcado'),estado=document.getElementById('order-state');
+const sel=document.getElementById('proveedor-sel'),otroWrap=document.getElementById('proveedor-otro-wrap');
+function actualizar(){const marcadas=filas.filter(f=>f.querySelector('.marca').checked);if(resumen)resumen.textContent=marcadas.length?marcadas.length+' línea'+(marcadas.length===1?'':'s')+' marcada'+(marcadas.length===1?'':'s'):'Nada marcado';}
+filas.forEach(f=>f.querySelector('.marca').addEventListener('change',actualizar));
+const todo=document.getElementById('marcar-todo');if(todo)todo.addEventListener('change',()=>{filas.forEach(f=>{f.querySelector('.marca').checked=todo.checked});actualizar()});
+if(sel)sel.addEventListener('change',()=>{otroWrap.hidden=sel.value!=='otro'});
+actualizar();
+document.getElementById('crear-pedido').onclick=async()=>{const b=document.getElementById('crear-pedido');const lineas=filas.filter(f=>f.querySelector('.marca').checked).map(f=>({tipo:f.dataset.tipo,objeto_id:Number(f.dataset.id),cantidad:Number(f.querySelector('.cantidad').value)||1}));
+ const codigo=document.getElementById('anadir-codigo').value.trim();if(!lineas.length&&!codigo){estado.className='small text-danger';estado.textContent='Marca al menos una referencia o escribe un código.';return}
+ const enPedido=filas.filter(f=>f.querySelector('.marca').checked&&f.querySelector('.marca').dataset.enPedido);if(enPedido.length&&!confirm(enPedido.length+' referencia(s) ya están en un pedido abierto. ¿Pedirlas otra vez?'))return;
+ b.disabled=true;estado.className='small';estado.textContent='Creando pedido…';
+ const cab={'Content-Type':'application/json','Accept':'application/json','X-CSRF-Token':csrf()};
+ try{let r,d;if(lineas.length){r=await fetch('/api/pedidos-proveedor/seleccion',{method:'POST',headers:cab,redirect:'manual',body:JSON.stringify({proveedor_id:(sel.value&&sel.value!=='otro')?Number(sel.value):null,proveedor:sel.value==='otro'?document.getElementById('proveedor-otro').value:'',fecha_prevista:document.getElementById('fecha-prevista').value||null,lineas})});d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo crear');
+  if(codigo){await fetch('/api/pedidos-proveedor/'+d.id+'/anadir',{method:'POST',headers:cab,redirect:'manual',body:JSON.stringify({codigo,cantidad:Number(document.getElementById('anadir-cantidad').value)||1})})}}
+ else{r=await fetch('/api/pedidos-proveedor',{method:'POST',headers:cab,redirect:'manual',body:JSON.stringify({proveedor:sel.value==='otro'?document.getElementById('proveedor-otro').value:(sel.selectedOptions[0]?.textContent.split(' · ')[0]||''),incluir_stock_bajo:false,codigo,cantidad:Number(document.getElementById('anadir-cantidad').value)||1})});d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo crear')}
+  estado.textContent='Pedido creado. Abriendo para revisar…';location.href=d.url}catch(err){estado.className='small text-danger';estado.textContent=err.message;b.disabled=false}};
+})();
+</script>
 {% endblock %}

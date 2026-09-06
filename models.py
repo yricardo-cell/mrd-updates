@@ -1953,6 +1953,7 @@ class PedidoProveedor(Base):
     numero = Column(String(40), nullable=False, unique=True, index=True)
     almacen_id = Column(Integer, ForeignKey("almacenes.id"), nullable=False, index=True)
     proveedor = Column(String(150), nullable=True)
+    proveedor_id = Column(Integer, ForeignKey("proveedores.id"), nullable=True)  # pedidos 2.7.50
     estado = Column(String(20), nullable=False, default="borrador", index=True)
     fecha_pedido = Column(DateTime, nullable=False, server_default=func.now())
     fecha_prevista = Column(Date, nullable=True)
@@ -1962,6 +1963,7 @@ class PedidoProveedor(Base):
 
     almacen = relationship("Almacen", foreign_keys=[almacen_id])
     creado_por = relationship("Usuario", foreign_keys=[creado_por_id])
+    proveedor_rel = relationship("Proveedor", foreign_keys=[proveedor_id])
     lineas = relationship("LineaPedidoProveedor", back_populates="pedido", cascade="all, delete-orphan", order_by="LineaPedidoProveedor.id")
 
 

@@ -1249,3 +1249,48 @@ def exportar_tabla_excel(titulo: str, headers: list, rows: list, col_w: list | N
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def exportar_pedido_pdf(pedido, proveedor=None, company_name: str = "MRD ESTRUCTURAS") -> bytes:
+    """PDF de un pedido a proveedor para enviarlo por correo o WhatsApp (2.7.50)."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+    from reportlab.lib.styles import ParagraphStyle
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=1.5*cm, rightMargin=1.5*cm, topMargin=1.5*cm, bottomMargin=1.5*cm)
+    azul = colors.HexColor("#1B4F8A"); gris = colors.HexColor("#6C757D")
+    h1 = ParagraphStyle("h1", fontSize=16, textColor=azul, fontName="Helvetica-Bold", spaceAfter=2)
+    normal = ParagraphStyle("n", fontSize=10, leading=13)
+    small = ParagraphStyle("s", fontSize=8.5, textColor=gris, leading=11)
+    nombre_prov = (proveedor.nombre if proveedor else None) or pedido.proveedor or "Proveedor sin indicar"
+    contacto = ""
+    if proveedor:
+        contacto = " · ".join(x for x in (proveedor.contacto, proveedor.telefono, proveedor.email) if x)
+    story = [
+        Paragraph(company_name, h1),
+        Paragraph(f"Pedido {pedido.numero} — {pedido.fecha_pedido.strftime('%d/%m/%Y') if pedido.fecha_pedido else ''}", normal),
+        Paragraph(f"Proveedor: <b>{nombre_prov}</b>{(' · ' + contacto) if contacto else ''}", normal),
+        Paragraph(f"Entregar en: {pedido.almacen.nombre if pedido.almacen else ''}"
+                  + (f" · Fecha prevista: {pedido.fecha_prevista.strftime('%d/%m/%Y')}" if pedido.fecha_prevista else ""), small),
+        HRFlowable(width="100%", thickness=2, color=azul, spaceAfter=8),
+    ]
+    data = [["Referencia", "Descripción", "Cantidad", "Último precio"]]
+    for l in pedido.lineas:
+        data.append([l.referencia or "", l.descripcion or "", f"{l.cantidad_pedida:g}",
+                     f"{l.precio_anterior:.2f} €" if l.precio_anterior is not None else ""])
+    t = Table(data, colWidths=[3.5*cm, 9*cm, 2.5*cm, 3*cm], repeatRows=1)
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), azul), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CCCCCC")), ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F4F6F9")]),
+    ]))
+    story += [t, Spacer(1, 10)]
+    if pedido.notas:
+        story.append(Paragraph(f"Notas: {pedido.notas}", small))
+    story.append(Paragraph(f"Generado por MRD TOOL CONTROL el {datetime.now().strftime('%d/%m/%Y %H:%M')}", small))
+    doc.build(story)
+    return buf.getvalue()

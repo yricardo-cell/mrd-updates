@@ -40,7 +40,7 @@
   </a>
   <a href="/materiales/alertas" class="dash-task {% if dash_hoy.materiales_bajo > 0 %}is-warn{% else %}is-ok{% endif %}">
     <small>Materiales bajo mínimo</small><strong>{{ dash_hoy.materiales_bajo }}</strong>
-    <span>{{ dash_hoy.materiales_bajo_nombres|join(', ') if dash_hoy.materiales_bajo_nombres else 'stock en orden' }}</span>
+    <span>{{ dash_hoy.materiales_bajo_nombres|join(', ') if dash_hoy.materiales_bajo_nombres else 'stock en orden' }}{% if dash_hoy.materiales_bajo > 0 %} · <a href="/pedidos-proveedor"><i class="bi bi-cart-plus"></i> Pedir</a>{% endif %}</span>
     <em>Hacer pedido <i class="bi bi-arrow-right"></i></em>
   </a>
   <a href="/movimientos" class="dash-task {% if dash_hoy.devoluciones_vencidas > 0 %}is-urgent{% else %}is-ok{% endif %}">

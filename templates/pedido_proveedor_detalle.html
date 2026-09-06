@@ -1,9 +1,62 @@
 {% extends "base.html" %}{% block title %}{{ pedido.numero }}{% endblock %}{% block content %}
-<section class="card"><div class="card-header"><div><h2 class="mb-0">{{ pedido.numero }}</h2><small>{{ pedido.almacen.nombre }} · {{ pedido.proveedor or 'Proveedor pendiente' }}</small></div><span class="badge bg-primary">{{ pedido.estado }}</span></div><div class="card-body">
-{% if pedido.estado == 'borrador' %}<button id="send-order" class="btn btn-primary mb-3">Marcar como enviado</button>{% endif %}
-<div class="table-responsive"><table class="table"><thead><tr><th>Referencia</th><th>Descripción</th><th>Pedido</th><th>Recibido</th><th>Recibir ahora</th><th>Lote / caducidad</th></tr></thead><tbody>
-{% for line in pedido.lineas %}{% set pending=line.cantidad_pedida-line.cantidad_recibida %}<tr class="order-line" data-id="{{ line.id }}" data-pending="{{ pending }}"><td><code>{{ line.referencia }}</code></td><td>{{ line.descripcion }}</td><td>{{ '%g'|format(line.cantidad_pedida) }}</td><td>{{ '%g'|format(line.cantidad_recibida) }}</td><td><input class="form-control qty" type="number" min="0" max="{{ pending }}" value="{{ pending if pending > 0 else 0 }}"></td><td><input class="form-control lot mb-1" placeholder="Lote (opcional)"><input class="form-control expiry" type="date"></td></tr>{% endfor %}
-</tbody></table></div>
-{% if pedido.estado in ['enviado','parcial'] %}<button id="receive-order" class="btn btn-success btn-lg">Registrar recepción</button>{% endif %}<div id="order-detail-state" class="small mt-2"></div></div></section>
-<script>const state=document.getElementById('order-detail-state');const send=document.getElementById('send-order');if(send)send.onclick=async()=>{send.disabled=true;const r=await fetch('/api/pedidos-proveedor/{{ pedido.id }}/enviar',{method:'POST',headers:{'Accept':'application/json'},redirect:'manual'});if(r.ok)location.reload();else{const d=await r.json();state.textContent=d.detail||'No se pudo enviar';send.disabled=false}};const receive=document.getElementById('receive-order');if(receive)receive.onclick=async()=>{const lines=[...document.querySelectorAll('.order-line')].map(row=>({linea_id:Number(row.dataset.id),cantidad:Number(row.querySelector('.qty').value)||0,numero_lote:row.querySelector('.lot').value||null,fecha_caducidad:row.querySelector('.expiry').value||null})).filter(x=>x.cantidad>0);if(!lines.length){state.textContent='Indica alguna cantidad';return}receive.disabled=true;try{const r=await fetch('/api/pedidos-proveedor/{{ pedido.id }}/recibir',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},redirect:'manual',body:JSON.stringify({event_id:'order-'+crypto.randomUUID().replaceAll('-',''),lineas:lines})});if(r.status===0||r.type==='opaqueredirect'){location.href='/login';return}const d=await r.json();if(!r.ok)throw Error(d.detail||'No se pudo recibir');location.reload()}catch(e){state.textContent=e.message;state.className='small mt-2 text-danger';receive.disabled=false}};</script>
+{% set borrador = pedido.estado == 'borrador' %}{% set recibible = pedido.estado in ['enviado','parcial'] %}
+<section class="card mb-3"><div class="card-header"><div><h2 class="mb-0">{{ pedido.numero }}</h2><small>{{ pedido.almacen.nombre }} · creado por {{ pedido.creado_por.nombre if pedido.creado_por else '—' }} · {{ pedido.fecha_pedido.strftime('%d/%m/%Y %H:%M') }}</small></div><span class="badge {{ 'badge-warning' if recibible else ('badge-success' if pedido.estado == 'recibido' else 'badge-gray') }}">{{ pedido.estado }}</span></div>
+<div class="card-body">
+  <p class="text-muted small mb-2">{% if borrador %}2 · Revisa el pedido: cantidades, líneas, proveedor. Después envíalo.{% elif recibible %}3 · Recibe lo que llega. Lo que no llegue se queda pendiente.{% else %}Pedido cerrado.{% endif %}</p>
+  <div class="row g-2 align-items-end mb-3">
+    <div class="col-md-4"><label class="form-label" for="proveedor-sel">Proveedor</label>
+      {% if borrador %}<select id="proveedor-sel" class="form-select"><option value="">Sin indicar</option>{% for p in proveedores %}<option value="{{ p.id }}" {% if pedido.proveedor_id == p.id %}selected{% endif %}>{{ p.nombre }}{% if p.telefono %} · {{ p.telefono }}{% endif %}</option>{% endfor %}<option value="otro" {% if pedido.proveedor and not pedido.proveedor_id %}selected{% endif %}>Otro (escribir nombre)</option></select>
+      {% else %}<div class="form-control-plaintext"><strong>{{ pedido.proveedor or 'Sin indicar' }}</strong>{% if pedido.proveedor_rel and pedido.proveedor_rel.telefono %} · {{ pedido.proveedor_rel.telefono }}{% endif %}</div>{% endif %}</div>
+    {% if borrador %}<div class="col-md-3" id="proveedor-otro-wrap" {% if pedido.proveedor_id or not pedido.proveedor %}hidden{% endif %}><label class="form-label" for="proveedor-otro">Nombre</label><input id="proveedor-otro" class="form-control" maxlength="150" value="{{ pedido.proveedor if not pedido.proveedor_id else '' }}"></div>{% endif %}
+    <div class="col-md-2"><label class="form-label" for="fecha-prevista">Fecha prevista</label>{% if borrador %}<input id="fecha-prevista" type="date" class="form-control" value="{{ pedido.fecha_prevista.strftime('%Y-%m-%d') if pedido.fecha_prevista else '' }}">{% else %}<div class="form-control-plaintext">{{ pedido.fecha_prevista.strftime('%d/%m/%Y') if pedido.fecha_prevista else '—' }}</div>{% endif %}</div>
+    {% if borrador %}<div class="col-md-3"><button id="guardar-cabecera" class="btn btn-outline-primary w-100"><i class="bi bi-check2"></i> Guardar proveedor y fecha</button></div>{% endif %}
+  </div>
+  <div class="table-responsive"><table class="mrd-table"><thead><tr><th>Referencia</th><th>Descripción</th><th>Pedido</th>{% if not borrador %}<th>Recibido</th>{% endif %}{% if recibible %}<th>Llega ahora</th><th>Lote / caducidad</th>{% endif %}{% if borrador %}<th></th>{% endif %}</tr></thead><tbody>
+  {% for line in pedido.lineas %}{% set pending = line.cantidad_pedida - line.cantidad_recibida %}
+  <tr class="order-line" data-id="{{ line.id }}" data-pending="{{ pending }}">
+    <td><code class="mrd-code">{{ line.referencia }}</code></td><td>{{ line.descripcion }}</td>
+    <td>{% if borrador %}<input class="form-control form-control-sm cantidad-linea" type="number" min="1" value="{{ '%g'|format(line.cantidad_pedida) }}" aria-label="Cantidad">{% else %}{{ '%g'|format(line.cantidad_pedida) }}{% endif %}</td>
+    {% if not borrador %}<td>{{ '%g'|format(line.cantidad_recibida) }}</td>{% endif %}
+    {% if recibible %}<td><input class="form-control form-control-sm qty" type="number" min="0" max="{{ pending }}" value="{{ pending if pending > 0 else 0 }}" aria-label="Llega ahora"></td>
+    <td><button type="button" class="btn btn-sm btn-outline-secondary toggle-lote">tiene lote</button><span class="lote-wrap" hidden><input class="form-control form-control-sm lot mb-1" placeholder="Lote"><input class="form-control form-control-sm expiry" type="date" aria-label="Caducidad"></span></td>{% endif %}
+    {% if borrador %}<td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger quitar-linea" title="Quitar línea"><i class="bi bi-x-lg"></i></button></td>{% endif %}
+  </tr>{% endfor %}
+  </tbody></table></div>
+  {% if borrador %}
+  <div class="d-flex gap-2 align-items-end flex-wrap mb-3"><div><label class="form-label" for="anadir-codigo">Añadir por código o nombre</label><input id="anadir-codigo" class="form-control" placeholder="QR / pistola / nombre" autocomplete="off"></div><div><label class="form-label" for="anadir-cantidad">Cantidad</label><input id="anadir-cantidad" type="number" class="form-control" min="1" value="1"></div><button id="anadir-linea" class="btn btn-outline-primary"><i class="bi bi-plus-lg"></i> Añadir</button></div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-secondary" href="/pedidos-proveedor/{{ pedido.id }}/pdf" target="_blank"><i class="bi bi-file-pdf"></i> PDF</a>
+    {% if whatsapp_tel %}<a class="btn btn-outline-success" target="_blank" href="https://wa.me/{{ whatsapp_tel }}?text={{ whatsapp_texto | urlencode }}"><i class="bi bi-whatsapp"></i> WhatsApp al proveedor</a>{% endif %}
+    <button id="send-order" class="btn btn-primary"><i class="bi bi-send"></i> Marcar como enviado</button>
+    <button id="cancel-order" class="btn btn-outline-danger ms-auto">Cancelar pedido</button>
+  </div>
+  {% elif recibible %}
+  <div class="d-flex gap-2 flex-wrap">
+    <button id="receive-all" class="btn btn-success btn-lg"><i class="bi bi-check2-all"></i> Ha llegado todo</button>
+    <button id="receive-order" class="btn btn-outline-success btn-lg">Registrar lo que ha llegado</button>
+    <a class="btn btn-outline-secondary" href="/pedidos-proveedor/{{ pedido.id }}/pdf" target="_blank"><i class="bi bi-file-pdf"></i> PDF</a>
+    {% if pedido.estado == 'enviado' %}<button id="cancel-order" class="btn btn-outline-danger ms-auto">Cancelar pedido</button>{% endif %}
+  </div>
+  {% endif %}
+  <div id="order-detail-state" class="small mt-2"></div>
+</div></section>
+<a href="/pedidos-proveedor" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Volver a pedidos</a>
+<script>
+(()=>{const csrf=()=>(document.cookie.split('; ').find(v=>v.startsWith('mrd_csrf='))||'').split('=').slice(1).join('');const cab={'Content-Type':'application/json','Accept':'application/json','X-CSRF-Token':csrf()};
+const state=document.getElementById('order-detail-state');const ID={{ pedido.id }};
+const post=async(url,body)=>{const r=await fetch(url,{method:'POST',headers:cab,redirect:'manual',body:body?JSON.stringify(body):null});let d={};try{d=await r.json()}catch(e){}if(!r.ok)throw new Error(d.detail||'Error '+r.status);return d};
+const fallo=e=>{state.className='small text-danger';state.textContent=e.message};
+const sel=document.getElementById('proveedor-sel'),otroWrap=document.getElementById('proveedor-otro-wrap');if(sel&&otroWrap)sel.addEventListener('change',()=>{otroWrap.hidden=sel.value!=='otro'});
+const guardar=document.getElementById('guardar-cabecera');if(guardar)guardar.onclick=async()=>{try{await post('/api/pedidos-proveedor/'+ID+'/proveedor',{proveedor_id:(sel.value&&sel.value!=='otro')?Number(sel.value):null,proveedor:sel.value==='otro'?document.getElementById('proveedor-otro').value:'',fecha_prevista:document.getElementById('fecha-prevista').value||null});location.reload()}catch(e){fallo(e)}};
+document.querySelectorAll('.cantidad-linea').forEach(inp=>inp.addEventListener('change',async()=>{const row=inp.closest('.order-line');try{await post('/api/pedidos-proveedor/'+ID+'/lineas',{linea_id:Number(row.dataset.id),cantidad:Number(inp.value)||1});state.className='small text-success';state.textContent='Cantidad guardada'}catch(e){fallo(e)}}));
+document.querySelectorAll('.quitar-linea').forEach(b=>b.onclick=async()=>{const row=b.closest('.order-line');if(!confirm('¿Quitar esta línea del pedido?'))return;try{await post('/api/pedidos-proveedor/'+ID+'/lineas',{linea_id:Number(row.dataset.id),cantidad:0});row.remove()}catch(e){fallo(e)}});
+const anadir=document.getElementById('anadir-linea');if(anadir)anadir.onclick=async()=>{const c=document.getElementById('anadir-codigo').value.trim();if(!c)return;try{await post('/api/pedidos-proveedor/'+ID+'/anadir',{codigo:c,cantidad:Number(document.getElementById('anadir-cantidad').value)||1});location.reload()}catch(e){fallo(e)}};
+const send=document.getElementById('send-order');if(send)send.onclick=async()=>{send.disabled=true;try{await post('/api/pedidos-proveedor/'+ID+'/enviar');location.reload()}catch(e){fallo(e);send.disabled=false}};
+const cancel=document.getElementById('cancel-order');if(cancel)cancel.onclick=async()=>{if(!confirm('¿Cancelar este pedido?'))return;try{await post('/api/pedidos-proveedor/'+ID+'/cancelar');location.href='/pedidos-proveedor'}catch(e){fallo(e)}};
+document.querySelectorAll('.toggle-lote').forEach(b=>b.onclick=()=>{const w=b.parentElement.querySelector('.lote-wrap');w.hidden=!w.hidden;b.hidden=true});
+const eventId=()=>'rec-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
+const recibir=async(todo)=>{const lines=[...document.querySelectorAll('.order-line')].map(row=>{const pend=Number(row.dataset.pending)||0;const q=todo?pend:Number(row.querySelector('.qty')?.value)||0;const lot=row.querySelector('.lot'),exp=row.querySelector('.expiry');return {linea_id:Number(row.dataset.id),cantidad:q,numero_lote:lot&&lot.value?lot.value:null,fecha_caducidad:exp&&exp.value?exp.value:null}}).filter(l=>l.cantidad>0);if(!lines.length){fallo(new Error('No hay cantidades que recibir'));return}try{state.className='small';state.textContent='Registrando recepción…';await post('/api/pedidos-proveedor/'+ID+'/recibir',{event_id:eventId(),lineas:lines});location.reload()}catch(e){fallo(e)}};
+const all=document.getElementById('receive-all');if(all)all.onclick=()=>recibir(true);const rec=document.getElementById('receive-order');if(rec)rec.onclick=()=>recibir(false);
+})();
+</script>
 {% endblock %}

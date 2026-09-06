@@ -173,6 +173,7 @@ from reports import (exportar_inventario_excel, exportar_movimientos_excel,
                     exportar_reparaciones_excel, exportar_inventario_pdf,
                     generar_plantilla_trabajadores, importar_trabajadores_excel,
     exportar_tabla_excel,
+    exportar_pedido_pdf,
 )
 # Sprint 5.7 updater compatibility shim
 import updater as _updater_mod
@@ -7926,9 +7927,14 @@ def supplier_orders_page(
         StockEPI.almacen_id == warehouse.id, StockEPI.stock_minimo > 0,
         StockEPI.cantidad <= StockEPI.stock_minimo,
     ).order_by(StockEPI.nombre, StockEPI.talla).all()
+    necesidades = _necesidades_pedido(db, warehouse.id, low_materials, low_epi)
+    proveedores = db.query(Proveedor).filter(Proveedor.activo == True).order_by(Proveedor.nombre).all()
+    pendientes_recibir = sum(1 for o in orders if o.estado in ("enviado", "parcial"))
     return templates.TemplateResponse(request, "pedidos_proveedor.html", ctx_base(
         request, user, db, almacen=warehouse, pedidos=orders,
         materiales_bajos=low_materials, epis_bajos=low_epi,
+        necesidades=necesidades, proveedores=proveedores, pendientes_recibir=pendientes_recibir,
+        marcar=request.query_params.get("ref", ""),
     ))
 
 
@@ -7980,6 +7986,226 @@ def supplier_order_create(
     return JSONResponse({"ok": True, "id": order.id, "url": f"/pedidos-proveedor/{order.id}"}, status_code=201)
 
 
+def _cantidad_sugerida(stock: float, minimo: float, paquete: int) -> float:
+    """Reponer hasta el doble del mínimo, en paquetes completos si los hay (2.7.50)."""
+    objetivo = max(float(minimo) * 2 - float(stock), float(minimo) - float(stock), 1.0)
+    paquete = int(paquete or 1)
+    if paquete > 1:
+        import math
+        objetivo = math.ceil(objetivo / paquete) * paquete
+    return float(objetivo)
+
+
+def _necesidades_pedido(db: Session, warehouse_id: int, low_materials, low_epi) -> list[dict]:
+    """Qué falta, con cantidad sugerida y si ya está en un pedido abierto."""
+    abiertos = db.query(PedidoProveedor).filter(
+        PedidoProveedor.almacen_id == warehouse_id, PedidoProveedor.estado.in_(("borrador", "enviado", "parcial")),
+    ).all()
+    en_pedido = {}
+    for o in abiertos:
+        for l in o.lineas:
+            en_pedido.setdefault((l.tipo, l.objeto_id), o.numero)
+    filas = []
+    for m in low_materials:
+        paquete = int(getattr(m, "unidades_por_paquete", 1) or 1)
+        filas.append({
+            "tipo": "material", "id": m.id, "nombre": m.nombre, "codigo": m.codigo or "",
+            "stock": float(m.stock_actual or 0), "minimo": float(m.stock_minimo or 0), "unidad": m.unidad or "ud",
+            "paquete": paquete, "sugerida": _cantidad_sugerida(m.stock_actual or 0, m.stock_minimo or 0, paquete),
+            "en_pedido": en_pedido.get(("material", m.id)),
+        })
+    for e in low_epi:
+        paquete = int(getattr(e, "unidades_por_paquete", 1) or 1)
+        filas.append({
+            "tipo": "stock_epi", "id": e.id, "nombre": e.nombre_display, "codigo": e.codigo or "",
+            "stock": float(e.cantidad or 0), "minimo": float(e.stock_minimo or 0), "unidad": "ud",
+            "paquete": paquete, "sugerida": _cantidad_sugerida(e.cantidad or 0, e.stock_minimo or 0, paquete),
+            "en_pedido": en_pedido.get(("stock_epi", e.id)),
+        })
+    return filas
+
+
+class PedidoSeleccionLinea(BaseModel):
+    tipo: str = Field(pattern=r"^(material|stock_epi)$")
+    objeto_id: int = Field(gt=0)
+    cantidad: float = Field(gt=0, le=1_000_000)
+
+
+class PedidoSeleccionRequest(BaseModel):
+    proveedor_id: Optional[int] = Field(default=None, gt=0)
+    proveedor: str = Field(default="", max_length=150)
+    fecha_prevista: Optional[date] = None
+    notas: str = Field(default="", max_length=1000)
+    lineas: list[PedidoSeleccionLinea] = Field(min_length=1, max_length=300)
+
+
+class PedidoLineaEditarRequest(BaseModel):
+    linea_id: int = Field(gt=0)
+    cantidad: float = Field(ge=0, le=1_000_000)   # 0 = quitar la línea
+
+
+class PedidoAnadirRequest(BaseModel):
+    codigo: str = Field(min_length=1, max_length=512)
+    cantidad: float = Field(default=1, gt=0, le=1_000_000)
+
+
+class PedidoProveedorRequest(BaseModel):
+    proveedor_id: Optional[int] = Field(default=None, gt=0)
+    proveedor: str = Field(default="", max_length=150)
+    fecha_prevista: Optional[date] = None
+    notas: str = Field(default="", max_length=1000)
+
+
+def _resolver_objeto_pedido(db: Session, warehouse_id: int, tipo: str, objeto_id: int) -> dict:
+    if tipo == "material":
+        obj = db.get(Material, objeto_id)
+        if not obj or not obj.activo or obj.almacen_id not in (None, warehouse_id):
+            raise HTTPException(404, "Material no encontrado en este almacén")
+        return {"tipo": "material", "objeto_id": obj.id, "referencia": (obj.codigo or "")[:100], "descripcion": obj.nombre[:300],
+                "precio_anterior": obj.precio_unidad}
+    if tipo == "stock_epi":
+        obj = db.get(StockEPI, objeto_id)
+        if not obj or obj.almacen_id not in (None, warehouse_id):
+            raise HTTPException(404, "Referencia de EPI no encontrada en este almacén")
+        return {"tipo": "stock_epi", "objeto_id": obj.id, "referencia": (obj.codigo or "")[:100], "descripcion": obj.nombre_display[:300],
+                "precio_anterior": None}
+    raise HTTPException(400, "Tipo de artículo no admitido en pedidos")
+
+
+def _aplicar_proveedor(db: Session, order: PedidoProveedor, proveedor_id: Optional[int], proveedor: str) -> None:
+    if proveedor_id:
+        prov = db.get(Proveedor, proveedor_id)
+        if not prov:
+            raise HTTPException(404, "Proveedor no encontrado")
+        order.proveedor_id = prov.id
+        order.proveedor = prov.nombre
+    else:
+        order.proveedor_id = None
+        order.proveedor = (proveedor or "").strip()[:150] or None
+
+
+@app.post("/api/pedidos-proveedor/seleccion")
+def supplier_order_create_selection(
+    payload: PedidoSeleccionRequest, request: Request,
+    user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db),
+):
+    """Paso 1 (2.7.50): crea un borrador solo con lo marcado y las cantidades elegidas."""
+    _require_stock_http(user)
+    warehouse = _operation_warehouse(request, user, db)
+    rows = {}
+    for l in payload.lineas:
+        data = _resolver_objeto_pedido(db, warehouse.id, l.tipo, l.objeto_id)
+        data["cantidad_pedida"] = float(l.cantidad)
+        rows[(l.tipo, l.objeto_id)] = data
+    order = PedidoProveedor(
+        numero=f"PED-{datetime.now():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}",
+        almacen_id=warehouse.id, fecha_prevista=payload.fecha_prevista,
+        notas=payload.notas.strip() or None, creado_por_id=user.id,
+    )
+    _aplicar_proveedor(db, order, payload.proveedor_id, payload.proveedor)
+    db.add(order)
+    db.flush()
+    for row in rows.values():
+        db.add(LineaPedidoProveedor(pedido_id=order.id, **row))
+    db.add(AuditoriaLog(tabla="pedidos_proveedor", registro_id=order.id, accion="crear",
+                        resumen=f"{order.numero}: {len(rows)} líneas para {warehouse.nombre}", usuario_id=user.id))
+    db.commit()
+    return JSONResponse({"ok": True, "id": order.id, "numero": order.numero, "url": f"/pedidos-proveedor/{order.id}"}, status_code=201)
+
+
+@app.post("/api/pedidos-proveedor/{order_id}/lineas")
+def supplier_order_edit_line(
+    order_id: int, payload: PedidoLineaEditarRequest,
+    user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db),
+):
+    """Paso 2 (2.7.50): cambiar cantidad o quitar una línea del borrador."""
+    _require_stock_http(user)
+    order = _supplier_order_for_user(db, user, order_id)
+    if order.estado != "borrador":
+        raise HTTPException(409, "Solo se pueden editar pedidos en borrador")
+    line = next((l for l in order.lineas if l.id == payload.linea_id), None)
+    if not line:
+        raise HTTPException(404, "Línea no encontrada")
+    if payload.cantidad <= 0:
+        db.delete(line)
+    else:
+        line.cantidad_pedida = float(payload.cantidad)
+    db.commit()
+    return JSONResponse({"ok": True, "lineas": len(order.lineas)})
+
+
+@app.post("/api/pedidos-proveedor/{order_id}/anadir")
+def supplier_order_add_line(
+    order_id: int, payload: PedidoAnadirRequest,
+    user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db),
+):
+    """Paso 2 (2.7.50): añadir una referencia por código o nombre al borrador."""
+    _require_stock_http(user)
+    order = _supplier_order_for_user(db, user, order_id)
+    if order.estado != "borrador":
+        raise HTTPException(409, "Solo se pueden editar pedidos en borrador")
+    try:
+        item = resolve_counter_item(db, payload.codigo, warehouse_id=order.almacen_id)
+    except CounterError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+    if item["tipo"] not in {"material", "stock_epi"}:
+        raise HTTPException(409, "Esta referencia no pertenece a stock comprable")
+    for l in order.lineas:
+        if l.tipo == item["tipo"] and l.objeto_id == int(item["id"]):
+            l.cantidad_pedida = float(l.cantidad_pedida) + float(payload.cantidad)
+            db.commit()
+            return JSONResponse({"ok": True, "linea_id": l.id, "sumada": True})
+    data = _resolver_objeto_pedido(db, order.almacen_id, item["tipo"], int(item["id"]))
+    line = LineaPedidoProveedor(pedido_id=order.id, cantidad_pedida=float(payload.cantidad), **data)
+    db.add(line)
+    db.commit()
+    return JSONResponse({"ok": True, "linea_id": line.id, "sumada": False})
+
+
+@app.post("/api/pedidos-proveedor/{order_id}/proveedor")
+def supplier_order_set_supplier(
+    order_id: int, payload: PedidoProveedorRequest,
+    user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db),
+):
+    _require_stock_http(user)
+    order = _supplier_order_for_user(db, user, order_id)
+    if order.estado != "borrador":
+        raise HTTPException(409, "Solo se pueden editar pedidos en borrador")
+    _aplicar_proveedor(db, order, payload.proveedor_id, payload.proveedor)
+    order.fecha_prevista = payload.fecha_prevista
+    if payload.notas.strip():
+        order.notas = payload.notas.strip()
+    db.commit()
+    return JSONResponse({"ok": True, "proveedor": order.proveedor or ""})
+
+
+@app.post("/api/pedidos-proveedor/{order_id}/cancelar")
+def supplier_order_cancel(
+    order_id: int, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db),
+):
+    _require_stock_http(user)
+    order = _supplier_order_for_user(db, user, order_id)
+    if order.estado not in ("borrador", "enviado"):
+        raise HTTPException(409, "Solo se cancelan pedidos en borrador o enviados sin recepciones")
+    if any(float(l.cantidad_recibida or 0) > 0 for l in order.lineas):
+        raise HTTPException(409, "El pedido ya tiene recepciones; ciérralo recibiendo el resto")
+    order.estado = "cancelado"
+    order.cerrado_en = datetime.now()
+    db.add(AuditoriaLog(tabla="pedidos_proveedor", registro_id=order.id, accion="cancelar",
+                        resumen=f"{order.numero} cancelado", usuario_id=user.id))
+    db.commit()
+    return JSONResponse({"ok": True, "estado": order.estado})
+
+
+@app.get("/pedidos-proveedor/{order_id}/pdf")
+def supplier_order_pdf(order_id: int, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    _require_stock_http(user)
+    order = _supplier_order_for_user(db, user, order_id)
+    pdf = exportar_pedido_pdf(order, order.proveedor_rel)
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f"inline; filename=pedido_{order.numero}.pdf"})
+
+
 def _supplier_order_for_user(db: Session, user: Usuario, order_id: int) -> PedidoProveedor:
     order = db.get(PedidoProveedor, order_id)
     if not order:
@@ -7993,8 +8219,15 @@ def supplier_order_detail(
     order_id: int, request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db),
 ):
     _require_stock_http(user)
+    order = _supplier_order_for_user(db, user, order_id)
+    proveedores = db.query(Proveedor).filter(Proveedor.activo == True).order_by(Proveedor.nombre).all()
+    telefono = "".join(ch for ch in (order.proveedor_rel.telefono or "") if ch.isdigit()) if order.proveedor_rel else ""
+    if telefono and len(telefono) == 9:
+        telefono = "34" + telefono
+    lineas_txt = "\n".join(f"- {l.cantidad_pedida:g} x {l.descripcion} ({l.referencia})" for l in order.lineas)
+    whatsapp_texto = f"Pedido {order.numero} de {order.almacen.nombre if order.almacen else 'MRD'}:\n{lineas_txt}"
     return templates.TemplateResponse(request, "pedido_proveedor_detalle.html", ctx_base(
-        request, user, db, pedido=_supplier_order_for_user(db, user, order_id),
+        request, user, db, pedido=order, proveedores=proveedores, whatsapp_tel=telefono, whatsapp_texto=whatsapp_texto,
     ))
 
 
