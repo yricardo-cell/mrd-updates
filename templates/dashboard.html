@@ -16,14 +16,76 @@
     <div class="dash-hero-meta"><span id="hero-time"></span><span class="dash-hero-separator"></span><span>Control diario MRD Tool</span></div>
   </div>
   <nav class="dash-primary-actions" aria-label="Operaciones prioritarias">
-    <a href="/movimientos/entregar" class="dash-primary-action dash-primary-action-main"><i class="bi bi-arrow-up-right"></i><span>Entregar</span></a>
-    <a href="/movimientos/devolver" class="dash-primary-action"><i class="bi bi-arrow-down-left"></i><span>Devolver</span></a>
-    <a href="/scan" class="dash-primary-action"><i class="bi bi-upc-scan"></i><span>Escanear</span></a>
-    <a href="/herramientas" class="dash-primary-action"><i class="bi bi-tools"></i><span>Inventario</span></a>
+    <a href="/scan" class="dash-primary-action dash-primary-action-main"><i class="bi bi-upc-scan"></i><span>Escanear</span></a>
+    <a href="/salida-rapida" class="dash-primary-action"><i class="bi bi-lightning"></i><span>Mostrador Único</span></a>
+    <a href="/panel-salidas" class="dash-primary-action"><i class="bi bi-eye-fill"></i><span>¿Qué está fuera?</span></a>
+    <a href="/inventario" class="dash-primary-action"><i class="bi bi-clipboard2-check"></i><span>Inventario</span></a>
     <a href="/avisos" class="dash-primary-action"><i class="bi bi-bell"></i><span>Avisos{% if alertas_count > 0 %}<strong class="dash-action-count">{{ alertas_count }}</strong>{% endif %}</span></a>
   </nav>
   <span class="dash-last-update" id="last-update"></span>
 </section>
+
+{% if dash_hoy is defined %}
+<!-- Tareas de hoy: cada tarjeta lleva al sitio donde se resuelve -->
+<section class="dash-today" aria-label="Tareas de hoy">
+  <a href="/solicitudes-trabajadores" class="dash-task {% if dash_hoy.solicitudes > 0 %}is-urgent{% else %}is-ok{% endif %}">
+    <small>Solicitudes de trabajadores</small><strong>{{ dash_hoy.solicitudes }}</strong>
+    <span>{% if dash_hoy.solicitudes > 0 %}pendientes · {{ dash_hoy.solicitudes_preparando }} en preparación{% if dash_hoy.solicitud_mas_antigua_dias is not none %} · la más antigua lleva {{ dash_hoy.solicitud_mas_antigua_dias }} días{% endif %}{% else %}nada pendiente{% endif %}</span>
+    <em>Preparar entregas <i class="bi bi-arrow-right"></i></em>
+  </a>
+  <a href="/panel-salidas" class="dash-task {% if dash_hoy.herramientas_fuera > 0 %}is-warn{% else %}is-ok{% endif %}">
+    <small>Herramientas fuera</small><strong>{{ dash_hoy.herramientas_fuera }}</strong>
+    <span>{{ '{:,}'.format(dash_hoy.valor_fuera).replace(',', '.') }} € fuera de la nave</span>
+    <em>¿Qué está fuera? <i class="bi bi-arrow-right"></i></em>
+  </a>
+  <a href="/materiales/alertas" class="dash-task {% if dash_hoy.materiales_bajo > 0 %}is-warn{% else %}is-ok{% endif %}">
+    <small>Materiales bajo mínimo</small><strong>{{ dash_hoy.materiales_bajo }}</strong>
+    <span>{{ dash_hoy.materiales_bajo_nombres|join(', ') if dash_hoy.materiales_bajo_nombres else 'stock en orden' }}</span>
+    <em>Hacer pedido <i class="bi bi-arrow-right"></i></em>
+  </a>
+  <a href="/movimientos" class="dash-task {% if dash_hoy.devoluciones_vencidas > 0 %}is-urgent{% else %}is-ok{% endif %}">
+    <small>Devoluciones vencidas</small><strong>{{ dash_hoy.devoluciones_vencidas }}</strong>
+    <span>{% if dash_hoy.devoluciones_vencidas > 0 %}entregas con fecha prevista pasada{% else %}nada atrasado hoy{% endif %}</span>
+    <em>Ver plazos <i class="bi bi-arrow-right"></i></em>
+  </a>
+  <a href="/epis/individuales" class="dash-task {% if dash_hoy.vencimientos > 0 %}is-warn{% else %}is-ok{% endif %}">
+    <small>Revisiones y vencimientos</small><strong>{{ dash_hoy.vencimientos }}</strong>
+    <span>{{ dash_hoy.epis_vencidos }} EPI vencidos · {{ dash_hoy.epis_proximos }} EPI en 30 días · {{ dash_hoy.vehiculos_avisos }} avisos ITV/seguro</span>
+    <em>Calendario <i class="bi bi-arrow-right"></i></em>
+  </a>
+  <a href="/reparaciones" class="dash-task {% if dash_hoy.reparaciones + dash_hoy.incidencias > 0 %}is-warn{% else %}is-info{% endif %}">
+    <small>Reparaciones e incidencias</small><strong>{{ dash_hoy.reparaciones + dash_hoy.incidencias }}</strong>
+    <span>{{ dash_hoy.reparaciones }} reparaciones · {{ dash_hoy.incidencias }} incidencias abiertas</span>
+    <em>Taller <i class="bi bi-arrow-right"></i></em>
+  </a>
+</section>
+
+<section class="card dash-money-card" aria-label="Dinero y riesgo">
+  <div class="card-header">
+    <div class="card-title"><i class="bi bi-cash-coin"></i> Dinero y riesgo</div>
+    <span class="dash-money-hint">precio de compra de las herramientas · {{ dash_hoy.movimientos_semana_total }} movimientos esta semana, {{ dash_hoy.movimientos_hoy }} hoy</span>
+  </div>
+  <div class="card-body">
+    <div class="dash-money">
+      <a href="/panel-salidas"><small>Valor fuera de la nave</small><strong>{{ '{:,}'.format(dash_hoy.valor_fuera).replace(',', '.') }} €</strong></a>
+      <a href="/etiquetas"><small>Valor sin ubicación ni etiqueta</small><strong>{{ '{:,}'.format(dash_hoy.valor_sin_ubicacion).replace(',', '.') }} €</strong></a>
+      <a href="/materiales"><small>Stock sin movimiento en 90 días</small><strong>{{ '{:,}'.format(dash_hoy.stock_inmovilizado).replace(',', '.') }} €</strong></a>
+    </div>
+    {% if dash_hoy.ranking_fuera %}
+    <div class="table-responsive">
+      <table class="table dash-ranking-table">
+        <thead><tr><th>Quién tiene más material fuera</th><th>Herramientas</th><th>Valor</th><th>Desde hace</th></tr></thead>
+        <tbody>
+        {% for fila in dash_hoy.ranking_fuera %}
+          <tr><td>{{ fila.nombre }}</td><td>{{ fila.herramientas }}</td><td>{{ '{:,}'.format(fila.valor).replace(',', '.') }} €</td><td>{% if fila.dias is not none %}<span class="badge {% if fila.dias > 30 %}text-bg-danger{% elif fila.dias > 7 %}text-bg-warning{% else %}text-bg-success{% endif %}">{{ fila.dias }} días</span>{% else %}—{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="dash-money-hint">No hay herramientas fuera de la nave.</p>{% endif %}
+  </div>
+</section>
+{% endif %}
 
 <!-- KPIs -->
 <div class="kpi-grid">

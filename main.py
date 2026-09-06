@@ -1739,8 +1739,104 @@ def dashboard(request: Request, user: Usuario = Depends(requiere_login), db: Ses
                         "titulo": f"{_mat_bajo} material(es) bajo mínimo de stock",
                         "texto": "Ir a Materiales → Alertas para ver la lista"})
 
+    # ── Panel operativo (2.7.35): tareas de hoy, dinero y riesgo ──────────
+    estados_fuera = ("entregada", "en_obra", "en_furgoneta", "en_transporte")
+    fuera_rows = db.query(Herramienta).filter(
+        Herramienta.activa == True, Herramienta.almacen_id == warehouse_id,
+        Herramienta.estado.in_(estados_fuera),
+    ).all()
+    valor_fuera = sum(float(h.precio_compra or h.valor_actual or 0) for h in fuera_rows)
+    por_responsable: dict = {}
+    for h in fuera_rows:
+        if h.responsable_id:
+            clave = ("trabajador", h.responsable_id)
+        elif h.vehiculo_id:
+            clave = ("vehiculo", h.vehiculo_id)
+        elif h.obra_id:
+            clave = ("obra", h.obra_id)
+        else:
+            clave = ("otros", 0)
+        item = por_responsable.setdefault(clave, {"herramientas": 0, "valor": 0.0})
+        item["herramientas"] += 1
+        item["valor"] += float(h.precio_compra or h.valor_actual or 0)
+    ranking_fuera = []
+    for (tipo, ident), datos in sorted(por_responsable.items(), key=lambda kv: kv[1]["valor"], reverse=True)[:5]:
+        nombre = "Sin responsable registrado"
+        if tipo == "trabajador":
+            t = db.get(Trabajador, ident)
+            nombre = f"{t.nombre} {t.apellidos or ''}".strip() if t else "Trabajador"
+        elif tipo == "vehiculo":
+            v = db.get(Vehiculo, ident)
+            nombre = f"Vehículo {v.matricula or v.nombre}" if v else "Vehículo"
+        elif tipo == "obra":
+            o = db.get(Obra, ident)
+            nombre = f"Obra {o.nombre}" if o else "Obra"
+        ultima = None
+        if tipo == "trabajador":
+            ultima = db.query(func.min(Movimiento.fecha)).join(Herramienta).filter(
+                Movimiento.trabajador_id == ident, Movimiento.tipo == "entrega",
+                Herramienta.estado.in_(estados_fuera), Herramienta.almacen_id == warehouse_id,
+            ).scalar()
+        dias = (datetime.now() - ultima).days if ultima else None
+        ranking_fuera.append({"nombre": nombre, "herramientas": datos["herramientas"],
+                              "valor": round(datos["valor"]), "dias": dias})
+    valor_sin_ubicacion = sum(
+        float(h.precio_compra or h.valor_actual or 0)
+        for h in db.query(Herramienta).filter(
+            Herramienta.activa == True, Herramienta.almacen_id == warehouse_id,
+        ).all()
+        if not (h.codigo or "").strip() or not any((h.ubicacion_texto, h.obra_id, h.vehiculo_id, h.responsable_id))
+    )
+    limite_90 = datetime.now() - timedelta(days=90)
+    materiales_movidos = {
+        row[0] for row in db.query(MovimientoMaterial.material_id).filter(
+            MovimientoMaterial.material_id != None, MovimientoMaterial.fecha >= limite_90,
+        ).distinct().all()
+    }
+    stock_inmovilizado = sum(
+        float(m.stock_actual or 0) * float(m.precio_unidad or 0)
+        for m in db.query(Material).filter(Material.activo == True, Material.almacen_id == warehouse_id).all()
+        if m.id not in materiales_movidos
+    )
+    solicitudes_pend = db.query(SolicitudTrabajador).filter(
+        SolicitudTrabajador.almacen_id == warehouse_id,
+        SolicitudTrabajador.estado.in_(("pendiente", "en_revision", "aprobada", "preparando", "preparada")),
+    ).order_by(SolicitudTrabajador.creado_en).all()
+    solicitud_mas_antigua = (datetime.now() - solicitudes_pend[0].creado_en).days if solicitudes_pend and solicitudes_pend[0].creado_en else None
+    devoluciones_vencidas = db.query(Movimiento).join(Herramienta).filter(
+        Movimiento.tipo == "entrega", Movimiento.fecha_devolucion_prevista != None,
+        Movimiento.fecha_devolucion_prevista < datetime.now(),
+        Herramienta.estado.in_(estados_fuera), Herramienta.almacen_id == warehouse_id,
+    ).count()
+    reparaciones_abiertas = db.query(Reparacion).filter(
+        Reparacion.fecha_salida == None, Reparacion.almacen_id == warehouse_id,
+    ).count()
+    incidencias_abiertas = db.query(Incidencia).filter(
+        Incidencia.almacen_id == warehouse_id,
+        Incidencia.estado.notin_(("cerrada", "resuelta", "cancelada")),
+    ).count()
+    mat_bajo_nombres = [m.nombre for m in db.query(Material).filter(
+        Material.activo == True, Material.stock_minimo > 0, Material.almacen_id == warehouse_id,
+        Material.stock_actual <= Material.stock_minimo,
+    ).order_by(Material.nombre).limit(3).all()]
+    dash_hoy = {
+        "solicitudes": len(solicitudes_pend),
+        "solicitudes_preparando": sum(1 for x in solicitudes_pend if x.estado in ("preparando", "preparada")),
+        "solicitud_mas_antigua_dias": solicitud_mas_antigua,
+        "herramientas_fuera": len(fuera_rows), "valor_fuera": round(valor_fuera),
+        "materiales_bajo": _mat_bajo, "materiales_bajo_nombres": mat_bajo_nombres,
+        "devoluciones_vencidas": devoluciones_vencidas,
+        "vencimientos": epis_vencidos + epis_proximos_30 + vehs_itv_vencida + len(vehs_itv) + len(vehs_seg),
+        "epis_vencidos": epis_vencidos, "epis_proximos": epis_proximos_30,
+        "vehiculos_avisos": vehs_itv_vencida + len(vehs_itv) + len(vehs_seg),
+        "reparaciones": reparaciones_abiertas, "incidencias": incidencias_abiertas,
+        "valor_sin_ubicacion": round(valor_sin_ubicacion), "stock_inmovilizado": round(stock_inmovilizado),
+        "ranking_fuera": ranking_fuera,
+        "movimientos_semana_total": sum(_semana), "movimientos_hoy": _semana[-1] if _semana else 0,
+    }
     return templates.TemplateResponse(request, "dashboard.html", ctx_base(
         request, user, db,
+        dash_hoy=dash_hoy,
         total=total,
         disponibles=disponibles,
         entregadas=entregadas,

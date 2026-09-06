@@ -2566,3 +2566,24 @@ div[style*="font-size:1.6rem"] {
   box-shadow: 0 2px 8px -2px #22d3ee60;
 }
 
+/* ── Dashboard operativo (2.7.35): tareas de hoy, dinero y riesgo ─────────── */
+.dash-today { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.dash-task { display: grid; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-left: 5px solid var(--border); border-radius: 14px; padding: 14px 16px; color: var(--text); text-decoration: none; }
+.dash-task:hover { border-color: var(--primary); text-decoration: none; color: var(--text); }
+.dash-task.is-urgent { border-left-color: #ef4444; }
+.dash-task.is-warn { border-left-color: #f59e0b; }
+.dash-task.is-ok { border-left-color: #22c55e; }
+.dash-task.is-info { border-left-color: var(--primary); }
+.dash-task small { color: var(--text-muted); font-size: .78rem; }
+.dash-task strong { font-size: 1.7rem; line-height: 1.1; }
+.dash-task span { font-size: .82rem; color: var(--text); }
+.dash-task em { font-style: normal; font-size: .8rem; font-weight: 600; color: var(--primary); }
+.dash-money-card { margin-bottom: 16px; }
+.dash-money { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.dash-money a { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; color: var(--text); text-decoration: none; }
+.dash-money a:hover { outline: 2px solid var(--primary); }
+.dash-money small { display: block; color: var(--text-muted); font-size: .78rem; }
+.dash-money strong { font-size: 1.25rem; }
+.dash-money-hint { color: var(--text-muted); font-size: .8rem; }
+.dash-ranking-table td, .dash-ranking-table th { font-size: .85rem; }
+@media (max-width: 768px) { .dash-task strong { font-size: 1.4rem; } }
