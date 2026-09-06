@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.29",
-    "nombre":  "MRD TOOL CONTROL -- Correcciones de consolidacion y ficha de material",
+    "version_actual":  "2.7.30",
+    "nombre":  "MRD TOOL CONTROL -- Afinidad de CPU por maquina y DR4 con backups comprimidos",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Correcciones de consolidacion y ficha de material"
+                    "Afinidad de CPU por maquina y DR4 con backups comprimidos"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.29.zip",
-    "sha256":  "e70f1dd9e0f1d71868c1e4f390a0d31f62ce1c00c775413c5b67b3f6bf097f05"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.30.zip",
+    "sha256":  "f24c5994048cc963d8b21fc8d682384f5fc512a2522bdd61e5254a0d6b0896df"
 }
