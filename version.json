@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.36",
-    "nombre":  "MRD TOOL CONTROL -- Graficos del Dashboard rehechos",
+    "version_actual":  "2.7.37",
+    "nombre":  "MRD TOOL CONTROL -- Solicitudes entregadas desde Mostrador Unico",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Graficos del Dashboard rehechos"
+                    "Solicitudes entregadas desde Mostrador Unico"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.36.zip",
-    "sha256":  "66f37cc42c78ff63033321eba087ca252b75e500b8a12bfa5aedbe72ae117880"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.37.zip",
+    "sha256":  "f0dc5dd710f6fcc2a41ed3022ecbf527c5e6a92decb468c44a1e4eeb19347b84"
 }
