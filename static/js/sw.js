@@ -1,7 +1,7 @@
-/* MRD TOOL CONTROL — Service Worker v2.7.39 */
+/* MRD TOOL CONTROL — Service Worker v2.7.40 */
 // Incrementar CACHE_NAME al desplegar nueva version invalida la cache antigua.
 // El cliente puede forzar actualizacion con: postMessage({type:'SKIP_WAITING'})
-const CACHE_NAME = 'mrd-static-v2.7.39';
+const CACHE_NAME = 'mrd-static-v2.7.40';
 
 // Assets estaticos pre-cacheados — NUNCA paginas HTML ni datos de API
 const STATIC_ASSETS = [

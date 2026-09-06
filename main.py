@@ -3,6 +3,16 @@ MRD TOOL CONTROL - Aplicación principal FastAPI
 v1.0.0 - MRD Estructuras
 """
 import os
+
+# Afinidad de CPU lo antes posible (nucleos inestables de esta maquina,
+# config/cpu_excluir.txt): antes de las importaciones pesadas, no solo en el
+# evento de arranque. Nunca impide arrancar.
+try:
+    from cpu_affinity import aplicar_afinidad_configurada as _afinidad_temprana
+    _afinidad_temprana()
+except Exception:
+    pass
+
 import re
 import shutil
 import subprocess
@@ -13362,6 +13372,16 @@ def _restart_exec_target(argv: list[str], python_executable: str, os_name: str):
     return python_executable, [python_executable] + argv[1:]
 
 
+def _exec_args_para_so(args: list[str], os_name: str) -> list[str]:
+    """En Windows, os.execv concatena los argumentos sin comillas: una ruta con
+    espacio ("C:\\mrd tool\\...") llegaba partida en dos al proceso nuevo, que
+    moria al instante (incidentes del 01/09 y 06/09/2026). Se entrecomillan
+    los argumentos con espacios; en otros sistemas no cambia nada."""
+    if os_name != "nt":
+        return list(args)
+    return [f'"{a}"' if " " in a and not a.startswith('"') else a for a in args]
+
+
 def _restart_target_is_valid(executable: str) -> bool:
     """Verifica que el ejecutable de destino exista como fichero real antes de
     detener el proceso actual. Si no existe, el reinicio debe cancelarse y
@@ -13465,11 +13485,21 @@ def reiniciar_servidor(
         def _do_restart():
             try:
                 time.sleep(1.2)
+                if os.getenv("MRD_SUPERVISADO") == "1":
+                    # SERVICIO_MRD.ps1 supervisa este proceso: al salir con
+                    # codigo 3 lo relanza en 1 segundo con la afinidad de CPU
+                    # ya heredada. Evita el execv de Windows, que rompia la
+                    # ruta con espacio y dejaba el relanzamiento al azar.
+                    mrd_logging.log_app(
+                        "Reinicio supervisado: el lanzador relanza el servidor (codigo 3)",
+                        level="warning",
+                    )
+                    os._exit(3)
                 # Uvicorn se instala como lanzador .exe en Windows. Ejecutarlo con
                 # python.exe como si fuera un script deja NSSM activo pero sin servidor.
                 # Reemplazamos el proceso por el mismo lanzador y los mismos argumentos,
                 # ya validados y absolutos — nunca se vuelve a recalcular aquí.
-                os.execv(executable, args)
+                os.execv(executable, _exec_args_para_so(args, os.name))
             finally:
                 # Solo se alcanza si os.execv falla (el proceso normalmente se reemplaza).
                 _RESTART_STATE["in_progress"] = False

@@ -20,6 +20,29 @@ function Write-Log($msg) {
     Add-Content -Path $LOG -Value $line -Encoding UTF8
 }
 
+# Afinidad de CPU del lanzador: los hijos (uvicorn y sus python.exe) la
+# heredan desde su primera instruccion, antes de cualquier import. Lee la
+# misma lista de CPUs a excluir que la app (config/cpu_excluir.txt, propio
+# de esta maquina). Sin fichero no cambia nada.
+function Set-AfinidadCpu {
+    $cfg = Join-Path $DIR "config\cpu_excluir.txt"
+    if (-not (Test-Path $cfg)) { return }
+    try {
+        $raw = (Get-Content $cfg -Raw).Split('#')[0]
+        $excl = @($raw -split '[,; \r\n]+' | Where-Object { $_ -match '^\d+$' } | ForEach-Object { [int]$_ })
+        if (-not $excl.Count) { return }
+        $n = [Environment]::ProcessorCount
+        if ($n -gt 62) { $n = 62 }
+        [int64]$mask = 0
+        for ($i = 0; $i -lt $n; $i++) { if ($excl -notcontains $i) { $mask = $mask -bor ([int64]1 -shl $i) } }
+        if ($mask -eq 0) { return }
+        (Get-Process -Id $PID).ProcessorAffinity = [IntPtr]$mask
+        Write-Log ("Afinidad de CPU fijada para el lanzador y sus hijos: se excluyen las CPUs " + ($excl -join ','))
+    } catch {
+        Write-Log "No se pudo fijar la afinidad de CPU: $_"
+    }
+}
+
 function Kill-Port($port) {
     $conns = netstat -aon 2>$null | Select-String ":$port\s" | Select-String "LISTENING"
     foreach ($c in $conns) {
@@ -43,6 +66,11 @@ if ($officialService -and $officialService.Status -in @("Running", "Paused", "St
 
 Write-Log "=== MRD TOOL CONTROL - Servicio iniciado ==="
 Set-Location $DIR
+Set-AfinidadCpu
+# La app sabe que este bucle la supervisa: al pedir un reinicio desde
+# /servicio sale con codigo 3 y se relanza aqui (sin execv, que en Windows
+# rompia con el espacio de "C:\mrd tool").
+$env:MRD_SUPERVISADO = "1"
 
 # Comprobar que el venv existe
 if (-not (Test-Path $UVICORN)) {
@@ -76,6 +104,11 @@ while ($true) {
     } catch {
         Write-Log "ERROR: $_"
     }
-    Write-Log "El servicio se detuvo. Reiniciando en 5 segundos..."
-    Start-Sleep -Seconds 5
+    if ($LASTEXITCODE -eq 3) {
+        Write-Log "Reinicio pedido desde /servicio (codigo 3): relanzando en 1 segundo..."
+        Start-Sleep -Seconds 1
+    } else {
+        Write-Log "El servicio se detuvo (codigo $LASTEXITCODE). Reiniciando en 5 segundos..."
+        Start-Sleep -Seconds 5
+    }
 }
