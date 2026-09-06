@@ -128,7 +128,7 @@ $robocopyArgs = @(
     "/XF", "*.log", "*.bak", "*.bak_edit", "desktop.ini", "*.pyc",
            "*.exe", "*.db", "*.db-wal", "*.db-shm",
            "local.env", "*.token", "vapid_keys.json", ".service_restart",
-           ".recovery_history.json",
+           ".recovery_history.json", "secret.key", "users.json", "*.pem",
     "/NFL", "/NDL", "/NJH", "/NJS"
 )
 & robocopy @robocopyArgs | Out-Null
@@ -136,7 +136,23 @@ $robocopyArgs = @(
 # Verificacion de seguridad: ningun *.token (ni otro secreto conocido) debe
 # llegar al paquete publico. robocopy copia del disco, no de git, asi que
 # .gitignore no protege aqui - esta es la unica red de seguridad real.
-$secretosEncontrados = Get-ChildItem -Path $destino -Recurse -File -Include "*.token","local.env","vapid_keys.json" -ErrorAction SilentlyContinue
+$secretosEncontrados = Get-ChildItem -Path $destino -Recurse -File -Include "*.token","local.env","vapid_keys.json","secret.key","users.json","*.pem",".recovery_history.json" -ErrorAction SilentlyContinue
+# Segunda red: ningun fichero que git ignore (secretos autogenerados, datos
+# locales) debe viajar en el paquete publico aunque nadie lo haya listado.
+# Se pasan como argumentos por lotes: por stdin, Windows anade CR y git no
+# reconoce las rutas.
+$ignorados = @()
+try {
+    $relativos = @(Get-ChildItem -Path $destino -Recurse -File | ForEach-Object { $_.FullName.Substring($destino.Length + 1).Replace('', '/') })
+    for ($i = 0; $i -lt $relativos.Count; $i += 100) {
+        $lote = $relativos[$i..([Math]::Min($i + 99, $relativos.Count - 1))]
+        $ignorados += @(& git -C $raiz check-ignore --no-index -- @lote 2>$null | Where-Object { $_ -and ($_ -notlike '*.gitkeep') })
+    }
+} catch { $ignorados = @() }
+if ($ignorados.Count -gt 0) {
+    $lista = $ignorados -join "`n    "
+    Pausar "ERROR: el paquete contiene ficheros ignorados por git (posibles secretos), publicacion abortada:`n    $lista"
+}
 if ($secretosEncontrados) {
     $lista = ($secretosEncontrados | ForEach-Object { $_.FullName.Substring($destino.Length) }) -join "`n    "
     Pausar "ERROR: se encontraron archivos secretos en el paquete, publicacion abortada:`n    $lista"
