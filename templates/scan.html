@@ -1015,7 +1015,8 @@ function mostrarError(msg, codigoNoEncontrado) {
   if (codigoNoEncontrado && SCAN_AUTHENTICATED) {
     var enc = encodeURIComponent(codigoNoEncontrado);
     html += '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">' +
-      '<a href="/herramientas/nueva?num_serie=' + enc + '" class="btn btn-sm btn-primary"><i class="bi bi-tools me-1"></i>Registrar herramienta</a>' +
+      '<a href="/herramientas/alta-express?codigo=' + enc + '" class="btn btn-sm btn-primary"><i class="bi bi-upc-scan me-1"></i>Alta express</a>' +
+      '<a href="/herramientas/nueva?num_serie=' + enc + '" class="btn btn-sm btn-ghost"><i class="bi bi-tools me-1"></i>Ficha completa</a>' +
       '<a href="/maquinaria/nueva?codigo_barras=' + enc + '" class="btn btn-sm btn-ghost"><i class="bi bi-truck me-1"></i>Registrar maquinaria</a>' +
       '</div>';
   }

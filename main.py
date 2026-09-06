@@ -2269,6 +2269,112 @@ async def herramienta_nueva_post(
     return RedirectResponse(f"/herramientas/{h.id}", status_code=303)
 
 
+# ─── Alta express por escáner (2.7.58) ───────────────────────────────────────
+
+@app.get("/herramientas/alta-express", response_class=HTMLResponse)
+def herramienta_alta_express_get(
+    request: Request, codigo: str = Query(""), ubicacion: int | None = None,
+    user: Usuario = Depends(requiere_login), db: Session = Depends(get_db),
+):
+    """Alta express (2.7.58): pegatina QR → nombre → foto → hueco, en segundos.
+    Pensada para el móvil con la cámara y la pistola."""
+    if not tiene_permiso(user, "crear"):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _active_warehouse(db, user, request)
+    wid = warehouse.id if warehouse else None
+    huecos = []
+    if wid:
+        huecos = db.query(Ubicacion).filter(Ubicacion.almacen_id == wid, Ubicacion.activo == True).all()
+        huecos.sort(key=lambda u: (_nave_clave_natural(u.zona), _nave_clave_natural(u.estanteria), _nave_clave_natural(u.balda), _nave_clave_natural(u.posicion), _nave_clave_natural(u.nombre)))
+    recientes = [r[0] for r in db.query(Herramienta.nombre).filter(Herramienta.activa == True)
+                 .order_by(Herramienta.id.desc()).limit(400).all()]
+    nombres = list(dict.fromkeys(n.strip() for n in recientes if n and n.strip()))[:150]
+    hueco_actual = next((u for u in huecos if u.id == ubicacion), None) if ubicacion else None
+    return templates.TemplateResponse(request, "alta_express.html", ctx_base(
+        request, user, db, almacen=warehouse, categorias=CATEGORIAS_DEFAULT, huecos=huecos,
+        nombres=nombres, codigo_pendiente=(codigo or "").strip()[:128], hueco_actual=hueco_actual,
+    ))
+
+
+@app.post("/api/herramientas/alta-express")
+async def api_herramienta_alta_express(
+    request: Request,
+    nombre: str = Form(...),
+    categoria: str = Form("Otro"),
+    marca: str = Form(""),
+    num_serie: str = Form(""),
+    ubicacion_id: str = Form(""),
+    cantidad: str = Form("1"),
+    foto: UploadFile = File(None),
+    user: Usuario = Depends(requiere_login),
+    db: Session = Depends(get_db),
+):
+    """Crea una o varias herramientas iguales con el código de la pegatina,
+    la foto y el hueco. El código MRD lo genera siempre el servidor."""
+    if not tiene_permiso(user, "crear"):
+        raise HTTPException(403, "Sin permiso")
+    nombre = (nombre or "").strip()[:200]
+    if len(nombre) < 2:
+        raise HTTPException(400, "Escribe el nombre de la herramienta")
+    try:
+        n = max(1, min(50, int(cantidad or 1)))
+    except ValueError:
+        n = 1
+    serie = (num_serie or "").strip()[:150]
+    if serie:
+        existente = db.query(Herramienta).filter(or_(Herramienta.num_serie == serie, Herramienta.codigo == serie)).first()
+        if existente:
+            raise HTTPException(409, f"Ese código ya es de «{existente.nombre}» ({existente.codigo})")
+    warehouse = _active_warehouse(db, user, request)
+    wid = warehouse.id if warehouse else None
+    loc = None
+    if (ubicacion_id or "").strip():
+        loc = db.get(Ubicacion, int(ubicacion_id))
+        if not loc or not loc.activo or (wid and loc.almacen_id != wid):
+            raise HTTPException(404, "Ese hueco no existe en este almacén")
+    contenido_foto, ext = None, None
+    if foto and foto.filename:
+        try:
+            _, ext = validar_nombre_archivo(foto.filename, {"jpg", "jpeg", "png", "webp"})
+            head = await foto.read(16)
+            await foto.seek(0)
+            validar_contenido_archivo(head, ext)
+            contenido_foto = await foto.read()
+            validar_tamaño_bytes(len(contenido_foto), MAX_UPLOAD_MB)
+        except ErrorArchivo as exc:
+            raise HTTPException(400, str(exc))
+    categoria = (categoria or "Otro").strip()[:100] or "Otro"
+    marca = (marca or "").strip()[:100] or None
+    ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "")
+    creadas = []
+    foto_dir = BASE_DIR / "static" / "uploads" / "herramientas"
+    for i in range(n):
+        h = Herramienta(
+            codigo=generar_referencia_herramienta(db), nombre=nombre, categoria=categoria, marca=marca,
+            num_serie=serie if (serie and i == 0) else None, estado="disponible", activa=True,
+            almacen_id=wid, ubicacion_id=loc.id if loc else None,
+            ubicacion_texto=(loc.nombre if loc else (warehouse.nombre if warehouse else "Almacén")),
+            tipo_seguimiento="individual", observaciones="Alta express por escáner",
+        )
+        db.add(h)
+        db.flush()
+        if contenido_foto:
+            foto_dir.mkdir(parents=True, exist_ok=True)
+            nombre_foto = f"h_{h.id}.{ext}"
+            (foto_dir / nombre_foto).write_bytes(contenido_foto)
+            h.foto_path = nombre_foto
+        registrar_movimiento(db, h, "alta", "disponible", user, observaciones="Alta express por escáner")
+        registrar_auditoria(db, tabla="herramientas", registro_id=h.id, accion="crear", usuario_id=user.id,
+                            datos_anteriores=None, datos_nuevos=snapshot_herramienta(h),
+                            resumen=f"Alta express de {h.nombre} ({h.codigo})", ip=ip)
+        creadas.append(h)
+    db.commit()
+    return JSONResponse({"ok": True, "creadas": [
+        {"id": h.id, "codigo": h.codigo, "nombre": h.nombre, "url": f"/herramientas/{h.id}",
+         "hueco": loc.nombre if loc else "", "foto": bool(h.foto_path)} for h in creadas
+    ]})
+
+
 @app.get("/herramientas/importar/plantilla")
 def herramientas_plantilla_descarga(user: Usuario = Depends(requiere_login)):
     """Descarga la plantilla Excel de importación."""

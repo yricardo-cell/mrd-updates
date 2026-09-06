@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Alta express{% endblock %}
+{% block breadcrumb %}
+<a href="/">Inicio</a>
+<span class="sep">/</span>
+<a href="/herramientas">Herramientas</a>
+<span class="sep">/</span>
+<span class="current">Alta express</span>
+{% endblock %}
+{% block content %}
+<style>
+.ex-paso{display:flex;gap:10px;align-items:flex-start;border:1px solid rgba(148,163,184,.35);border-radius:12px;padding:12px;margin-bottom:10px}
+.ex-paso b.n{background:#0891b2;color:#fff;border-radius:999px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.9rem}
+.ex-paso .cuerpo{flex:1;min-width:0}
+.ex-paso label{font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:2px}
+#ex-preview{width:100%;max-width:260px;height:150px;border:2px dashed rgba(148,163,184,.5);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--text-muted);font-size:.85rem}
+#ex-preview img{width:100%;height:100%;object-fit:cover}
+.ex-ok{border-color:#16a34a}
+#ex-hechas .list-group-item{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+</style>
+<div class="page-header-row mb-3">
+  <div>
+    <h1 class="page-title"><i class="bi bi-upc-scan"></i> Alta express</h1>
+    <p class="page-subtitle">{{ almacen.nombre if almacen else '' }} · Pega la pegatina QR, escanéala, escribe el nombre, haz la foto y escanea el hueco. Treinta segundos por herramienta.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/herramientas/nueva"><i class="bi bi-card-list"></i> Ficha completa</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <form id="form-ex" autocomplete="off">
+      <div class="ex-paso" id="paso-codigo"><b class="n">1</b><div class="cuerpo">
+        <label for="ex-codigo">Código de la pegatina (escanéala; si no tiene, déjalo vacío y el programa crea uno)</label>
+        <div class="input-group"><input class="form-control form-control-lg" id="ex-codigo" name="num_serie" value="{{ codigo_pendiente }}" placeholder="Escanea la pegatina…" {% if not codigo_pendiente %}autofocus{% endif %}><button class="btn btn-outline-secondary" type="button" id="ex-codigo-limpiar" title="Vaciar"><i class="bi bi-x-lg"></i></button></div>
+        <div class="small mt-1" id="ex-codigo-estado"></div>
+      </div></div>
+      <div class="ex-paso"><b class="n">2</b><div class="cuerpo">
+        <div class="row g-2">
+          <div class="col-12"><label for="ex-nombre">Nombre</label><input class="form-control form-control-lg" id="ex-nombre" name="nombre" list="ex-nombres" required placeholder="Taladro Hilti TE-6" {% if codigo_pendiente %}autofocus{% endif %}><datalist id="ex-nombres">{% for n in nombres %}<option value="{{ n }}">{% endfor %}</datalist></div>
+          <div class="col-6"><label for="ex-categoria">Categoría</label><select class="form-select" id="ex-categoria" name="categoria">{% for c in categorias %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select></div>
+          <div class="col-6"><label for="ex-marca">Marca (opcional)</label><input class="form-control" id="ex-marca" name="marca" placeholder="Hilti"></div>
+          <div class="col-6"><label for="ex-cantidad">Cuántas iguales</label><input class="form-control" id="ex-cantidad" name="cantidad" type="number" min="1" max="50" value="1"></div>
+        </div>
+      </div></div>
+      <div class="ex-paso"><b class="n">3</b><div class="cuerpo">
+        <label>Foto</label>
+        <div class="d-flex gap-3 flex-wrap align-items-start">
+          <div id="ex-preview">Sin foto</div>
+          <div class="d-flex flex-column gap-2">
+            <button type="button" class="btn btn-primary" id="ex-btn-camara"><i class="bi bi-camera"></i> Hacer foto</button>
+            <button type="button" class="btn btn-outline-secondary" id="ex-btn-galeria"><i class="bi bi-upload"></i> Elegir imagen</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="ex-btn-sinfoto" hidden><i class="bi bi-x"></i> Quitar</button>
+          </div>
+        </div>
+        <input type="file" id="ex-foto-camara" accept="image/*" capture="environment" hidden>
+        <input type="file" id="ex-foto-galeria" accept="image/*" hidden>
+      </div></div>
+      <div class="ex-paso"><b class="n">4</b><div class="cuerpo">
+        <label for="ex-hueco">Hueco (escanea su QR o elígelo; opcional)</label>
+        <select class="form-select" id="ex-hueco" name="ubicacion_id"><option value="">Sin hueco por ahora</option>{% for u in huecos %}<option value="{{ u.id }}" {% if hueco_actual and u.id == hueco_actual.id %}selected{% endif %}>{{ u.nombre }}</option>{% endfor %}</select>
+        <div class="small text-muted mt-1" id="ex-hueco-estado">{% if hueco_actual %}Hueco elegido: {{ hueco_actual.nombre }}{% else %}Escanea el QR del hueco en cualquier momento y se elige solo.{% endif %}</div>
+      </div></div>
+      <div class="d-flex gap-2 flex-wrap align-items-center">
+        <button class="btn btn-success btn-lg" type="submit" id="ex-guardar"><i class="bi bi-check-lg"></i> Dar de alta</button>
+        <span class="small text-muted" id="ex-estado"></span>
+      </div>
+    </form>
+  </div>
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-list-check"></i> Dadas de alta ahora</div><span class="table-meta" id="ex-contador">0</span></div>
+      <div class="card-body p-0"><div class="list-group list-group-flush" id="ex-hechas"><div class="text-muted small p-3" id="ex-vacio">Aquí irán apareciendo según las des de alta. El nombre, la categoría y el hueco se quedan para la siguiente.</div></div></div>
+    </div>
+  </div>
+</div>
+<script>
+(()=>{
+  const f=document.getElementById('form-ex'),codigo=document.getElementById('ex-codigo'),codEstado=document.getElementById('ex-codigo-estado'),nombre=document.getElementById('ex-nombre');
+  const hueco=document.getElementById('ex-hueco'),huecoEstado=document.getElementById('ex-hueco-estado'),estado=document.getElementById('ex-estado'),preview=document.getElementById('ex-preview');
+  const cam=document.getElementById('ex-foto-camara'),gal=document.getElementById('ex-foto-galeria');let foto=null,total=0,busy=false;
+  const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  async function comprimirImagen(file,max=1600,calidad=.85){if(!file||!file.type||!file.type.startsWith('image/'))return file;try{const bmp=await createImageBitmap(file,{imageOrientation:'from-image'});const e=Math.min(1,max/Math.max(bmp.width,bmp.height));if(e>=1&&file.size<600*1024){if(bmp.close)bmp.close();return file}const c=document.createElement('canvas');c.width=Math.round(bmp.width*e);c.height=Math.round(bmp.height*e);c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);if(bmp.close)bmp.close();const b=await new Promise(r=>c.toBlob(r,'image/jpeg',calidad));return b?new File([b],'foto.jpg',{type:'image/jpeg'}):file}catch(err){return file}}
+  async function ponerFoto(input){if(!input.files.length)return;foto=await comprimirImagen(input.files[0]);const r=new FileReader();r.onload=e=>{preview.innerHTML=`<img src="${e.target.result}" alt="">`;preview.classList.add('ex-ok')};r.readAsDataURL(foto);document.getElementById('ex-btn-sinfoto').hidden=false;input.value=''}
+  cam.onchange=()=>ponerFoto(cam);gal.onchange=()=>ponerFoto(gal);
+  document.getElementById('ex-btn-camara').onclick=()=>cam.click();document.getElementById('ex-btn-galeria').onclick=()=>gal.click();
+  document.getElementById('ex-btn-sinfoto').onclick=()=>{foto=null;preview.innerHTML='Sin foto';preview.classList.remove('ex-ok');document.getElementById('ex-btn-sinfoto').hidden=true};
+  document.getElementById('ex-codigo-limpiar').onclick=()=>{codigo.value='';codEstado.textContent='';codigo.focus()};
+  async function comprobarCodigo(){const v=codigo.value.trim();if(!v){codEstado.textContent='';return}try{const r=await fetch('/api/mostrador/resolver?codigo='+encodeURIComponent(v),{headers:{Accept:'application/json'}});if(r.ok){const d=await r.json();if(d.item&&d.item.tipo==='ubicacion'){elegirHueco(d.item);codigo.value='';codEstado.textContent='';return}codEstado.className='small mt-1 text-danger';codEstado.innerHTML=`Ese código ya es de <a href="${esc(d.item.url||'#')}">${esc(d.item.nombre)}</a>. Usa otra pegatina.`;return}codEstado.className='small mt-1 text-success';codEstado.textContent='Pegatina nueva: se guardará como código de esta herramienta.'}catch(e){codEstado.textContent=''}}
+  codigo.addEventListener('change',comprobarCodigo);codigo.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();comprobarCodigo();nombre.focus()}});
+  function elegirHueco(item){const opt=[...hueco.options].find(o=>Number(o.value)===Number(item.id));if(opt){hueco.value=opt.value;huecoEstado.className='small text-success mt-1';huecoEstado.textContent='Hueco elegido: '+item.nombre}else{huecoEstado.className='small text-danger mt-1';huecoEstado.textContent='Ese hueco no es de este almacén.'}}
+  document.addEventListener('mrd:scanner-code',async e=>{e.preventDefault();const code=e.detail.code;try{const r=await fetch('/api/mostrador/resolver?codigo='+encodeURIComponent(code),{headers:{Accept:'application/json'}});if(r.ok){const d=await r.json();if(d.item&&d.item.tipo==='ubicacion'){elegirHueco(d.item);return}codigo.value=code;comprobarCodigo();return}}catch(err){}codigo.value=code;comprobarCodigo();nombre.focus()});
+  if(codigo.value)comprobarCodigo();
+  f.onsubmit=async ev=>{ev.preventDefault();if(busy)return;if(nombre.value.trim().length<2){nombre.focus();return}busy=true;estado.textContent='Guardando…';
+    try{const fd=new FormData();fd.append('nombre',nombre.value.trim());fd.append('categoria',document.getElementById('ex-categoria').value);fd.append('marca',document.getElementById('ex-marca').value.trim());fd.append('num_serie',codigo.value.trim());fd.append('ubicacion_id',hueco.value);fd.append('cantidad',document.getElementById('ex-cantidad').value||'1');if(foto)fd.append('foto',foto,foto.name||'foto.jpg');
+      const r=await fetchCsrf('/api/herramientas/alta-express',{method:'POST',body:fd,headers:{Accept:'application/json'}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||'No se pudo dar de alta');
+      document.getElementById('ex-vacio')?.remove();const lista=document.getElementById('ex-hechas');d.creadas.forEach(h=>{total++;const el=document.createElement('a');el.className='list-group-item list-group-item-action';el.href=h.url;el.innerHTML=`<span><strong>${esc(h.nombre)}</strong><br><small class="text-muted">${esc(h.codigo)}${h.hueco?' · '+esc(h.hueco):''}</small></span><span class="badge ${h.foto?'badge-success':'badge-secondary'}">${h.foto?'con foto':'sin foto'}</span>`;lista.prepend(el)});document.getElementById('ex-contador').textContent=total;
+      estado.className='small text-success';estado.textContent=`${d.creadas.length===1?'Dada de alta':d.creadas.length+' dadas de alta'}: ${d.creadas[0].codigo}`;
+      codigo.value='';codEstado.textContent='';foto=null;preview.innerHTML='Sin foto';preview.classList.remove('ex-ok');document.getElementById('ex-btn-sinfoto').hidden=true;document.getElementById('ex-cantidad').value='1';if(navigator.vibrate)navigator.vibrate(60);codigo.focus()}
+    catch(e){estado.className='small text-danger';estado.textContent=e.message}finally{busy=false}};
+})();
+</script>
+{% endblock %}
