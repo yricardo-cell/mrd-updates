@@ -133,6 +133,221 @@ def _get_config() -> dict:
     }
 
 
+# ─── Copia fuera del PC (2.7.56) ─────────────────────────────────────────────
+EXTERNO_CFG = BASE_DIR / "config" / "backup_externo.json"
+EXTERNO_SUBDIR = "MRD Tool Control"
+
+
+def _externo_leer() -> dict:
+    try:
+        return json.loads(EXTERNO_CFG.read_text(encoding="utf-8")) if EXTERNO_CFG.exists() else {}
+    except Exception:
+        return {}
+
+
+def _externo_escribir(data: dict) -> None:
+    EXTERNO_CFG.parent.mkdir(parents=True, exist_ok=True)
+    EXTERNO_CFG.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def get_externo_config() -> dict:
+    d = _externo_leer()
+    ruta = str(d.get("ruta") or "").strip()
+    return {"ruta": ruta, "activo": bool(d.get("activo")) and bool(ruta), "ultimo_ok": d.get("ultimo_ok"),
+            "ultimo_error": d.get("ultimo_error"), "ultimo_error_en": d.get("ultimo_error_en")}
+
+
+def set_externo_config(ruta: str, activo: bool) -> dict:
+    d = _externo_leer()
+    d["ruta"] = str(ruta or "").strip()
+    d["activo"] = bool(activo) and bool(d["ruta"])
+    _externo_escribir(d)
+    return get_externo_config()
+
+
+def _externo_estado_guardar(**campos) -> None:
+    d = _externo_leer()
+    d.update(campos)
+    _externo_escribir(d)
+
+
+def _externo_destino(ruta: str) -> Path | None:
+    ruta = str(ruta or "").strip()
+    return Path(ruta) / EXTERNO_SUBDIR if ruta else None
+
+
+def probar_externo(ruta: str) -> dict:
+    """Comprueba que la carpeta (USB, disco externo, OneDrive, Google Drive) existe y se puede escribir."""
+    ruta = str(ruta or "").strip()
+    if not ruta:
+        return {"ok": False, "error": "Indica una carpeta: por ejemplo E:\\ (un USB) o la carpeta de OneDrive o Google Drive."}
+    base = Path(ruta)
+    if not base.exists():
+        return {"ok": False, "error": f"La carpeta no existe o no está conectada: {base}"}
+    dest = base / EXTERNO_SUBDIR
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+        prueba = dest / f".mrd_prueba_{secrets.token_hex(4)}.tmp"
+        prueba.write_text("ok", encoding="utf-8")
+        prueba.unlink()
+    except Exception as exc:
+        return {"ok": False, "error": f"No se puede escribir en {dest}: {exc}"}
+    libre = None
+    try:
+        libre = round(shutil.disk_usage(base).free / 1024 ** 2)
+    except Exception:
+        pass
+    return {"ok": True, "destino": str(dest), "libre_mb": libre}
+
+
+def _externo_relativa(origen: Path) -> Path:
+    try:
+        return origen.resolve().relative_to(BACKUPS_DIR.resolve())
+    except ValueError:
+        return Path(origen.name)
+
+
+def _externo_copiar(rutas, dest: Path) -> tuple[list, list]:
+    copiados, errores = [], []
+    for origen in rutas:
+        origen = Path(origen)
+        if not origen.is_file():
+            continue
+        destino = dest / _externo_relativa(origen)
+        try:
+            if not dest.parent.exists():
+                raise FileNotFoundError(f"la carpeta {dest.parent} no está conectada")
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            if destino.exists() and destino.stat().st_size == origen.stat().st_size:
+                copiados.append(str(destino))
+                continue
+            tmp = destino.with_name(destino.name + ".parcial")
+            shutil.copy2(origen, tmp)
+            os.replace(tmp, destino)
+            if destino.stat().st_size != origen.stat().st_size:
+                raise OSError("el tamaño no coincide tras copiar")
+            copiados.append(str(destino))
+        except Exception as exc:
+            errores.append(f"{origen.name}: {exc}")
+    return copiados, errores
+
+
+def _aviso_externo(error: str) -> None:
+    """Aviso interno (uno al día) cuando la copia externa falla."""
+    try:
+        from database import SessionLocal as _SLx
+        from models import Aviso as _Aviso
+        db = _SLx()
+        try:
+            titulo = f"Copia fuera del PC fallida {datetime.now().strftime('%d/%m/%Y')}"
+            if not db.query(_Aviso).filter(_Aviso.titulo == titulo).first():
+                db.add(_Aviso(titulo=titulo, tipo="alerta", prioridad="alta", enlace="/backup",
+                              mensaje=f"No se pudo copiar la copia de seguridad a la carpeta externa: {error}. "
+                                      "Comprueba que el USB, el disco o la carpeta de la nube estén conectados."))
+                db.commit()
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("No se pudo crear el aviso de copia externa: %s", exc)
+
+
+def copiar_a_externo(rutas) -> dict | None:
+    """Copia ficheros de backup al destino externo. None si la copia externa no está activa."""
+    cfg = get_externo_config()
+    if not cfg["activo"]:
+        return None
+    dest = _externo_destino(cfg["ruta"])
+    copiados, errores = _externo_copiar(rutas, dest)
+    ahora = datetime.utcnow().isoformat(timespec="seconds")
+    if errores:
+        texto = "; ".join(errores)[:500]
+        _externo_estado_guardar(ultimo_error=texto, ultimo_error_en=ahora)
+        _aviso_externo(texto[:300])
+        return {"ok": False, "copiados": copiados, "error": texto, "destino": str(dest)}
+    _externo_estado_guardar(ultimo_ok=ahora, ultimo_error=None, ultimo_error_en=None)
+    return {"ok": True, "copiados": copiados, "destino": str(dest)}
+
+
+def _archivos_backup_locales() -> list:
+    out = []
+    for m in _load_history():
+        p = Path(str(m.get("path") or ""))
+        if p.is_file():
+            out.append(p)
+        if m.get("photos_filename"):
+            f = p.parent / m["photos_filename"]
+            if f.is_file():
+                out.append(f)
+    return out
+
+
+def sincronizar_externo() -> dict:
+    """Copia a la carpeta externa todos los backups que falten y quita de allí los que ya no existen aquí."""
+    cfg = get_externo_config()
+    if not cfg["ruta"]:
+        return {"ok": False, "error": "No hay carpeta externa configurada"}
+    dest = _externo_destino(cfg["ruta"])
+    ahora = datetime.utcnow().isoformat(timespec="seconds")
+    if not dest.parent.exists():
+        error = f"La carpeta no está conectada: {dest.parent}"
+        _externo_estado_guardar(ultimo_error=error, ultimo_error_en=ahora)
+        _aviso_externo(error)
+        return {"ok": False, "error": error}
+    locales = _archivos_backup_locales()
+    copiados, errores = _externo_copiar(locales, dest)
+    relativas = {str(_externo_relativa(p)) for p in locales}
+    borrados = 0
+    if dest.exists():
+        for f in dest.rglob("*"):
+            if f.is_file() and f.suffix in (".db", ".gz", ".enc", ".tar", ".parcial") and str(f.relative_to(dest)) not in relativas:
+                try:
+                    f.unlink()
+                    borrados += 1
+                except Exception:
+                    pass
+    if errores:
+        texto = "; ".join(errores)[:500]
+        _externo_estado_guardar(ultimo_error=texto, ultimo_error_en=ahora)
+        _aviso_externo(texto[:300])
+        return {"ok": False, "copiados": len(copiados), "borrados": borrados, "error": texto}
+    _externo_estado_guardar(ultimo_ok=ahora, ultimo_error=None, ultimo_error_en=None)
+    return {"ok": True, "copiados": len(copiados), "borrados": borrados, "destino": str(dest)}
+
+
+def externo_estado() -> dict:
+    cfg = get_externo_config()
+    dest = _externo_destino(cfg["ruta"]) if cfg["ruta"] else None
+    disponible = bool(dest and dest.parent.exists())
+    locales = _archivos_backup_locales()
+    copiados = pendientes = 0
+    libre = None
+    if dest and disponible:
+        for p in locales:
+            d = dest / _externo_relativa(p)
+            if d.exists() and d.stat().st_size == p.stat().st_size:
+                copiados += 1
+            else:
+                pendientes += 1
+        try:
+            libre = round(shutil.disk_usage(dest.parent).free / 1024 ** 2)
+        except Exception:
+            pass
+    else:
+        pendientes = len(locales)
+    return {**cfg, "destino": str(dest) if dest else "", "disponible": disponible, "copiados": copiados,
+            "pendientes": pendientes, "locales": len(locales), "libre_mb": libre}
+
+
+def _externo_tras_programados(result: dict) -> None:
+    cfg = get_externo_config()
+    if not cfg["activo"]:
+        return
+    est = externo_estado()
+    if not est["disponible"]:
+        _aviso_externo(f"la carpeta {est['destino']} no está conectada")
+        result.setdefault("errors", []).append({"tipo": "externo", "error": "carpeta externa no conectada"})
+
+
 # ─── Cifrado AES (usando Fernet si disponible, fallback XOR) ─────────────────
 def _encrypt_data(data: bytes, key: str) -> bytes:
     """Cifra con Fernet (AES-128-CBC + HMAC). Requiere cryptography."""
@@ -266,6 +481,11 @@ def create_backup(
                 meta["photos_filename"]   = photos_meta["filename"]
                 meta["photos_sha256"]     = photos_meta["sha256"]
                 meta["photos_size_bytes"] = photos_meta["size_bytes"]
+            # Copia fuera del PC (2.7.56): segunda copia en USB / disco / nube si está activa.
+            externo = copiar_a_externo([backup_path] + ([backup_subdir / photos_meta["filename"]] if photos_meta else []))
+            if externo is not None:
+                meta["externo_ok"] = bool(externo.get("ok"))
+                meta["externo_error"] = externo.get("error")
             _save_meta(meta)
             logger.info("Backup creado: %s (%.1f KB, %d ms)", backup_path.name, size_bytes/1024, elapsed)
 
@@ -595,6 +815,7 @@ def get_backup_status() -> dict:
             "pre_action": cfg["retention_pre_action"],
         },
         "encrypt_enabled": cfg["encrypt"],
+        "externo": externo_estado(),
         "checked_at":     datetime.utcnow().isoformat(timespec="seconds"),
     }
 
@@ -642,6 +863,7 @@ def run_scheduled_backups(now: datetime = None) -> dict:
             result["errors"].append({"tipo": tipo, "error": backup.get("error", "desconocido")})
 
     result["cleanup"] = cleanup_old_backups()
+    _externo_tras_programados(result)
     return result
 
 

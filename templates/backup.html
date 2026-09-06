@@ -15,6 +15,23 @@
     </button>
   </div>
 
+  <div class="card shadow-sm mb-3" id="card-externo">
+    <div class="card-header fw-semibold"><i class="bi bi-hdd-network me-2 text-info"></i>Copia fuera del PC</div>
+    <div class="card-body">
+      <p class="small text-muted mb-2">Segunda copia automática de cada backup en un USB, un disco externo o la carpeta de OneDrive o Google Drive. Si el disco del PC muere, las copias siguen fuera. Si la copia falla o la carpeta no está conectada, sale un aviso.</p>
+      <div class="row g-2 align-items-end">
+        <div class="col-md-6"><label class="form-label small mb-1" for="extRuta">Carpeta externa</label><input class="form-control" id="extRuta" placeholder="E:\   o   C:\Users\...\OneDrive\MRD"></div>
+        <div class="col-md-2"><div class="form-check"><input class="form-check-input" type="checkbox" id="extActivo"><label class="form-check-label small" for="extActivo">Activa</label></div></div>
+        <div class="col-md-4 d-flex gap-2 flex-wrap">
+          <button class="btn btn-sm btn-outline-secondary" type="button" onclick="extProbar()"><i class="bi bi-plug"></i> Probar</button>
+          <button class="btn btn-sm btn-primary" type="button" onclick="extGuardar()"><i class="bi bi-check-lg"></i> Guardar</button>
+          <button class="btn btn-sm btn-outline-success" type="button" onclick="extSincronizar()"><i class="bi bi-arrow-repeat"></i> Copiar ahora lo que falta</button>
+        </div>
+      </div>
+      <div id="extEstado" class="small mt-2 text-muted">—</div>
+    </div>
+  </div>
+
   <div class="row g-3">
 
     <!-- Estado -->
@@ -157,6 +174,40 @@ function fmtDate(s) {
   if (!s) return '—';
   return new Date(s + 'Z').toLocaleString('es-ES');
 }
+
+function extRender(ex) {
+  if (!ex) return;
+  const ruta = document.getElementById('extRuta'), act = document.getElementById('extActivo'), est = document.getElementById('extEstado');
+  if (document.activeElement !== ruta) ruta.value = ex.ruta || '';
+  act.checked = !!ex.activo;
+  if (!ex.ruta) { est.className = 'small mt-2 text-muted'; est.textContent = 'Sin carpeta externa. Pon una carpeta y pulsa Probar.'; return; }
+  if (!ex.disponible) { est.className = 'small mt-2 text-danger'; est.textContent = 'La carpeta no está conectada: ' + ex.destino + (ex.ultimo_error ? ' · último error: ' + ex.ultimo_error : ''); return; }
+  const pend = ex.pendientes ? `<span class="text-warning">${ex.pendientes} sin copiar</span>` : '<span class="text-success">todo copiado</span>';
+  est.className = 'small mt-2';
+  est.innerHTML = `${ex.activo ? 'Activa' : 'Desactivada'} · ${ex.destino} · ${ex.copiados} de ${ex.locales} copias fuera · ${pend}` + (ex.libre_mb != null ? ` · ${ex.libre_mb} MB libres` : '') + (ex.ultimo_ok ? ` · última copia externa ${fmtDate(ex.ultimo_ok)}` : '') + (ex.ultimo_error ? ` · <span class="text-danger">último error: ${ex.ultimo_error}</span>` : '');
+}
+async function extProbar() {
+  const est = document.getElementById('extEstado'); est.className = 'small mt-2 text-muted'; est.textContent = 'Probando…';
+  const r = await fetchCsrf('/api/backup/externo/probar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ruta: document.getElementById('extRuta').value }) });
+  const d = await r.json();
+  est.className = 'small mt-2 ' + (d.ok ? 'text-success' : 'text-danger');
+  est.textContent = d.ok ? `Correcto: se puede escribir en ${d.destino}` + (d.libre_mb != null ? ` (${d.libre_mb} MB libres)` : '') : d.error;
+}
+async function extGuardar() {
+  const est = document.getElementById('extEstado');
+  const r = await fetchCsrf('/api/backup/externo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ruta: document.getElementById('extRuta').value, activo: document.getElementById('extActivo').checked }) });
+  const d = await r.json();
+  if (!r.ok) { est.className = 'small mt-2 text-danger'; est.textContent = d.detail || 'No se pudo guardar'; return; }
+  bkRefresh();
+}
+async function extSincronizar() {
+  const est = document.getElementById('extEstado'); est.className = 'small mt-2 text-muted'; est.textContent = 'Copiando…';
+  const r = await fetchCsrf('/api/backup/externo/sincronizar', { method: 'POST' });
+  const d = await r.json();
+  if (!d.ok) { est.className = 'small mt-2 text-danger'; est.textContent = d.error || d.detail || 'No se pudo copiar'; return; }
+  bkRefresh();
+}
+
 function tipoBadge(t) {
   const m = {daily:'primary',weekly:'success',monthly:'info',manual:'secondary',pre_update:'warning',pre_import:'warning',pre_migrate:'warning'};
   return `<span class="badge bg-${m[t]||'dark'}">${t}</span>`;
@@ -170,6 +221,7 @@ async function bkRefresh() {
     ]);
 
     document.getElementById('totalBkBadge').textContent = (st.total_backups || 0) + ' backups';
+    extRender(st.externo);
     document.getElementById('bkDir').textContent    = st.backup_dir || '—';
     document.getElementById('bkTotal').textContent  = st.total_backups || 0;
     document.getElementById('bkSize').textContent   = (st.total_size_mb || 0) + ' MB';

@@ -15637,6 +15637,45 @@ def api_bk_status(user: Usuario = Depends(requiere_login)):
     return _bk.get_backup_status()
 
 
+@app.get("/api/backup/externo")
+def api_bk_externo(user: Usuario = Depends(requiere_login)):
+    """Copia fuera del PC (2.7.56): estado de la carpeta externa."""
+    _bk_requiere_admin(user)
+    return _bk.externo_estado()
+
+
+class BackupExternoRequest(BaseModel):
+    ruta: str = Field("", max_length=400)
+    activo: bool = False
+
+
+@app.post("/api/backup/externo")
+def api_bk_externo_guardar(payload: BackupExternoRequest, user: Usuario = Depends(requiere_login)):
+    _bk_requiere_admin(user)
+    if payload.activo:
+        prueba = _bk.probar_externo(payload.ruta)
+        if not prueba["ok"]:
+            raise HTTPException(400, prueba["error"])
+    cfg = _bk.set_externo_config(payload.ruta, payload.activo)
+    _bk_audit(user, "externo_config", f"{payload.ruta} activo={payload.activo}")
+    return {"ok": True, **cfg}
+
+
+@app.post("/api/backup/externo/probar")
+def api_bk_externo_probar(payload: BackupExternoRequest, user: Usuario = Depends(requiere_login)):
+    _bk_requiere_admin(user)
+    return _bk.probar_externo(payload.ruta)
+
+
+@app.post("/api/backup/externo/sincronizar")
+async def api_bk_externo_sincronizar(user: Usuario = Depends(requiere_login)):
+    """Copia ahora a la carpeta externa todo lo que falte."""
+    _bk_requiere_admin(user)
+    result = await run_in_threadpool(_bk.sincronizar_externo)
+    _bk_audit(user, "externo_sincronizar", str(result.get("copiados", 0)))
+    return result
+
+
 @app.get("/api/backup/history")
 def api_bk_history(
     limit: int = 50,
