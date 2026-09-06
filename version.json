@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.53",
-    "nombre":  "MRD TOOL CONTROL -- Continuidad 24x7: failover seguro con comprobacion real del tunel B, tunel B como tarea SYSTEM, Sentinel comprueba /ready de los tuneles, recarga del token de Cloudflare y cambio de contrasena del panel de Sentinel",
+    "version_actual":  "2.7.54",
+    "nombre":  "MRD TOOL CONTROL -- Zonas en 3D: contenedores, nave, furgonetas y patio con medidas reales; estanterias, cajoneras y maquinas colocadas por pared y distancias; cada balda o cajon genera huecos con QR; borrado seguro que nunca pierde herramientas; Vista de la nave sin saltos al tocar",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Continuidad 24x7: failover seguro con comprobacion real del tunel B, tunel B como tarea SYSTEM, Sentinel comprueba /ready de los tuneles, recarga del token de Cloudflare y cambio de contrasena del panel de Sentinel"
+                    "Zonas en 3D: contenedores, nave, furgonetas y patio con medidas reales; estanterias, cajoneras y maquinas colocadas por pared y distancias; cada balda o cajon genera huecos con QR; borrado seguro que nunca pierde herramientas; Vista de la nave sin saltos al tocar"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.53.zip",
-    "sha256":  "9c0079d621b07333ce8f79724e823dcb4e5ab287f80a699da98d4e65d1564e25"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.54.zip",
+    "sha256":  "065a775fd9953abf0474e4fab4f0b93c22adbc876d0b1520dd74efa9bc03b7ab"
 }
