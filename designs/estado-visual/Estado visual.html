@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MRD · Maqueta del Estado visual corregido</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  :root{--bg:#0b1220;--surface:#111a2e;--surface2:#16213a;--border:#22304d;--text:#e2e8f0;--muted:#94a3b8;--cyan:#22d3ee;--green:#34d399;--amber:#f59e0b;--red:#f87171}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 28px 8px}
+  header h1{margin:0 0 4px;font-size:20px}
+  header p{margin:0;color:var(--muted);max-width:1000px}
+  .wrap{padding:8px 28px 32px;display:grid;gap:18px;max-width:1100px}
+  .app{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px}
+  .app h2{margin:0 0 4px;font-size:17px}
+  .app .sub{color:var(--muted);margin:0 0 14px;font-size:13px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+  .kpi{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;cursor:pointer}
+  .kpi:hover{border-color:var(--cyan)}
+  .kpi small{display:block;color:var(--muted)}.kpi strong{font-size:22px}.kpi em{font-style:normal;color:var(--muted);font-size:12px}
+  .bars{display:grid;gap:10px}
+  .bar{display:grid;grid-template-columns:190px 1fr 150px;gap:12px;align-items:center;cursor:pointer}
+  .bar:hover .track{outline:1px solid var(--cyan)}
+  .bar .label{font-weight:600}.bar .label small{display:block;color:var(--muted);font-weight:400}
+  .track{height:26px;background:var(--surface2);border-radius:8px;overflow:hidden;display:flex}
+  .seg{height:100%}
+  .seg.g{background:var(--green)}.seg.b{background:var(--cyan)}.seg.o{background:var(--amber)}.seg.r{background:var(--red)}
+  .val{text-align:right;font-weight:700}.val small{display:block;color:var(--muted);font-weight:400}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:12.5px;margin-top:10px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
+  .old{border-color:#4c1d1d}
+  .old h2{color:var(--red)}
+  .note{background:#1c2740;border-left:3px solid var(--amber);padding:8px 12px;border-radius:8px;font-size:13px;margin-top:10px}
+  .notes{padding:0 28px 40px;max-width:1100px}
+  .notes h3{font-size:15px;margin:18px 0 6px}
+  .notes ul{padding-left:18px}.notes li{margin:4px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Estado visual corregido: activos y unidades por separado</h1>
+  <p>Cifras reales de hoy en Almacén Madrid. Hoy la página suma en una sola barra herramientas contadas de una en una con miles de unidades de consumibles, y la ropa aparece a cero porque solo mira el stock nuevo por variantes. Cada cifra y cada barra de la propuesta abre el listado que la origina, para comprobarla.</p>
+</header>
+
+<div class="wrap">
+  <section class="app old">
+    <h2><i class="bi bi-x-octagon"></i> Así se muestra hoy</h2>
+    <p class="sub">"Total controlado: 6.908 unidades y activos". Una sola barra por familia.</p>
+    <div class="bars">
+      <div class="bar"><span class="label">Herramientas</span><div class="track"><div class="seg b" style="width:1.9%"></div></div><span class="val">133</span></div>
+      <div class="bar"><span class="label">Ropa</span><div class="track"></div><span class="val">0 <small>faltan 728</small></span></div>
+      <div class="bar"><span class="label">EPIs</span><div class="track"><div class="seg b" style="width:1.8%"></div></div><span class="val">122</span></div>
+      <div class="bar"><span class="label">Maquinaria</span><div class="track"><div class="seg b" style="width:0.1%"></div></div><span class="val">3</span></div>
+      <div class="bar"><span class="label">Consumibles</span><div class="track"><div class="seg b" style="width:96%"></div></div><span class="val">6.647</span></div>
+    </div>
+    <div class="note">Las barras de herramientas, EPI y maquinaria son invisibles al lado de los consumibles, y nada indica que 6.647 son tornillos, discos y guantes sueltos, no aparatos.</div>
+  </section>
+
+  <section class="app">
+    <h2><i class="bi bi-tools"></i> Activos: se cuentan de uno en uno</h2>
+    <p class="sub">Herramientas, maquinaria y EPI individual (arneses, cascos con código). 258 activos en Madrid.</p>
+    <div class="kpis">
+      <div class="kpi"><small>Disponibles en nave</small><strong>201</strong><em>ver lista</em></div>
+      <div class="kpi"><small>Entregados / en obra</small><strong>56</strong><em>¿Qué está fuera?</em></div>
+      <div class="kpi"><small>En mantenimiento</small><strong>0</strong><em>Reparaciones</em></div>
+      <div class="kpi"><small>Fuera de servicio / baja</small><strong>1</strong><em>ver lista</em></div>
+    </div>
+    <div class="bars">
+      <div class="bar"><span class="label">Herramientas<small>133 unidades físicas</small></span><div class="track"><div class="seg g" style="width:63%"></div><div class="seg b" style="width:37%"></div></div><span class="val">133<small>84 en nave · 49 fuera</small></span></div>
+      <div class="bar"><span class="label">EPI individual<small>arneses, absorbedores…</small></span><div class="track"><div class="seg g" style="width:96%"></div><div class="seg b" style="width:3.3%"></div><div class="seg r" style="width:0.8%"></div></div><span class="val">122<small>117 en nave · 4 asignados · 1 baja</small></span></div>
+      <div class="bar"><span class="label">Maquinaria<small>toros, plataformas…</small></span><div class="track"><div class="seg b" style="width:100%"></div></div><span class="val">3<small>3 en uso</small></span></div>
+    </div>
+    <div class="legend"><span><i style="background:var(--green)"></i>En nave</span><span><i style="background:var(--cyan)"></i>Entregado / en obra</span><span><i style="background:var(--amber)"></i>Mantenimiento</span><span><i style="background:var(--red)"></i>Baja</span></div>
+  </section>
+
+  <section class="app">
+    <h2><i class="bi bi-boxes"></i> Stock: se cuentan unidades</h2>
+    <p class="sub">Materiales y consumibles, y ropa de stock (incluida la ropa histórica que hoy no aparece). La barra mide referencias, no unidades, para que 1.400 tornillos no tapen a 21 referencias.</p>
+    <div class="kpis">
+      <div class="kpi"><small>Referencias de material</small><strong>21</strong><em>6.647 unidades · ver Materiales</em></div>
+      <div class="kpi"><small>Con stock bajo</small><strong style="color:var(--amber)">3</strong><em>Stock bajo</em></div>
+      <div class="kpi"><small>Ropa en stock</small><strong>728</strong><em>unidades · Ropa y variantes</em></div>
+      <div class="kpi"><small>Ropa entregada este año</small><strong>0</strong><em>Entregas de EPI</em></div>
+    </div>
+    <div class="bars">
+      <div class="bar"><span class="label">Materiales<small>21 referencias</small></span><div class="track"><div class="seg g" style="width:86%"></div><div class="seg o" style="width:14%"></div></div><span class="val">21<small>18 ok · 3 bajo mínimo</small></span></div>
+      <div class="bar"><span class="label">Ropa de stock<small>tallas y prendas</small></span><div class="track"><div class="seg g" style="width:100%"></div></div><span class="val">728 ud.<small>sin mínimos definidos</small></span></div>
+    </div>
+    <div class="legend"><span><i style="background:var(--green)"></i>Con stock</span><span><i style="background:var(--amber)"></i>Bajo mínimo</span></div>
+  </section>
+</div>
+
+<div class="notes">
+  <h3>Qué cambia por dentro</h3>
+  <ul>
+    <li>Dos totales en vez de uno: <b>258 activos</b> y <b>21 referencias / 6.647 unidades de material + 728 de ropa</b>. Desaparece el "Total controlado" que mezclaba ambos.</li>
+    <li>La ropa suma el stock histórico (tabla stock_epi) además de las variantes nuevas.</li>
+    <li>Cada tarjeta y cada barra es un enlace al listado filtrado (Herramientas disponibles, ¿Qué está fuera?, Stock bajo, Ropa y variantes…). Lo que ves se puede contar a mano.</li>
+    <li>El mismo criterio se aplicará después al Dashboard y a Informes (tanda aparte): gráficos de activos y de unidades por separado, con su etiqueta de unidad.</li>
+  </ul>
+</div>
+</body>
+</html>

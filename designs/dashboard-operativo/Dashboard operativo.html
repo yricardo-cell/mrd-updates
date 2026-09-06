@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MRD · Maqueta del Dashboard operativo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  :root{--bg:#0b1220;--surface:#111a2e;--surface2:#16213a;--border:#22304d;--text:#e2e8f0;--muted:#94a3b8;--cyan:#22d3ee;--green:#34d399;--amber:#f59e0b;--red:#f87171}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 28px 8px}
+  header h1{margin:0 0 4px;font-size:20px}
+  header p{margin:0;color:var(--muted);max-width:1040px}
+  .wrap{padding:8px 28px 28px;max-width:1140px;display:grid;gap:16px}
+  .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+  .hero h2{margin:0;font-size:22px}.hero p{margin:4px 0 0;color:var(--muted)}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{border:0;border-radius:10px;padding:11px 16px;font:inherit;font-weight:700;cursor:pointer;display:inline-flex;gap:8px;align-items:center}
+  .btn.primary{background:var(--cyan);color:#0b1220}.btn.ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .today{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .task{background:var(--surface);border:1px solid var(--border);border-left:5px solid var(--border);border-radius:14px;padding:14px 16px;display:grid;gap:6px}
+  .task.urgent{border-left-color:var(--red)}.task.warn{border-left-color:var(--amber)}.task.ok{border-left-color:var(--green)}.task.info{border-left-color:var(--cyan)}
+  .task small{color:var(--muted)}.task strong{font-size:26px;line-height:1}.task span{font-size:13px}
+  .task a{color:var(--cyan);font-weight:600;text-decoration:none;font-size:13px}
+  .grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card h3{margin:0 0 2px;font-size:15px}.card .sub{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+  .money{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+  .money div{background:var(--surface2);border-radius:10px;padding:10px 12px}
+  .money small{display:block;color:var(--muted)}.money strong{font-size:20px}
+  table{width:100%;border-collapse:collapse}th,td{padding:8px 6px;border-bottom:1px solid var(--border);text-align:left;font-size:13px}th{color:var(--muted);font-weight:600}
+  .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:700}
+  .tag.warn{background:#4a2e05;color:var(--amber)}.tag.bad{background:#4c1d1d;color:var(--red)}.tag.ok{background:#064e3b;color:var(--green)}
+  .bars{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:end;height:110px;margin-top:8px}
+  .bars div{background:linear-gradient(180deg,var(--cyan),#0891b2);border-radius:6px 6px 2px 2px;position:relative}
+  .bars div::after{content:attr(data-v);position:absolute;top:-18px;left:0;right:0;text-align:center;font-size:11px;color:var(--muted)}
+  .bars div::before{content:attr(data-d);position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-size:11px;color:var(--muted)}
+  .feed{list-style:none;margin:0;padding:0}
+  .feed li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+  .feed i{color:var(--cyan)}.feed small{color:var(--muted);margin-left:auto;white-space:nowrap}
+  .notes{padding:0 28px 40px;max-width:1140px}.notes h3{font-size:15px;margin:18px 0 6px}.notes ul{padding-left:18px}.notes li{margin:4px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Dashboard operativo: qué hay que hacer hoy y cuánto vale lo que está fuera</h1>
+  <p>Cifras reales de Almacén Madrid a día de hoy (los nombres de cuadrilla son ilustrativos). Sustituye el panel actual de contadores (total herramientas, disponibles, en obra…) por tres capas: tareas de hoy con botón, dinero y riesgo, y actividad real. Todo enlaza a la pantalla donde se resuelve.</p>
+</header>
+
+<div class="wrap">
+  <div class="hero">
+    <div><h2>Buenos días · sábado 6 de septiembre</h2><p>Madrid · 133 herramientas · 21 materiales · 122 EPI · última actualización hace 2 min</p></div>
+    <div class="actions"><button class="btn primary"><i class="bi bi-upc-scan"></i> Escanear</button><button class="btn ghost"><i class="bi bi-lightning"></i> Mostrador Único</button><button class="btn ghost"><i class="bi bi-clipboard2-check"></i> Inventario</button></div>
+  </div>
+
+  <div class="today">
+    <div class="task urgent"><small>Solicitudes de trabajadores</small><strong>12</strong><span>pendientes · 1 en preparación · la más antigua lleva 3 días</span><a href="#">Preparar entregas →</a></div>
+    <div class="task warn"><small>Herramientas fuera</small><strong>49</strong><span>con trabajadores · 11.795 € en la calle</span><a href="#">¿Qué está fuera? →</a></div>
+    <div class="task warn"><small>Materiales bajo mínimo</small><strong>3</strong><span>guantes 9, discos 230, silicona</span><a href="#">Hacer pedido →</a></div>
+    <div class="task ok"><small>Devoluciones vencidas</small><strong>0</strong><span>nada atrasado hoy</span><a href="#">Ver plazos →</a></div>
+    <div class="task ok"><small>Revisiones y vencimientos</small><strong>0</strong><span>EPI, ITV y seguros al día</span><a href="#">Calendario →</a></div>
+    <div class="task info"><small>Reparaciones e incidencias</small><strong>0</strong><span>abiertas · taller libre</span><a href="#">Abrir incidencia →</a></div>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h3><i class="bi bi-cash-coin"></i> Dinero y riesgo</h3>
+      <p class="sub">Lo que vale el material fuera de la nave y lo que cuesta no tenerlo controlado.</p>
+      <div class="money">
+        <div><small>Valor fuera de la nave</small><strong>11.795 €</strong></div>
+        <div><small>Valor sin ubicación ni etiqueta</small><strong>por calcular</strong></div>
+        <div><small>Stock inmovilizado &gt; 90 días</small><strong>por calcular</strong></div>
+      </div>
+      <table>
+        <thead><tr><th>Quién tiene más material fuera</th><th>Herramientas</th><th>Valor</th><th>Más antigua</th></tr></thead>
+        <tbody>
+          <tr><td>Cuadrilla A (ejemplo)</td><td>14</td><td>3.980 €</td><td><span class="tag warn">41 días</span></td></tr>
+          <tr><td>Cuadrilla B (ejemplo)</td><td>11</td><td>2.760 €</td><td><span class="tag ok">6 días</span></td></tr>
+          <tr><td>Furgoneta (ejemplo)</td><td>9</td><td>2.115 €</td><td><span class="tag ok">2 días</span></td></tr>
+          <tr><td>Otros</td><td>15</td><td>2.940 €</td><td><span class="tag bad">120 días</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card">
+      <h3><i class="bi bi-activity"></i> Actividad de la semana</h3>
+      <p class="sub">156 movimientos · pico el viernes · 10 hoy</p>
+      <div class="bars">
+        <div style="height:20%" data-v="9" data-d="L"></div><div style="height:75%" data-v="33" data-d="M"></div><div style="height:5%" data-v="2" data-d="X"></div><div style="height:73%" data-v="32" data-d="J"></div><div style="height:59%" data-v="26" data-d="V"></div><div style="height:100%" data-v="44" data-d="S"></div><div style="height:23%" data-v="10" data-d="D"></div>
+      </div>
+      <p class="sub" style="margin-top:26px">Últimos movimientos (ejemplo de formato)</p>
+      <ul class="feed">
+        <li><i class="bi bi-box-arrow-right"></i> Taladro → Cuadrilla A <small>hace 12 min</small></li>
+        <li><i class="bi bi-box-arrow-in-left"></i> Radial 230 devuelta <small>hace 40 min</small></li>
+        <li><i class="bi bi-bag-check"></i> Solicitud preparada (guantes, casco) <small>hace 1 h</small></li>
+        <li><i class="bi bi-exclamation-triangle"></i> Stock bajo: discos 230 (9 ud.) <small>hace 2 h</small></li>
+      </ul>
+    </section>
+  </div>
+</div>
+
+<div class="notes">
+  <h3>Qué cambia y de dónde sale cada cifra</h3>
+  <ul>
+    <li><b>Tareas de hoy</b>: solicitudes pendientes (tabla de solicitudes del trabajador), herramientas fuera con su valor (precio de compra de las herramientas entregadas), materiales bajo mínimo, devoluciones vencidas (fecha prevista de los movimientos), revisiones de EPI y vencimientos de ITV/seguro, reparaciones e incidencias abiertas. Cada tarjeta tiene el botón que la resuelve.</li>
+    <li><b>Dinero y riesgo</b>: valor de lo que está fuera por persona o vehículo y desde cuándo; valor sin ubicación ni etiqueta; stock que no se mueve. Las dos cifras marcadas "por calcular" se obtendrán del precio de compra y de la fecha del último movimiento.</li>
+    <li><b>Actividad</b>: movimientos por día de la semana con la cifra encima de cada barra y el listado de los últimos, con quién y qué.</li>
+    <li>Desaparecen los contadores sueltos sin acción (total herramientas, disponibles, en reparación, extraviadas…) que ya viven en el Estado visual.</li>
+  </ul>
+</div>
+</body>
+</html>

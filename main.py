@@ -17164,6 +17164,7 @@ def _estado_inventario_real(db: Session, warehouse_id: int | None = None) -> dic
     sin_etiqueta = 0
     sin_ubicacion = 0
     stock_bajo = 0
+    epi_individual = {estado: 0 for estado in estados}
 
     for item in db.query(Herramienta).filter(
         Herramienta.estado != "archivada",
@@ -17210,6 +17211,7 @@ def _estado_inventario_real(db: Session, warehouse_id: int | None = None) -> dic
         else:
             destino = "disponible"
         categorias["epis"][destino] += 1
+        epi_individual[destino] += 1
         sin_etiqueta += int(not any(((item.referencia_interna or "").strip(), (item.codigo_qr or "").strip())))
 
     variantes = db.query(VarianteEPI).filter(VarianteEPI.activo == True).all()
@@ -17227,6 +17229,31 @@ def _estado_inventario_real(db: Session, warehouse_id: int | None = None) -> dic
         categorias[categoria]["disponible"] += cantidad
         stock_bajo += int(variante.stock_minimo > 0 and cantidad <= variante.stock_minimo)
         sin_etiqueta += int(not (variante.referencia_interna and variante.codigo_qr))
+
+    # Ropa y EPI de stock genérico (tabla stock_epi): antes no se contaba y la
+    # familia "Ropa" salía a cero aunque hubiera cientos de unidades.
+    stock_generico = {"ropa": {"referencias": 0, "unidades": 0, "bajo_minimo": 0},
+                      "epi": {"referencias": 0, "unidades": 0, "bajo_minimo": 0}}
+    for item in db.query(StockEPI).filter(
+        *([StockEPI.almacen_id == warehouse_id] if warehouse_id else []),
+    ).all():
+        familia = "ropa" if item.categoria == "ropa" else "epi"
+        cantidad = max(0, int(item.cantidad or 0))
+        stock_generico[familia]["referencias"] += 1
+        stock_generico[familia]["unidades"] += cantidad
+        bajo = int((item.stock_minimo or 0) > 0 and cantidad <= (item.stock_minimo or 0))
+        stock_generico[familia]["bajo_minimo"] += bajo
+        stock_bajo += bajo
+        categorias["ropa" if familia == "ropa" else "epis"]["disponible"] += cantidad
+
+    variantes_stock = {"ropa": {"referencias": 0, "unidades": 0, "bajo_minimo": 0},
+                       "epi": {"referencias": 0, "unidades": 0, "bajo_minimo": 0}}
+    for variante in variantes:
+        familia = "ropa" if variante.catalogo and variante.catalogo.categoria == "ropa" else "epi"
+        cantidad = int(stock_por_variante.get(variante.id, 0) or 0)
+        variantes_stock[familia]["referencias"] += 1
+        variantes_stock[familia]["unidades"] += cantidad
+        variantes_stock[familia]["bajo_minimo"] += int(variante.stock_minimo > 0 and cantidad <= variante.stock_minimo)
 
     for linea in db.query(LineaDotacion).join(DotacionTrabajador).join(Trabajador).filter(
         LineaDotacion.estado == "entregada",
@@ -17247,8 +17274,39 @@ def _estado_inventario_real(db: Session, warehouse_id: int | None = None) -> dic
 
     totales = {estado: sum(datos[estado] for datos in categorias.values()) for estado in estados}
     total = sum(totales.values())
+
+    # Bloques nuevos (2.7.34): activos contados de uno en uno y stock en unidades,
+    # sin mezclarlos en una misma barra ni en un mismo total.
+    materiales_ref = db.query(Material).filter(
+        Material.activo == True,
+        *([Material.almacen_id == warehouse_id] if warehouse_id else []),
+    ).count()
+    activos = {
+        "herramientas": dict(categorias["herramientas"]),
+        "maquinaria": dict(categorias["maquinaria"]),
+        "epi_individual": dict(epi_individual),
+    }
+    for datos in activos.values():
+        datos["total"] = sum(datos[estado] for estado in estados)
+    activos["totales"] = {estado: sum(activos[f][estado] for f in ("herramientas", "maquinaria", "epi_individual")) for estado in estados}
+    activos["total"] = sum(activos["totales"].values())
+    stock = {
+        "materiales": {
+            "referencias": materiales_ref,
+            "unidades": categorias["consumibles"]["disponible"],
+            "bajo_minimo": sum(1 for item in db.query(Material).filter(
+                Material.activo == True,
+                *([Material.almacen_id == warehouse_id] if warehouse_id else []),
+            ).all() if item.bajo_minimo),
+        },
+        "ropa": {k: stock_generico["ropa"][k] + variantes_stock["ropa"][k] for k in ("referencias", "unidades", "bajo_minimo")},
+        "epi_stock": {k: stock_generico["epi"][k] + variantes_stock["epi"][k] for k in ("referencias", "unidades", "bajo_minimo")},
+    }
+    stock["ropa"]["entregadas"] = categorias["ropa"]["en_uso"]
+    stock["epi_stock"]["entregadas"] = categorias["epis"]["en_uso"] - sum(epi_individual[e] for e in ("en_uso",))
     return {
         "categorias": categorias, "totales": totales, "total": total,
+        "activos": activos, "stock": stock,
         "sin_etiqueta": sin_etiqueta, "sin_ubicacion": sin_ubicacion,
         "stock_bajo": stock_bajo, "actualizado": datetime.now().strftime("%d/%m/%Y · %H:%M"),
     }
