@@ -63,7 +63,7 @@ from config import (
 from database import engine, get_db, Base, apply_migrations, SessionLocal
 import mantenimiento as mant_engine
 from models import (
-    Ubicacion,
+    Ubicacion, NaveZona, NaveElemento,
     Usuario, Trabajador, Almacen, Obra, Vehiculo, Herramienta, Movimiento,
     Incidencia, Reparacion, Material, Documento, Proveedor, Categoria, AuditoriaLog,
     Maquinaria, EventoMaquinaria, DocumentoMaquinaria,
@@ -6049,9 +6049,8 @@ def ubicacion_eliminar(
         raise HTTPException(403)
     ub = db.query(Ubicacion).filter(Ubicacion.id == uid, Ubicacion.almacen_id == aid).first()
     if ub:
-        # Desvincular herramientas y materiales
-        db.query(Herramienta).filter(Herramienta.ubicacion_id == uid).update({"ubicacion_id": None})
-        db.query(Material).filter(Material.ubicacion_id == uid).update({"ubicacion_id": None})
+        # Lo que había dentro se queda sin hueco (herramientas, materiales y EPI); nunca se borra.
+        _nave_desvincular(db, [uid])
         db.delete(ub)
         db.commit()
     return RedirectResponse(f"/almacenes/{aid}?ok=ubicacion_eliminada", status_code=303)
@@ -8477,12 +8476,9 @@ def _nave_clave_natural(texto) -> tuple:
     return tuple(int(p) if p.isdigit() else p.upper() for p in partes)
 
 
-def _nave_huecos(db: Session, warehouse_id: int) -> tuple[list[dict], dict]:
-    """Ubicaciones activas del almacén con lo que hay en cada una (herramientas,
-    materiales, EPI de stock y EPI individual) agrupadas por zona y fila."""
-    ubicaciones = db.query(Ubicacion).filter(
-        Ubicacion.almacen_id == warehouse_id, Ubicacion.activo == True,
-    ).all()
+def _nave_contenido(db: Session, ubicaciones) -> dict[int, list[dict]]:
+    """Lo que hay en cada ubicación (herramientas, materiales, EPI de stock y
+    EPI individual) como lista de dicts por id de ubicación."""
     ids = [u.id for u in ubicaciones]
     contenido: dict[int, list[dict]] = {u.id: [] for u in ubicaciones}
     if ids:
@@ -8539,19 +8535,33 @@ def _nave_huecos(db: Session, warehouse_id: int) -> tuple[list[dict], dict]:
                 "nombre": e.tipo, "estado": e.estado or "", "fuera": e.trabajador_id is not None,
                 "cantidad": 1, "unidad": "ud", "url": f"/epis/individuales/{e.id}",
             })
+    return contenido
+
+
+def _nave_clase(items: list[dict]) -> str:
+    alerta = any(i.get("vencida") or i.get("bajo_minimo") for i in items)
+    if not items:
+        return "vacio"
+    if alerta:
+        return "alerta"
+    if any(i["tipo"] == "herramienta" for i in items):
+        return "lleno"
+    return "stock"
+
+
+def _nave_huecos(db: Session, warehouse_id: int) -> tuple[list[dict], dict]:
+    """Ubicaciones activas del almacén con lo que hay en cada una (herramientas,
+    materiales, EPI de stock y EPI individual) agrupadas por zona y fila."""
+    ubicaciones = db.query(Ubicacion).filter(
+        Ubicacion.almacen_id == warehouse_id, Ubicacion.activo == True,
+    ).all()
+    contenido = _nave_contenido(db, ubicaciones)
     filas_map: dict[tuple, dict] = {}
     resumen = {"huecos": len(ubicaciones), "ocupados": 0, "articulos": 0, "alertas": 0}
     for u in ubicaciones:
         items = contenido[u.id]
-        alerta = any(i.get("vencida") or i.get("bajo_minimo") for i in items)
-        if not items:
-            clase = "vacio"
-        elif alerta:
-            clase = "alerta"
-        elif any(i["tipo"] == "herramienta" for i in items):
-            clase = "lleno"
-        else:
-            clase = "stock"
+        clase = _nave_clase(items)
+        alerta = clase == "alerta"
         if items:
             resumen["ocupados"] += 1
         resumen["articulos"] += len(items)
@@ -8562,7 +8572,8 @@ def _nave_huecos(db: Session, warehouse_id: int) -> tuple[list[dict], dict]:
         filas_map.setdefault(clave, {"zona": zona, "fila": fila, "huecos": []})
         filas_map[clave]["huecos"].append({
             "id": u.id, "nombre": u.nombre, "codigo": u.codigo or "", "ruta": u.ruta_completa,
-            "posicion": u.posicion or u.balda or "", "clase": clase, "n": len(items),
+            "posicion": (f"{_nave_int(u.balda)}·{u.posicion}" if (u.elemento_id and u.balda and u.posicion) else (u.posicion or u.balda or "")),
+            "clase": clase, "n": len(items),
             "items": items,
         })
     filas = sorted(filas_map.values(), key=lambda f: (_nave_clave_natural(f["zona"]), _nave_clave_natural(f["fila"])))
@@ -8600,6 +8611,349 @@ def vista_nave(request: Request, user: Usuario = Depends(requiere_login), db: Se
         request, user, db, almacen=warehouse, filas=filas, resumen=resumen,
         sin_ubicacion=_nave_sin_ubicacion(db, warehouse.id), filas_json=_nave_json(filas),
     ))
+
+
+# ─── Zonas y elementos en 3D (2.7.54) ─────────────────────────────────────────
+
+NAVE_ZONA_TIPOS = ("contenedor", "nave", "furgoneta", "patio", "armario", "otro")
+NAVE_ELEMENTO_TIPOS = ("estanteria", "cajonera", "armario", "maquina", "caja")
+NAVE_PAREDES = ("izquierda", "fondo", "derecha", "suelto")
+
+
+def _nave_editor(user: Usuario) -> bool:
+    return user.rol == "admin" or tiene_permiso(user, "editar")
+
+
+def _nave_int(texto) -> int:
+    digitos = re.sub(r"\D", "", str(texto or ""))
+    return int(digitos) if digitos else 1
+
+
+def _nave_geometria(zona: NaveZona, el: NaveElemento) -> tuple[int, int, int, int]:
+    """(x, z, ancho, fondo) en cm dentro de la zona: x desde la pared del fondo
+    hacia la puerta, z desde la pared izquierda."""
+    L, A = int(zona.largo or 0), int(zona.ancho or 0)
+    w, d = (el.fondo, el.ancho) if int(el.giro or 0) == 90 else (el.ancho, el.fondo)
+    dp, dw = int(el.desde_puerta or 0), int(el.desde_pared or 0)
+    if el.pared == "fondo":
+        x, z = dw, dp
+    elif el.pared == "derecha":
+        x, z = L - dp - w, A - dw - d
+    else:  # izquierda o suelto
+        x, z = L - dp - w, dw
+    return max(0, x), max(0, z), int(w), int(d)
+
+
+def _nave_desvincular(db: Session, ubicacion_ids) -> dict:
+    """Deja sin hueco lo que había en esas ubicaciones. Nunca borra artículos."""
+    ids = [int(i) for i in ubicacion_ids]
+    res = {"herramientas": 0, "materiales": 0, "stock_epi": 0, "epi_individual": 0}
+    if not ids:
+        return res
+    for clave, modelo in (("herramientas", Herramienta), ("materiales", Material),
+                          ("stock_epi", StockEPI), ("epi_individual", EPIIndividual)):
+        res[clave] = db.query(modelo).filter(modelo.ubicacion_id.in_(ids)).update(
+            {"ubicacion_id": None}, synchronize_session=False)
+    return res
+
+
+def _nave_impacto(db: Session, ubicacion_ids) -> dict:
+    ids = [int(i) for i in ubicacion_ids]
+    res = {"huecos": len(ids), "herramientas": 0, "materiales": 0, "stock_epi": 0, "epi_individual": 0}
+    if ids:
+        for clave, modelo in (("herramientas", Herramienta), ("materiales", Material),
+                              ("stock_epi", StockEPI), ("epi_individual", EPIIndividual)):
+            res[clave] = db.query(modelo).filter(modelo.ubicacion_id.in_(ids)).count()
+    res["total"] = res["herramientas"] + res["materiales"] + res["stock_epi"] + res["epi_individual"]
+    return res
+
+
+def _nave_sync_huecos(db: Session, zona: NaveZona, el: NaveElemento) -> dict:
+    """Crea los huecos que faltan (baldas × huecos por balda), renombra los que
+    existen y quita los sobrantes dejando sin hueco lo que tuvieran."""
+    etiqueta = "Cajón" if el.tipo == "cajonera" else "Balda"
+    nb, nh = max(1, int(el.baldas or 1)), max(1, int(el.huecos_por_balda or 1))
+    por_clave: dict[tuple, Ubicacion] = {}
+    for u in db.query(Ubicacion).filter(Ubicacion.elemento_id == el.id).all():
+        por_clave.setdefault((_nave_int(u.balda), _nave_int(u.posicion)), u)
+    creados = 0
+    for b in range(1, nb + 1):
+        for p in range(1, nh + 1):
+            unico = nb == 1 and nh == 1
+            nombre = f"{zona.nombre} · {el.nombre}" if unico else f"{zona.nombre} · {el.nombre} · {etiqueta} {b} · {p}"
+            balda, posicion = (None, None) if unico else (f"{etiqueta} {b}", str(p))
+            u = por_clave.pop((b, p), None)
+            if u is None:
+                u = Ubicacion(almacen_id=zona.almacen_id, nombre=nombre[:100], codigo=generar_referencia_ubicacion(db),
+                              zona=zona.nombre[:100], estanteria=el.nombre[:50], balda=balda,
+                              posicion=posicion, activo=True, elemento_id=el.id)
+                db.add(u)
+                db.flush()
+                creados += 1
+            else:
+                u.nombre, u.zona, u.estanteria = nombre[:100], zona.nombre[:100], el.nombre[:50]
+                u.balda, u.posicion, u.activo = balda, posicion, True
+    sobrantes = list(por_clave.values())
+    desv = _nave_desvincular(db, [u.id for u in sobrantes])
+    for u in sobrantes:
+        db.delete(u)
+    db.flush()
+    return {"creados": creados, "eliminados": len(sobrantes), "desvinculados": sum(desv.values())}
+
+
+def _nave_3d_data(db: Session, warehouse: Almacen) -> dict:
+    zonas = db.query(NaveZona).filter(NaveZona.almacen_id == warehouse.id, NaveZona.activo == True).order_by(NaveZona.id).all()
+    ubic = db.query(Ubicacion).filter(Ubicacion.almacen_id == warehouse.id, Ubicacion.activo == True,
+                                      Ubicacion.elemento_id.isnot(None)).all()
+    contenido = _nave_contenido(db, ubic)
+    por_el: dict[int, list] = {}
+    for u in ubic:
+        por_el.setdefault(u.elemento_id, []).append(u)
+    maqs = {m.id: m for m in db.query(Maquinaria).filter(Maquinaria.activa == True).order_by(Maquinaria.nombre).all()}
+    salida = []
+    for z in zonas:
+        elementos = []
+        for el in sorted(z.elementos, key=lambda e: e.id):
+            x, zz, w, d = _nave_geometria(z, el)
+            huecos = []
+            for u in sorted(por_el.get(el.id, []), key=lambda u: (_nave_int(u.balda), _nave_int(u.posicion))):
+                items = contenido.get(u.id, [])
+                huecos.append({"id": u.id, "nombre": u.nombre, "codigo": u.codigo or "", "balda": _nave_int(u.balda),
+                               "posicion": _nave_int(u.posicion), "clase": _nave_clase(items), "n": len(items), "items": items})
+            m = maqs.get(el.maquinaria_id) if el.maquinaria_id else None
+            fuera = ""
+            if m is not None and (m.estado or "") not in ("disponible", "en_almacen", ""):
+                fuera = f"{m.estado}" + (f" · {m.ubicacion}" if getattr(m, "ubicacion", None) else "")
+            elementos.append({
+                "id": el.id, "zona_id": z.id, "tipo": el.tipo, "nombre": el.nombre, "ancho": el.ancho, "fondo": el.fondo,
+                "alto": el.alto, "pared": el.pared, "desde_puerta": el.desde_puerta, "desde_pared": el.desde_pared,
+                "giro": el.giro, "baldas": el.baldas, "huecos_por_balda": el.huecos_por_balda,
+                "maquinaria_id": el.maquinaria_id, "maquinaria": m.nombre if m else "", "fuera": fuera,
+                "x": x, "z": zz, "w": w, "d": d, "huecos": huecos,
+                "n": sum(h["n"] for h in huecos),
+            })
+        salida.append({
+            "id": z.id, "nombre": z.nombre, "tipo": z.tipo, "largo": z.largo, "ancho": z.ancho, "alto": z.alto,
+            "pos_x": z.pos_x, "pos_z": z.pos_z, "fuera": bool(z.fuera), "donde": z.donde or "",
+            "elementos": elementos, "huecos": sum(len(e["huecos"]) for e in elementos),
+            "n": sum(e["n"] for e in elementos),
+        })
+    huecos_prueba = db.query(Ubicacion).filter(Ubicacion.almacen_id == warehouse.id, Ubicacion.activo == True,
+                                               Ubicacion.elemento_id.is_(None)).count()
+    return {
+        "almacen_id": warehouse.id, "almacen": warehouse.nombre, "zonas": salida,
+        "maquinaria": [{"id": m.id, "nombre": m.nombre, "estado": m.estado or ""} for m in maqs.values()],
+        "huecos_prueba": huecos_prueba, "sin_ubicacion": _nave_sin_ubicacion(db, warehouse.id),
+    }
+
+
+@app.get("/nave/3d", response_class=HTMLResponse)
+def nave_3d_page(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Zonas en 3D (2.7.54): contenedores, nave, furgonetas y patio con sus
+    medidas; dentro, estanterías, cajoneras y máquinas sueltas colocadas
+    donde el usuario dice. Se gira, se toca y se edita sin plano."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _operation_warehouse(request, user, db)
+    data = _nave_3d_data(db, warehouse)
+    return templates.TemplateResponse(request, "nave_3d.html", ctx_base(
+        request, user, db, almacen=warehouse, datos=data, datos_json=_nave_json(data),
+        puede_editar=_nave_editor(user),
+    ))
+
+
+@app.get("/api/nave/3d")
+def api_nave_3d(request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _operation_warehouse(request, user, db)
+    return JSONResponse(_nave_3d_data(db, warehouse))
+
+
+class NaveZonaRequest(BaseModel):
+    id: int | None = None
+    nombre: str = Field(..., min_length=1, max_length=120)
+    tipo: str = "contenedor"
+    largo: int = Field(600, ge=10, le=100000)
+    ancho: int = Field(244, ge=10, le=100000)
+    alto: int = Field(259, ge=10, le=100000)
+    pos_x: int | None = None
+    pos_z: int | None = None
+    fuera: bool = False
+    donde: str = Field("", max_length=255)
+
+
+class NaveElementoRequest(BaseModel):
+    id: int | None = None
+    zona_id: int
+    tipo: str = "estanteria"
+    nombre: str = Field(..., min_length=1, max_length=120)
+    ancho: int = Field(100, ge=1, le=100000)
+    fondo: int = Field(40, ge=1, le=100000)
+    alto: int = Field(200, ge=1, le=100000)
+    pared: str = "izquierda"
+    desde_puerta: int = Field(0, ge=0, le=100000)
+    desde_pared: int = Field(0, ge=0, le=100000)
+    giro: int = 0
+    baldas: int = Field(1, ge=1, le=60)
+    huecos_por_balda: int = Field(1, ge=1, le=60)
+    maquinaria_id: int | None = None
+
+
+def _nave_zona_de(db: Session, warehouse: Almacen, zona_id: int) -> NaveZona:
+    z = db.get(NaveZona, int(zona_id))
+    if not z or z.almacen_id != warehouse.id or not z.activo:
+        raise HTTPException(404, "Esa zona no existe en este almacén")
+    return z
+
+
+@app.post("/api/nave/zonas")
+def api_nave_zona_guardar(payload: NaveZonaRequest, request: Request = None,
+                          user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    if not _nave_editor(user):
+        raise HTTPException(403, "Sin permiso para editar la nave")
+    warehouse = _operation_warehouse(request, user, db)
+    if payload.tipo not in NAVE_ZONA_TIPOS:
+        raise HTTPException(400, "Tipo de zona no válido")
+    if payload.id:
+        z = _nave_zona_de(db, warehouse, payload.id)
+        anterior = {"nombre": z.nombre, "largo": z.largo, "ancho": z.ancho, "alto": z.alto}
+        accion = "editar"
+    else:
+        z = NaveZona(almacen_id=warehouse.id)
+        db.add(z)
+        anterior, accion = None, "crear"
+    z.nombre, z.tipo = payload.nombre.strip(), payload.tipo
+    z.largo, z.ancho, z.alto = payload.largo, payload.ancho, payload.alto
+    z.pos_x, z.pos_z, z.fuera = payload.pos_x, payload.pos_z, bool(payload.fuera)
+    z.donde = payload.donde.strip() or None
+    db.flush()
+    for el in z.elementos:  # el nombre de la zona forma parte del nombre de cada hueco
+        _nave_sync_huecos(db, z, el)
+    registrar_auditoria(db, "nave_zonas", z.id, accion, user.id, anterior,
+                        {"nombre": z.nombre, "tipo": z.tipo, "largo": z.largo, "ancho": z.ancho, "alto": z.alto})
+    db.commit()
+    return JSONResponse({"ok": True, "id": z.id})
+
+
+@app.get("/api/nave/zonas/{zid}/impacto")
+def api_nave_zona_impacto(zid: int, request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    z = _nave_zona_de(db, _operation_warehouse(request, user, db), zid)
+    ids = [u.id for u in db.query(Ubicacion).filter(Ubicacion.elemento_id.in_([e.id for e in z.elementos] or [0])).all()]
+    res = _nave_impacto(db, ids)
+    res["elementos"] = len(z.elementos)
+    return JSONResponse(res)
+
+
+@app.post("/api/nave/zonas/{zid}/eliminar")
+def api_nave_zona_eliminar(zid: int, request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    """Borra la zona, sus elementos y sus huecos. Lo que había dentro se queda sin hueco, no se borra."""
+    if not _nave_editor(user):
+        raise HTTPException(403, "Sin permiso para editar la nave")
+    z = _nave_zona_de(db, _operation_warehouse(request, user, db), zid)
+    huecos = db.query(Ubicacion).filter(Ubicacion.elemento_id.in_([e.id for e in z.elementos] or [0])).all()
+    desv = _nave_desvincular(db, [u.id for u in huecos])
+    for u in huecos:
+        db.delete(u)
+    registrar_auditoria(db, "nave_zonas", z.id, "eliminar", user.id,
+                        {"nombre": z.nombre, "elementos": len(z.elementos), "huecos": len(huecos)}, {"desvinculados": desv})
+    db.delete(z)
+    db.commit()
+    return JSONResponse({"ok": True, "huecos": len(huecos), "desvinculados": desv})
+
+
+@app.post("/api/nave/elementos")
+def api_nave_elemento_guardar(payload: NaveElementoRequest, request: Request = None,
+                              user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    if not _nave_editor(user):
+        raise HTTPException(403, "Sin permiso para editar la nave")
+    warehouse = _operation_warehouse(request, user, db)
+    z = _nave_zona_de(db, warehouse, payload.zona_id)
+    if payload.tipo not in NAVE_ELEMENTO_TIPOS:
+        raise HTTPException(400, "Tipo de elemento no válido")
+    if payload.pared not in NAVE_PAREDES:
+        raise HTTPException(400, "Pared no válida")
+    if payload.giro not in (0, 90):
+        raise HTTPException(400, "El giro solo puede ser 0 o 90")
+    if payload.maquinaria_id and not db.get(Maquinaria, payload.maquinaria_id):
+        raise HTTPException(404, "Esa máquina no existe")
+    if payload.id:
+        el = db.get(NaveElemento, payload.id)
+        if not el or el.zona.almacen_id != warehouse.id:
+            raise HTTPException(404, "Ese elemento no existe")
+        anterior = {"nombre": el.nombre, "zona_id": el.zona_id, "baldas": el.baldas, "huecos_por_balda": el.huecos_por_balda}
+        accion = "editar"
+    else:
+        el = NaveElemento()
+        db.add(el)
+        anterior, accion = None, "crear"
+    el.zona_id, el.tipo, el.nombre = z.id, payload.tipo, payload.nombre.strip()
+    el.ancho, el.fondo, el.alto = payload.ancho, payload.fondo, payload.alto
+    el.pared, el.desde_puerta, el.desde_pared, el.giro = payload.pared, payload.desde_puerta, payload.desde_pared, payload.giro
+    el.baldas, el.huecos_por_balda, el.maquinaria_id = payload.baldas, payload.huecos_por_balda, payload.maquinaria_id
+    db.flush()
+    sync = _nave_sync_huecos(db, z, el)
+    registrar_auditoria(db, "nave_elementos", el.id, accion, user.id, anterior,
+                        {"nombre": el.nombre, "tipo": el.tipo, "zona": z.nombre, "huecos": sync})
+    db.commit()
+    return JSONResponse({"ok": True, "id": el.id, "zona_id": z.id, **sync})
+
+
+@app.get("/api/nave/elementos/{eid}/impacto")
+def api_nave_elemento_impacto(eid: int, request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _operation_warehouse(request, user, db)
+    el = db.get(NaveElemento, eid)
+    if not el or el.zona.almacen_id != warehouse.id:
+        raise HTTPException(404, "Ese elemento no existe")
+    return JSONResponse(_nave_impacto(db, [u.id for u in db.query(Ubicacion).filter(Ubicacion.elemento_id == el.id).all()]))
+
+
+@app.post("/api/nave/elementos/{eid}/eliminar")
+def api_nave_elemento_eliminar(eid: int, request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    if not _nave_editor(user):
+        raise HTTPException(403, "Sin permiso para editar la nave")
+    warehouse = _operation_warehouse(request, user, db)
+    el = db.get(NaveElemento, eid)
+    if not el or el.zona.almacen_id != warehouse.id:
+        raise HTTPException(404, "Ese elemento no existe")
+    huecos = db.query(Ubicacion).filter(Ubicacion.elemento_id == el.id).all()
+    desv = _nave_desvincular(db, [u.id for u in huecos])
+    for u in huecos:
+        db.delete(u)
+    registrar_auditoria(db, "nave_elementos", el.id, "eliminar", user.id,
+                        {"nombre": el.nombre, "zona": el.zona.nombre, "huecos": len(huecos)}, {"desvinculados": desv})
+    db.delete(el)
+    db.commit()
+    return JSONResponse({"ok": True, "huecos": len(huecos), "desvinculados": desv})
+
+
+@app.get("/api/nave/huecos-prueba/impacto")
+def api_nave_huecos_prueba_impacto(request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _operation_warehouse(request, user, db)
+    ids = [u.id for u in db.query(Ubicacion).filter(Ubicacion.almacen_id == warehouse.id, Ubicacion.elemento_id.is_(None)).all()]
+    return JSONResponse(_nave_impacto(db, ids))
+
+
+@app.post("/api/nave/huecos-prueba/eliminar")
+def api_nave_huecos_prueba_eliminar(request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    """Quita los huecos antiguos (los que no salen de ningún elemento 3D). Las cosas se quedan sin hueco."""
+    if not _nave_editor(user):
+        raise HTTPException(403, "Sin permiso para editar la nave")
+    warehouse = _operation_warehouse(request, user, db)
+    huecos = db.query(Ubicacion).filter(Ubicacion.almacen_id == warehouse.id, Ubicacion.elemento_id.is_(None)).all()
+    desv = _nave_desvincular(db, [u.id for u in huecos])
+    for u in huecos:
+        db.delete(u)
+    registrar_auditoria(db, "ubicaciones", warehouse.id, "eliminar_huecos_prueba", user.id,
+                        {"huecos": len(huecos)}, {"desvinculados": desv})
+    db.commit()
+    return JSONResponse({"ok": True, "huecos": len(huecos), "desvinculados": desv})
 
 
 @app.get("/nave/colocar", response_class=HTMLResponse)

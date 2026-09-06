@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MRD · Maqueta: Contenedor en 3D con medidas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{--bg:#0b1220;--surface:#111a2e;--surface2:#16213a;--border:#22304d;--text:#e2e8f0;--muted:#94a3b8;--cyan:#22d3ee;--green:#34d399;--amber:#f59e0b;--red:#f87171}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 28px 8px}header h1{margin:0 0 4px;font-size:21px}header p{margin:0;color:var(--muted);max-width:1100px}
+  .wrap{padding:8px 28px 28px;display:grid;grid-template-columns:1.5fr 1fr;gap:18px}
+  @media (max-width:980px){.wrap{grid-template-columns:1fr}}
+  .screen{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px}
+  .screen h2{margin:0 0 2px;font-size:17px}.screen .sub{color:var(--muted);font-size:13px;margin:0 0 12px}
+  #vista{width:100%;height:460px;border-radius:12px;background:radial-gradient(circle at 50% 30%,#16213a,#0b1220);border:1px solid var(--border);cursor:grab;touch-action:none}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .btn{border:0;border-radius:9px;padding:8px 12px;font:inherit;font-weight:700;cursor:pointer;font-size:13.5px}
+  .btn.primary{background:var(--cyan);color:#0b1220}.btn.ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}.btn.danger{background:#7f1d1d;color:#fff}.btn.zona{background:var(--surface2);color:var(--muted);border:1px solid var(--border)}.btn.zona.on{border-color:var(--cyan);color:var(--cyan)}
+  label{font-size:12.5px;color:var(--muted);display:block;margin-bottom:3px}
+  .field input,.field select{background:#0b1220;border:1px solid var(--border);color:#fff;border-radius:8px;padding:8px 10px;font:inherit;width:100%}
+  .form{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .panel{background:#0b1220;border:1px solid var(--border);border-radius:12px;padding:12px;margin-top:12px}
+  .panel h3{margin:0 0 4px;font-size:15px}.panel small{color:var(--muted)}
+  .lista{list-style:none;margin:8px 0 0;padding:0}.lista li{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13.5px}
+  .pill{border:1px solid var(--border);border-radius:999px;padding:2px 9px;font-size:12px;background:var(--surface2)}
+  .leyenda{display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:8px}.leyenda i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  .note{background:#1c2740;border-left:3px solid var(--cyan);padding:8px 12px;border-radius:8px;font-size:13px;margin-top:10px}
+  .notes{padding:0 28px 40px;max-width:1100px}.notes h3{font-size:15px;margin:18px 0 6px}.notes ul{padding-left:18px}.notes li{margin:4px 0}
+  code{background:#1c2740;padding:1px 5px;border-radius:4px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Contenedor en 3D: sus medidas y dónde está cada cosa</h1>
+  <p>Puedes tener <b>todas las zonas que quieras</b> (contenedor 1, contenedor 2, la nave, una furgoneta, el patio) y todas se ven igual: cada una con sus medidas y lo que tiene dentro. Y una <b>vista general</b> con todas las zonas colocadas en la nave. El contenedor se dibuja con sus medidas reales (aquí uno de 20 pies: 606 × 244 × 259 cm). Dentro colocas <b>estanterías</b>, <b>cajoneras</b> y <b>máquinas sueltas</b> diciendo sus medidas y dónde están (pared, distancia desde la puerta, distancia desde la pared). Se gira con el ratón o el dedo, se acerca con la rueda, y al tocar una cosa se ve lo que tiene. Los colores son los mismos que en la Vista de la nave.</p>
+</header>
+<div class="wrap">
+  <section class="screen">
+    <div class="row" style="margin-bottom:8px" id="zonas"></div>
+    <h2 id="zona-titulo"><i class="bi bi-box"></i> Contenedor 1 <small style="color:var(--muted);font-weight:400">· 606 × 244 × 259 cm · Nave, pared del fondo junto a la puerta grande</small></h2>
+    <p class="sub">Arrastra para girar · rueda para acercar · toca una cosa para ver qué tiene.</p>
+    <canvas id="vista"></canvas>
+    <div class="row" style="margin-top:10px"><button class="btn ghost" id="b-3d"><i class="bi bi-badge-3d"></i> Vista 3D</button><button class="btn ghost" id="b-top"><i class="bi bi-map"></i> Vista desde arriba</button><button class="btn ghost" id="b-puerta"><i class="bi bi-door-open"></i> Desde la puerta</button><span style="flex:1"></span><button class="btn primary"><i class="bi bi-plus-lg"></i> Añadir elemento</button><button class="btn ghost"><i class="bi bi-printer"></i> Etiquetas QR</button></div>
+    <div class="leyenda"><span><i style="background:#0e7490"></i>Herramientas</span><span><i style="background:#166534"></i>Stock</span><span><i style="background:#64748b"></i>Hueco vacío</span><span><i style="background:#8a5a14"></i>Cajonera</span><span><i style="background:#6d28d9"></i>Máquina suelta</span></div>
+    <div class="panel" id="panel"><h3><i class="bi bi-hand-index"></i> Toca una cosa del contenedor</h3><small>Verás sus medidas, dónde está y lo que contiene.</small></div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-rulers"></i> Medidas y colocación</h2>
+    <p class="sub">Todo en centímetros. Sin plano ni dibujo: solo números que tú sabes.</p>
+    <div class="form">
+      <div class="field" style="grid-column:1/-1"><label>Contenedor · nombre</label><input value="Contenedor 1"></div>
+      <div class="field"><label>Largo</label><input value="606"></div><div class="field"><label>Ancho</label><input value="244"></div><div class="field"><label>Alto</label><input value="259"></div>
+      <div class="field" style="grid-column:1/-1"><label>Dónde está colocado en la nave</label><input value="Pared del fondo, junto a la puerta grande"></div>
+    </div>
+    <hr style="border:0;border-top:1px solid var(--border);margin:14px 0">
+    <strong>Añadir o editar elemento</strong>
+    <div class="form" style="margin-top:8px">
+      <div class="field"><label>Tipo</label><select><option>Estantería</option><option selected>Cajonera</option><option>Máquina suelta</option><option>Armario</option><option>Caja / palé</option></select></div>
+      <div class="field" style="grid-column:2/-1"><label>Nombre</label><input value="Cajonera roja"></div>
+      <div class="field"><label>Ancho</label><input value="80"></div><div class="field"><label>Fondo</label><input value="50"></div><div class="field"><label>Alto</label><input value="90"></div>
+      <div class="field"><label>Pegado a</label><select><option>Pared izquierda</option><option>Pared del fondo</option><option selected>Pared derecha</option><option>Suelto (en medio)</option></select></div>
+      <div class="field"><label>Desde la puerta</label><input value="120"></div><div class="field"><label>Desde la pared</label><input value="0"></div>
+      <div class="field"><label>Cajones / baldas</label><input value="5"></div><div class="field"><label>Huecos por balda</label><input value="1"></div><div class="field"><label>Giro</label><select><option>0°</option><option>90°</option></select></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn primary"><i class="bi bi-check-lg"></i> Guardar</button><button class="btn ghost"><i class="bi bi-upc-scan"></i> Colocar aquí</button><button class="btn danger"><i class="bi bi-trash"></i> Borrar (las cosas se quedan)</button></div>
+    <div class="note">Cada cajón, balda o máquina es un hueco escaneable con su QR: "C1 · Cajonera roja · Cajón 3". La Vista de la nave y Colocar por escáner funcionan igual; esto solo añade las medidas y el sitio exacto. Las máquinas sueltas que salen a obra se ven en gris con "la tiene Erick desde 12/08".</div>
+  </section>
+</div>
+<div class="notes">
+  <h3>Qué cambia por dentro</h3>
+  <ul>
+    <li>Tabla nueva <code>nave_elementos</code>: contenedor, tipo (estantería, cajonera, máquina, armario, caja), nombre, medidas, posición (pared, distancia a la puerta y a la pared, altura, giro), nº de baldas o cajones y huecos por balda. Cada balda o cajón genera sus ubicaciones (huecos) en la tabla que ya existe, así el escáner y los QR no cambian.</li>
+    <li>Zonas sin límite: cada contenedor, la nave, cada furgoneta o el patio es una zona con sus medidas y su sitio; la vista general de la nave las coloca todas y al tocar una entras en ella. Pantalla <b>Contenedor en 3D</b> dentro de la Vista de la nave: dibujo con three.js incluido en el programa (funciona sin internet), vistas 3D, desde arriba y desde la puerta, tocar para ver contenido, y el formulario de la derecha para añadir, mover, medir o borrar sin perder nunca las herramientas.</li>
+    <li>Una máquina suelta puede ser la propia máquina de la ficha de maquinaria (Alimak, compresor): se vincula y aparece o desaparece según esté en nave o en obra.</li>
+  </ul>
+</div>
+<script>
+(()=>{
+  const cv=document.getElementById('vista');const W=()=>cv.clientWidth,H=()=>cv.clientHeight;
+  const renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  const S=0.01;let scene,cam,L,A,AL,target,pick=[];
+  const COL={lleno:0x0e7490,stock:0x166534,vacio:0x64748b};
+  const CONT1=[
+    {tipo:'estanteria',nombre:'Estantería izquierda',w:500,d:40,h:200,x:0,z:0,baldas:4,huecos:6,contenido:[['lleno',3],['lleno',1],['vacio',0],['stock',12],['lleno',2],['vacio',0],['lleno',1],['vacio',0],['stock',6],['lleno',4],['vacio',0],['vacio',0],['lleno',2],['lleno',1],['vacio',0],['stock',18],['vacio',0],['lleno',7],['vacio',0],['vacio',0],['lleno',3],['stock',9],['vacio',0],['lleno',2]],donde:'pegada a la pared izquierda, empieza en el fondo'},
+    {tipo:'estanteria',nombre:'Estantería del fondo',w:160,d:40,h:200,x:0,z:44,rot:true,baldas:3,huecos:4,contenido:[['stock',40],['vacio',0],['lleno',2],['vacio',0],['lleno',1],['stock',6],['vacio',0],['lleno',1],['lleno',5],['vacio',0],['vacio',0],['lleno',3]],donde:'pegada a la pared del fondo'},
+    {tipo:'cajonera',nombre:'Cajonera roja',w:80,d:50,h:90,x:486,z:194,cajones:5,cosas:12,donde:'pared derecha, a 120 cm de la puerta'},
+    {tipo:'cajonera',nombre:'Cajonera gris',w:80,d:50,h:90,x:400,z:194,cajones:4,cosas:7,donde:'pared derecha, a 206 cm de la puerta'},
+    {tipo:'maquina',nombre:'Compresor',w:90,d:60,h:80,x:300,z:150,cosas:1,donde:'suelto, a 300 cm del fondo y 150 cm de la pared izquierda'},
+    {tipo:'maquina',nombre:'Cortadora de mesa',w:100,d:70,h:90,x:170,z:110,cosas:1,donde:'suelta, a 170 cm del fondo'},
+    {tipo:'maquina',nombre:'Grupo electrógeno',w:110,d:70,h:95,x:500,z:60,cosas:1,fuera:'la tiene Erick desde 12/08',donde:'suelto junto a la puerta (ahora en obra)'},
+  ];
+  const CONT2=[
+    {tipo:'estanteria',nombre:'Estantería EPI',w:400,d:40,h:200,x:0,z:0,baldas:5,huecos:5,contenido:Array.from({length:25},(_,i)=>i%3===0?['stock',6+i]:(i%4===0?['lleno',1]:['vacio',0])),donde:'pegada a la pared izquierda'},
+    {tipo:'armario',nombre:'Armario de arneses',w:120,d:60,h:200,x:0,z:184,cajones:2,cosas:18,donde:'pared derecha, al fondo'},
+    {tipo:'maquina',nombre:'Andamio (palé)',w:120,d:80,h:100,x:330,z:120,cosas:1,donde:'suelto, cerca de la puerta'},
+  ];
+  const FURGO=[
+    {tipo:'estanteria',nombre:'Estantería lateral',w:220,d:35,h:120,x:0,z:0,baldas:3,huecos:4,contenido:[['lleno',2],['lleno',1],['vacio',0],['stock',8],['lleno',1],['vacio',0],['lleno',3],['vacio',0],['stock',4],['vacio',0],['lleno',1],['vacio',0]],donde:'lado izquierdo de la caja'},
+    {tipo:'cajonera',nombre:'Cajonera de la furgo',w:60,d:40,h:60,x:200,z:135,cajones:3,cosas:9,donde:'lado derecho, junto al portón'},
+  ];
+  const ZONAS=[
+    {id:'nave',nombre:'Nave completa',largo:3000,ancho:1500,alto:600,donde:'Vista general: dónde está cada zona',general:true},
+    {id:'c1',nombre:'Contenedor 1',largo:606,ancho:244,alto:259,donde:'Nave, pared del fondo junto a la puerta grande',el:CONT1,nx:200,nz:100},
+    {id:'c2',nombre:'Contenedor 2 (EPI)',largo:606,ancho:244,alto:259,donde:'Nave, pared izquierda',el:CONT2,nx:200,nz:900},
+    {id:'f1',nombre:'Furgoneta 1',largo:300,ancho:170,alto:180,donde:'Aparcada en el patio',el:FURGO,nx:2300,nz:1050,fuera:'con Erick, en obra Torre Sur'},
+    {id:'patio',nombre:'Patio',largo:1200,ancho:800,alto:300,donde:'Fuera de la nave, a la derecha',el:[{tipo:'maquina',nombre:'Alimak STS 300',w:250,d:150,h:220,x:200,z:200,cosas:1,donde:'patio, junto a la valla'},{tipo:'maquina',nombre:'Palés de material',w:120,d:80,h:120,x:700,z:500,cosas:1,donde:'patio'}],nx:1600,nz:300},
+  ];
+  let zona=ZONAS[1];
+  const mkBox=(w,h,d,color,op=1)=>new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color,transparent:op<1,opacity:op}));
+  const label=(txt,x,y,z,sz=.42)=>{const c=document.createElement('canvas');c.width=512;c.height=128;const g=c.getContext('2d');g.fillStyle='rgba(11,18,32,.75)';g.fillRect(0,0,512,128);g.font='bold 54px system-ui';g.fillStyle='#e2e8f0';g.textAlign='center';g.textBaseline='middle';g.fillText(txt,256,64);const t=new THREE.CanvasTexture(c);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false}));s.scale.set(sz*4,sz,1);s.position.set(x,y,z);scene.add(s);return s};
+  function caja(z){L=z.largo*S;A=z.ancho*S;AL=z.alto*S;target=new THREE.Vector3(L/2,AL/2.4,A/2);
+    const floor=mkBox(L,.02,A,0x1e293b);floor.position.set(L/2,-.01,A/2);scene.add(floor);
+    const grid=new THREE.GridHelper(Math.max(L,A),Math.round(Math.max(L,A)/(z.general?1:0.5)),0x334155,0x1f2a44);grid.position.set(L/2,0.005,A/2);scene.add(grid);
+    const wall=(w,h,x,zz,ry)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshLambertMaterial({color:0x22d3ee,transparent:true,opacity:.07,side:THREE.DoubleSide}));m.position.set(x,h/2,zz);m.rotation.y=ry;scene.add(m)};
+    if(z.id!=='patio'){wall(L,AL,L/2,0,0);wall(A,AL,0,A/2,Math.PI/2);wall(A,AL,L,A/2,Math.PI/2);wall(L,AL,L/2,A,0)}
+    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(L,AL,A)),new THREE.LineBasicMaterial({color:0x22d3ee}));edges.position.set(L/2,AL/2,A/2);scene.add(edges);
+    if(!z.general&&z.id!=='patio'){const door=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(A*.9,AL*.9)),new THREE.LineDashedMaterial({color:0xf59e0b,dashSize:.1,gapSize:.06}));door.computeLineDistances();door.position.set(L+.002,AL/2,A/2);door.rotation.y=Math.PI/2;scene.add(door);label('PUERTA',L+.1,AL+.15,A/2,.36)}
+    if(z.general){label('Puerta grande de la nave',L+.2,AL/2,A/2,.9);label('Patio (fuera)',L*.72,AL/2,A*.35,.9)}}
+  function add(e){const g=new THREE.Group();const w=(e.rot?e.d:e.w)*S,d=(e.rot?e.w:e.d)*S,h=e.h*S;const x0=e.x*S,z0=e.z*S;
+    if(e.tipo==='estanteria'){const frame=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w,h,d)),new THREE.LineBasicMaterial({color:0x94a3b8}));frame.position.set(x0+w/2,h/2,z0+d/2);g.add(frame);
+      const nb=e.baldas,nh=e.huecos;let k=0;for(let b=0;b<nb;b++){const y=(h/nb)*b;const shelf=mkBox(w,.02,d,0x334155);shelf.position.set(x0+w/2,y+.01,z0+d/2);g.add(shelf);
+        for(let i=0;i<nh;i++){const c=e.contenido[k++]||['vacio',0];const along=e.rot?d:w;const cw=along/nh*.8;const box=mkBox(e.rot?d*.7:cw,h/nb*.45,e.rot?cw:d*.7,COL[c[0]],c[0]==='vacio'?.35:1);
+          const px=e.rot?x0+w/2:x0+along/nh*(i+.5);const pz=e.rot?z0+along/nh*(i+.5):z0+d/2;box.position.set(px,y+h/nb*.25,pz);box.userData={el:e,hueco:`Balda ${b+1} · ${i+1}`,c};g.add(box);pick.push(box)}}
+      const hit=mkBox(w,h,d,0xffffff,0.001);hit.position.set(x0+w/2,h/2,z0+d/2);hit.userData={el:e};g.add(hit);pick.push(hit)}
+    else{const col=e.tipo==='zona'?0x0e7490:(e.tipo==='cajonera'||e.tipo==='armario')?0x8a5a14:(e.fuera?0x475569:0x6d28d9);const box=mkBox(w,h,d,col,e.fuera?.45:(e.tipo==='zona'?.55:1));box.position.set(x0+w/2,h/2,z0+d/2);box.userData={el:e};g.add(box);pick.push(box);
+      const ed=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w,h,d)),new THREE.LineBasicMaterial({color:0xe2e8f0}));ed.position.copy(box.position);g.add(ed);
+      if(e.cajones){for(let i=1;i<e.cajones;i++){const l=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(w,.001)),new THREE.LineBasicMaterial({color:0xe2e8f0}));l.position.set(x0+w/2,h/e.cajones*i,z0+.001);g.add(l)}}}
+    label(e.nombre,x0+w/2,h+.22,z0+d/2,zona.general?.8:.3);scene.add(g)}
+  function build(z){zona=z;scene=new THREE.Scene();pick=[];scene.add(new THREE.AmbientLight(0xffffff,.75));const dl=new THREE.DirectionalLight(0xffffff,.7);dl.position.set(4,8,6);scene.add(dl);caja(z);
+    const els=z.general?ZONAS.filter(q=>!q.general).map(q=>({tipo:'zona',nombre:q.nombre,w:q.largo,d:q.ancho,h:q.alto,x:q.nx,z:q.nz,zona:q,fuera:q.fuera,donde:q.donde})):z.el;els.forEach(add);
+    cam=new THREE.PerspectiveCamera(42,1,0.1,200);dist=z.general?28:Math.max(8.5,L*1.5);theta=-.9;phi=1.05;size();ROT();
+    const fuera=z.fuera?' · <span style="color:#f59e0b">'+z.fuera+'</span>':'';
+    document.getElementById('zona-titulo').innerHTML=`<i class="bi ${z.general?'bi-buildings':'bi-box'}"></i> ${z.nombre} <small style="color:var(--muted);font-weight:400">· ${z.largo} × ${z.ancho} × ${z.alto} cm · ${z.donde}${fuera}</small>`;
+    document.querySelectorAll('#zonas .btn').forEach(b=>b.classList.toggle('on',b.dataset.id===z.id));
+    panel.innerHTML=z.general?'<h3><i class="bi bi-hand-index"></i> Toca una zona para entrar en ella</h3><small>Cada caja es una zona con sus medidas colocada donde tú dijiste. Las que están fuera (furgoneta en obra) se ven en gris.</small>':'<h3><i class="bi bi-hand-index"></i> Toca una cosa de la zona</h3><small>Verás sus medidas, dónde está y lo que contiene.</small>'}
+  const zonasBox=document.getElementById('zonas');ZONAS.forEach(z=>{const b=document.createElement('button');b.className='btn zona';b.dataset.id=z.id;b.innerHTML=`<i class="bi ${z.general?'bi-buildings':(z.id==='f1'?'bi-truck':z.id==='patio'?'bi-tree':'bi-box')}"></i> ${z.nombre}`;b.onclick=()=>build(z);zonasBox.appendChild(b)});
+  const nb=document.createElement('button');nb.className='btn zona';nb.innerHTML='<i class="bi bi-plus-lg"></i> Nueva zona';zonasBox.appendChild(nb);
+  let theta=-.9,phi=1.05,dist=8.5,drag=null;const ROT=()=>{cam.position.set(target.x+dist*Math.sin(phi)*Math.cos(theta),target.y+dist*Math.cos(phi),target.z+dist*Math.sin(phi)*Math.sin(theta));cam.lookAt(target)};
+  cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,moved:false};cv.setPointerCapture(e.pointerId);cv.style.cursor='grabbing'});
+  cv.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>3)drag.moved=true;theta+=dx*.006;phi=Math.min(1.5,Math.max(.15,phi-dy*.006));drag.x=e.clientX;drag.y=e.clientY;ROT()});
+  cv.addEventListener('pointerup',e=>{cv.style.cursor='grab';if(drag&&!drag.moved)clickAt(e);drag=null});
+  cv.addEventListener('wheel',e=>{e.preventDefault();dist=Math.min(60,Math.max(2.5,dist+e.deltaY*.004*(zona.general?3:1)));ROT()},{passive:false});
+  document.getElementById('b-3d').onclick=()=>{theta=-.9;phi=1.05;dist=zona.general?28:8.5;ROT()};
+  document.getElementById('b-top').onclick=()=>{theta=-Math.PI/2;phi=.16;dist=zona.general?30:9;ROT()};
+  document.getElementById('b-puerta').onclick=()=>{theta=0;phi=1.35;dist=zona.general?26:7.5;ROT()};
+  const ray=new THREE.Raycaster();const panel=document.getElementById('panel');let sel=null;
+  function clickAt(e){const r=cv.getBoundingClientRect();const m=new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);ray.setFromCamera(m,cam);const hits=ray.intersectObjects(pick);if(!hits.length)return;const o=hits[0].object;const el=o.userData.el;
+    if(el.tipo==='zona'){build(el.zona);return}
+    if(sel&&sel.material.emissive)sel.material.emissive.setHex(0);sel=o;if(o.material.emissive&&o.material.opacity>.01)o.material.emissive.setHex(0x22d3ee);show(el,o.userData)}
+  function show(e,u){const med=`${e.w} × ${e.d} × ${e.h} cm`;let body='';
+    if(e.tipo==='estanteria'){const n=e.contenido.filter(c=>c[0]!=='vacio').length;const tot=e.contenido.reduce((a,c)=>a+c[1],0);body=`<ul class="lista"><li><span>${e.baldas} baldas × ${e.huecos} huecos</span><span class="pill">${n} ocupados · ${tot} cosas</span></li>${u.hueco?`<li><span><b>${u.hueco}</b></span><span class="pill">${u.c[0]==='vacio'?'vacío':u.c[1]+' cosas'}</span></li>`:''}<li><span>Taladro Hilti TE-6 · Balda 1 · 1</span><span class="pill">en nave</span></li><li><span>Radial 230 · Balda 1 · 2</span><span class="pill" style="color:#f59e0b">la tiene Erick desde 22/08</span></li></ul>`}
+    else if(e.tipo==='cajonera'||e.tipo==='armario'){body=`<ul class="lista"><li><span>${e.cajones} ${e.tipo==='armario'?'baldas':'cajones'}</span><span class="pill">${e.cosas} cosas</span></li><li><span>Cajón 1 · brocas SDS</span><span class="pill">24 ud</span></li><li><span>Cajón 2 · discos 125</span><span class="pill">40 ud</span></li><li><span>Cajón 3 · llaves Allen (juego)</span><span class="pill">en nave</span></li></ul>`}
+    else{body=`<ul class="lista"><li><span>Máquina de la ficha de maquinaria</span><span class="pill" ${e.fuera?'style="color:#f59e0b"':''}>${e.fuera||'en nave'}</span></li></ul>`}
+    panel.innerHTML=`<h3><i class="bi bi-geo-alt-fill"></i> ${e.nombre} <small style="font-weight:400;color:var(--muted)">· ${zona.nombre}</small></h3><small>${med} · ${e.donde}</small>${body}<div class="row" style="margin-top:10px"><button class="btn primary">Colocar aquí</button><button class="btn ghost">Editar medidas y sitio</button><button class="btn ghost">Etiqueta QR</button><button class="btn danger">Borrar (las cosas se quedan)</button></div>`}
+  function size(){const w=W(),h=H();renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
+  addEventListener('resize',size);build(ZONAS[1]);
+  (function loop(){renderer.render(scene,cam);requestAnimationFrame(loop)})();
+})();
+</script>
+</body>
+</html>

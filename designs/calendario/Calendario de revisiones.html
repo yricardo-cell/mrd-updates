@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MRD · Maqueta: Calendario de revisiones y caducidades</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  :root{--bg:#0b1220;--surface:#111a2e;--surface2:#16213a;--border:#22304d;--text:#e2e8f0;--muted:#94a3b8;--cyan:#22d3ee;--green:#34d399;--amber:#f59e0b;--red:#f87171;--violet:#a78bfa}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 28px 8px}header h1{margin:0 0 4px;font-size:21px}header p{margin:0;color:var(--muted);max-width:1100px}
+  .wrap{padding:8px 28px 28px;display:grid;grid-template-columns:1.4fr 1fr;gap:18px}
+  @media (max-width:900px){.wrap{grid-template-columns:1fr}}
+  .screen{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px}
+  .screen h2{margin:0 0 2px;font-size:17px}.screen .sub{color:var(--muted);font-size:13px;margin:0 0 12px}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:0 28px 6px}
+  .kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px}.kpi b{font-size:22px;display:block}.kpi span{font-size:12.5px;color:var(--muted)}
+  .kpi.red b{color:var(--red)}.kpi.amber b{color:var(--amber)}.kpi.cyan b{color:var(--cyan)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.chip{border:1px solid var(--border);border-radius:999px;padding:5px 11px;font-size:12.5px;background:var(--surface2)}.chip.on{border-color:var(--cyan);color:var(--cyan)}
+  .chip i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.cal .dow{font-size:11.5px;color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.05em}
+  .day{min-height:64px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:5px 6px;font-size:12px;position:relative}.day.off{opacity:.35}.day.hoy{border-color:var(--cyan)}
+  .day .n{font-weight:700}.dots{display:flex;gap:3px;flex-wrap:wrap;margin-top:4px}.dots i{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .day .cnt{position:absolute;right:6px;top:5px;background:#0b1220;border-radius:999px;font-size:11px;padding:0 6px;font-weight:700}
+  .day.sel{outline:2px solid var(--cyan);outline-offset:1px}
+  .grupo{margin-top:12px}.grupo h3{font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+  .item{display:flex;gap:10px;align-items:center;border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-bottom:6px;background:#0b1220}
+  .item .ic{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px}
+  .item .t{flex:1;min-width:0}.item .t b{display:block}.item .t small{color:var(--muted)}
+  .item .d{text-align:right;font-size:12.5px;white-space:nowrap}.item .d b{display:block}
+  .btn{border:0;border-radius:9px;padding:8px 12px;font:inherit;font-weight:700;cursor:pointer;font-size:13px}
+  .btn.primary{background:var(--cyan);color:#0b1220}.btn.ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .note{background:#1c2740;border-left:3px solid var(--cyan);padding:8px 12px;border-radius:8px;font-size:13px;margin-top:10px}
+  .notes{padding:0 28px 40px;max-width:1100px}.notes h3{font-size:15px;margin:18px 0 6px}.notes ul{padding-left:18px}.notes li{margin:4px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Calendario de revisiones y caducidades</h1>
+  <p>Un solo sitio con todo lo que vence: revisiones de arneses y EPI individual, mantenimiento de herramientas y máquinas, formaciones, reconocimientos médicos y documentos de los trabajadores, caducidad de lotes y, si quieres, ITV y seguro de vehículos. El programa ya guarda esas fechas en cada ficha pero no hay ningún sitio donde verlas juntas. Dato real: hoy hay <b>117 revisiones de EPI</b> programadas (agosto y septiembre de 2027) y el resto de fechas está a 0 porque nunca se han rellenado.</p>
+</header>
+<div class="kpis">
+  <div class="kpi red"><b>3</b><span>vencidas (ejemplo)</span></div>
+  <div class="kpi amber"><b>5</b><span>esta semana</span></div>
+  <div class="kpi cyan"><b>12</b><span>este mes</span></div>
+  <div class="kpi"><b>117</b><span>en los próximos 12 meses</span></div>
+</div>
+<div class="wrap">
+  <section class="screen">
+    <h2><i class="bi bi-calendar3"></i> Septiembre 2026</h2>
+    <p class="sub">Puntos de color por tipo; el número, cuántas cosas vencen ese día. Tocas un día y la lista de al lado se queda en ese día, sin saltar arriba.</p>
+    <div class="chips"><span class="chip on"><i style="background:#f59e0b"></i>EPI individual</span><span class="chip on"><i style="background:#22d3ee"></i>Herramientas y máquinas</span><span class="chip on"><i style="background:#a78bfa"></i>Trabajadores</span><span class="chip on"><i style="background:#34d399"></i>Lotes</span><span class="chip"><i style="background:#94a3b8"></i>Vehículos</span></div>
+    <div class="row" style="margin-bottom:10px"><button class="btn ghost">‹ Agosto</button><button class="btn ghost">Hoy</button><button class="btn ghost">Octubre ›</button><span style="flex:1"></span><button class="btn ghost"><i class="bi bi-list-ul"></i> Ver como lista</button></div>
+    <div class="cal">
+      <div class="dow">Lun</div><div class="dow">Mar</div><div class="dow">Mié</div><div class="dow">Jue</div><div class="dow">Vie</div><div class="dow">Sáb</div><div class="dow">Dom</div>
+      <div class="day off"><span class="n">31</span></div>
+      <div class="day"><span class="n">1</span></div><div class="day"><span class="n">2</span><span class="cnt">1</span><div class="dots"><i style="background:#a78bfa"></i></div></div><div class="day"><span class="n">3</span></div><div class="day"><span class="n">4</span></div><div class="day"><span class="n">5</span></div><div class="day hoy sel"><span class="n">6</span><span class="cnt">2</span><div class="dots"><i style="background:#f59e0b"></i><i style="background:#22d3ee"></i></div></div>
+      <div class="day"><span class="n">7</span></div><div class="day"><span class="n">8</span><span class="cnt">3</span><div class="dots"><i style="background:#f59e0b"></i><i style="background:#f59e0b"></i><i style="background:#34d399"></i></div></div><div class="day"><span class="n">9</span></div><div class="day"><span class="n">10</span></div><div class="day"><span class="n">11</span><span class="cnt">1</span><div class="dots"><i style="background:#22d3ee"></i></div></div><div class="day"><span class="n">12</span></div><div class="day"><span class="n">13</span></div>
+      <div class="day"><span class="n">14</span></div><div class="day"><span class="n">15</span><span class="cnt">2</span><div class="dots"><i style="background:#a78bfa"></i><i style="background:#a78bfa"></i></div></div><div class="day"><span class="n">16</span></div><div class="day"><span class="n">17</span></div><div class="day"><span class="n">18</span></div><div class="day"><span class="n">19</span></div><div class="day"><span class="n">20</span></div>
+      <div class="day"><span class="n">21</span><span class="cnt">1</span><div class="dots"><i style="background:#22d3ee"></i></div></div><div class="day"><span class="n">22</span></div><div class="day"><span class="n">23</span></div><div class="day"><span class="n">24</span></div><div class="day"><span class="n">25</span></div><div class="day"><span class="n">26</span></div><div class="day"><span class="n">27</span></div>
+      <div class="day"><span class="n">28</span></div><div class="day"><span class="n">29</span></div><div class="day"><span class="n">30</span><span class="cnt">2</span><div class="dots"><i style="background:#f59e0b"></i><i style="background:#34d399"></i></div></div><div class="day off"><span class="n">1</span></div><div class="day off"><span class="n">2</span></div><div class="day off"><span class="n">3</span></div><div class="day off"><span class="n">4</span></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn primary"><i class="bi bi-plus-lg"></i> Programar revisión</button><button class="btn ghost"><i class="bi bi-calendar-plus"></i> Añadir a mi calendario del móvil (.ics)</button><button class="btn ghost"><i class="bi bi-bell"></i> Aviso cada lunes con lo que vence</button></div>
+    <div class="note">"Programar revisión": eliges qué (herramienta, máquina, EPI, trabajador), la fecha y si se repite (cada 6 o 12 meses). Al marcarla "Hecha" se crea sola la siguiente.</div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-list-check"></i> Lo que vence</h2>
+    <p class="sub">Cada fila abre la ficha. "Hecho" apunta la revisión y programa la siguiente.</p>
+    <div class="grupo"><h3 style="color:var(--red)">Vencidas</h3>
+      <div class="item"><div class="ic" style="background:#3b1d1d;color:#f87171"><i class="bi bi-person-badge"></i></div><div class="t"><b>Erick · Reconocimiento médico</b><small>debía pasarlo el 25/08</small></div><div class="d"><b>25/08</b>-12 d</div><button class="btn ghost">Hecho</button></div>
+      <div class="item"><div class="ic" style="background:#3b1d1d;color:#f87171"><i class="bi bi-shield"></i></div><div class="t"><b>Arnés ARN-014 · Revisión anual</b><small>lo tiene Luis · vencida el 01/09</small></div><div class="d"><b>01/09</b>-5 d</div><button class="btn ghost">Hecho</button></div>
+    </div>
+    <div class="grupo"><h3 style="color:var(--amber)">Esta semana</h3>
+      <div class="item"><div class="ic" style="background:#3a2a12;color:#f59e0b"><i class="bi bi-shield"></i></div><div class="t"><b>Arnés ARN-021 · Revisión anual</b><small>lo tiene Carlos</small></div><div class="d"><b>Hoy</b>06/09</div><button class="btn ghost">Hecho</button></div>
+      <div class="item"><div class="ic" style="background:#0e2a33;color:#22d3ee"><i class="bi bi-tools"></i></div><div class="t"><b>Martillo Hilti TE-70 · Mantenimiento</b><small>cada 6 meses · en nave, Contenedor 1 · Fondo · F2-3</small></div><div class="d"><b>Hoy</b>06/09</div><button class="btn ghost">Hecho</button></div>
+      <div class="item"><div class="ic" style="background:#3a2a12;color:#f59e0b"><i class="bi bi-shield"></i></div><div class="t"><b>Arnés ARN-030 · Revisión anual</b><small>en nave</small></div><div class="d"><b>08/09</b>+2 d</div><button class="btn ghost">Hecho</button></div>
+      <div class="item"><div class="ic" style="background:#12301f;color:#34d399"><i class="bi bi-box"></i></div><div class="t"><b>Lote guantes nitrilo · Caducidad</b><small>32 ud en Contenedor 1 · Izquierda · F1-2</small></div><div class="d"><b>08/09</b>+2 d</div><button class="btn ghost">Ver</button></div>
+    </div>
+    <div class="grupo"><h3>Este mes</h3>
+      <div class="item"><div class="ic" style="background:#2a2140;color:#a78bfa"><i class="bi bi-mortarboard"></i></div><div class="t"><b>Ana · Formación PRL 20 h</b><small>caduca · pedir renovación</small></div><div class="d"><b>15/09</b>+9 d</div><button class="btn ghost">Ver</button></div>
+      <div class="item"><div class="ic" style="background:#0e2a33;color:#22d3ee"><i class="bi bi-gear"></i></div><div class="t"><b>Alimak STS 300 · Revisión</b><small>máquina · en obra Torre Sur</small></div><div class="d"><b>21/09</b>+15 d</div><button class="btn ghost">Ver</button></div>
+    </div>
+    <div class="note">Para que el calendario tenga vida, "Puesta a punto" añade dos puntos: herramientas sin intervalo de mantenimiento (0 de 133 lo tienen) y trabajadores sin reconocimiento ni formación registrados (92 de 92). Con rellenar el intervalo en la ficha ya aparecen aquí solas.</div>
+  </section>
+</div>
+<div class="notes">
+  <h3>Qué cambia por dentro</h3>
+  <ul>
+    <li>Nueva pantalla <b>Calendario</b> (menú Seguimiento) que lee fechas que ya existen: EPI individual (proxima_revision), herramientas (fecha_proximo_mantenimiento e intervalo), mantenimientos programados, maquinaria (proxima_revision), formaciones, reconocimientos, documentos de trabajador, lotes con caducidad y vehículos (ITV, seguro, revisión). Sin cambios de esquema.</li>
+    <li>"Hecho" usa las acciones que ya existen (revisión de EPI, mantenimiento realizado) y calcula la siguiente fecha con el intervalo.</li>
+    <li>Exportación <b>.ics</b> (se abre en el calendario del móvil) y aviso interno o push cada lunes con lo que vence en 14 días.</li>
+    <li>Dashboard: la tarjeta "Revisiones y vencimientos" abre este calendario en vez de la lista de EPI.</li>
+  </ul>
+</div>
+</body>
+</html>

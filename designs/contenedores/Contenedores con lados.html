@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MRD · Maqueta: Contenedores con lados</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  :root{--bg:#0b1220;--surface:#111a2e;--surface2:#16213a;--border:#22304d;--text:#e2e8f0;--muted:#94a3b8;--cyan:#22d3ee;--green:#34d399;--amber:#f59e0b;--red:#f87171}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 28px 8px}header h1{margin:0 0 4px;font-size:21px}header p{margin:0;color:var(--muted);max-width:1100px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:18px;padding:8px 28px 28px}
+  .screen{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px}
+  .screen h2{margin:0 0 2px;font-size:17px}.screen .sub{color:var(--muted);font-size:13px;margin:0 0 12px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .btn{border:0;border-radius:9px;padding:9px 13px;font:inherit;font-weight:700;cursor:pointer;font-size:14px}
+  .btn.primary{background:var(--cyan);color:#0b1220}.btn.ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}.btn.danger{background:#7f1d1d;color:#fff}
+  label{font-size:12.5px;color:var(--muted);display:block;margin-bottom:3px}
+  .field input,.field select{background:#0b1220;border:1px solid var(--border);color:#fff;border-radius:8px;padding:9px 11px;font:inherit;width:100%}
+  .form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .lado-cfg{border:1px solid var(--border);border-radius:10px;padding:10px;background:#0b1220;display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px;align-items:end}
+  .cont{background:linear-gradient(180deg,#0e1730,#0b1220);border:1px solid var(--border);border-radius:14px;padding:16px;overflow:auto}
+  .cont h3{margin:0 0 10px;font-size:15px}
+  .caras{display:flex;gap:18px;align-items:flex-end;width:max-content;padding:10px 20px}
+  .cara{background:#0f172a;border:1px solid #334155;border-radius:6px;padding:10px 10px 8px}
+  .cara.izq{transform:perspective(900px) rotateY(32deg);transform-origin:right center}
+  .cara.der{transform:perspective(900px) rotateY(-32deg);transform-origin:left center}
+  .cara h4{margin:0 0 8px;font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;text-align:center}
+  .fila{display:grid;grid-template-columns:28px repeat(var(--n),40px);gap:8px 6px;align-items:center;margin-bottom:10px}
+  .fila span{font-size:11px;color:var(--muted);font-weight:700}
+  .h{width:40px;height:30px;border-radius:4px;background:#cbd5e1;border:1px solid #94a3b8;box-shadow:3px 3px 0 #64748b;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#1e293b}
+  .h.lleno{background:#0e7490;border-color:#22d3ee;color:#fff;box-shadow:3px 3px 0 #22d3ee}.h.stock{background:#166534;border-color:#34d399;color:#fff;box-shadow:3px 3px 0 #34d399}
+  .note{background:#1c2740;border-left:3px solid var(--cyan);padding:8px 12px;border-radius:8px;font-size:13px;margin-top:10px}
+  .warn{background:#3a2a12;border-left:3px solid var(--amber);padding:10px 12px;border-radius:8px;font-size:13.5px;margin-top:10px}
+  .notes{padding:0 28px 40px;max-width:1100px}.notes h3{font-size:15px;margin:18px 0 6px}.notes ul{padding-left:18px}.notes li{margin:4px 0}
+  code{background:#1c2740;padding:1px 5px;border-radius:4px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Contenedores con lados: tú dices cuántos lados tiene y dónde está</h1>
+  <p>Los 231 huecos "CONTENEDOR A1…W10" eran una prueba hecha con la rejilla del plano. La idea real: cada <b>contenedor</b> (o estantería, o furgoneta) es una cosa con <b>lados</b>, y cada lado tiene <b>filas</b> con <b>huecos</b>. Tú lo creas diciendo el nombre, dónde está colocado, cuántos lados tiene y cuántas filas y huecos por lado. Y puedes borrarlo entero, un lado o un hueco, <b>sin perder nunca las herramientas</b>: se quedan "sin hueco" y las vuelves a colocar por escáner.</p>
+</header>
+<div class="grid">
+
+  <section class="screen">
+    <h2><i class="bi bi-box"></i> 1 · Crear o editar un contenedor</h2>
+    <p class="sub">Un formulario, sin plano. Se generan los huecos y sus etiquetas QR.</p>
+    <div class="form">
+      <div class="field"><label>Nombre</label><input value="Contenedor 1"></div>
+      <div class="field"><label>Tipo</label><select><option>Contenedor</option><option>Estantería</option><option>Furgoneta</option><option>Armario</option></select></div>
+      <div class="field" style="grid-column:1/-1"><label>Dónde está colocado</label><input value="Nave, pegado a la pared del fondo, junto a la puerta grande"></div>
+      <div class="field"><label>¿Cuántos lados tiene?</label><select><option>1</option><option>2</option><option selected>3</option><option>4</option></select></div>
+      <div class="field"><label>Nombres de los lados</label><input value="Izquierda, Fondo, Derecha"></div>
+    </div>
+    <div style="display:grid;gap:8px;margin-top:10px">
+      <div class="lado-cfg"><div><label>Lado</label><strong>Izquierda</strong></div><div class="field"><label>Filas (baldas)</label><input value="4"></div><div class="field"><label>Huecos por fila</label><input value="5"></div></div>
+      <div class="lado-cfg"><div><label>Lado</label><strong>Fondo</strong></div><div class="field"><label>Filas (baldas)</label><input value="3"></div><div class="field"><label>Huecos por fila</label><input value="8"></div></div>
+      <div class="lado-cfg"><div><label>Lado</label><strong>Derecha</strong></div><div class="field"><label>Filas (baldas)</label><input value="4"></div><div class="field"><label>Huecos por fila</label><input value="5"></div></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn primary"><i class="bi bi-check-lg"></i> Crear 64 huecos</button><button class="btn ghost"><i class="bi bi-printer"></i> Etiquetas QR de todos los huecos</button></div>
+    <div class="note">Cada hueco se llama solo: <b>C1 · Izquierda · Fila 2 · 3</b>. Si luego cambias las filas o los huecos, se añaden o se quitan solo los vacíos. Un lado se puede añadir o quitar sin tocar los demás.</div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-grid-3x3-gap-fill"></i> 2 · Así se ve en la Vista de la nave</h2>
+    <p class="sub">El contenedor abierto por sus lados: izquierda, fondo y derecha. Mismos colores y mismo panel al tocar un hueco.</p>
+    <div class="cont"><h3>Contenedor 1 <small style="color:var(--muted);font-weight:400">· Nave, pared del fondo · 64 huecos · 21 cosas</small></h3>
+      <div class="caras">
+        <div class="cara izq"><h4>Izquierda</h4>
+          <div class="fila" style="--n:5"><span>F4</span><div class="h lleno">2</div><div class="h"></div><div class="h lleno">1</div><div class="h"></div><div class="h stock">9</div></div>
+          <div class="fila" style="--n:5"><span>F3</span><div class="h"></div><div class="h lleno">3</div><div class="h"></div><div class="h"></div><div class="h"></div></div>
+          <div class="fila" style="--n:5"><span>F2</span><div class="h lleno">1</div><div class="h lleno">1</div><div class="h"></div><div class="h stock">4</div><div class="h"></div></div>
+          <div class="fila" style="--n:5"><span>F1</span><div class="h"></div><div class="h"></div><div class="h lleno">5</div><div class="h"></div><div class="h"></div></div>
+        </div>
+        <div class="cara"><h4>Fondo</h4>
+          <div class="fila" style="--n:8"><span>F3</span><div class="h stock">40</div><div class="h stock">18</div><div class="h"></div><div class="h"></div><div class="h lleno">2</div><div class="h"></div><div class="h"></div><div class="h"></div></div>
+          <div class="fila" style="--n:8"><span>F2</span><div class="h"></div><div class="h lleno">1</div><div class="h lleno">1</div><div class="h"></div><div class="h"></div><div class="h stock">6</div><div class="h"></div><div class="h"></div></div>
+          <div class="fila" style="--n:8"><span>F1</span><div class="h lleno">7</div><div class="h"></div><div class="h"></div><div class="h lleno">3</div><div class="h"></div><div class="h"></div><div class="h"></div><div class="h lleno">2</div></div>
+        </div>
+        <div class="cara der"><h4>Derecha</h4>
+          <div class="fila" style="--n:5"><span>F4</span><div class="h"></div><div class="h"></div><div class="h"></div><div class="h lleno">1</div><div class="h"></div></div>
+          <div class="fila" style="--n:5"><span>F3</span><div class="h stock">12</div><div class="h"></div><div class="h lleno">2</div><div class="h"></div><div class="h"></div></div>
+          <div class="fila" style="--n:5"><span>F2</span><div class="h"></div><div class="h"></div><div class="h"></div><div class="h"></div><div class="h lleno">1</div></div>
+          <div class="fila" style="--n:5"><span>F1</span><div class="h lleno">4</div><div class="h"></div><div class="h"></div><div class="h"></div><div class="h"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn ghost"><i class="bi bi-pencil"></i> Editar contenedor</button><button class="btn ghost"><i class="bi bi-upc-scan"></i> Colocar aquí</button><button class="btn danger"><i class="bi bi-trash"></i> Borrar contenedor</button></div>
+    <div class="warn"><i class="bi bi-exclamation-triangle"></i> <b>Borrar "Contenedor 1"</b>: se quitan sus 64 huecos y sus etiquetas. Las <b>21 cosas que hay dentro no se borran</b>: 17 herramientas y 4 materiales pasan a "sin hueco" y las verás en Colocar. ¿Seguro?  <button class="btn danger" style="margin-left:8px">Sí, borrar</button> <button class="btn ghost">Cancelar</button></div>
+    <div class="note">Lo mismo para borrar un lado o un hueco suelto. Y un botón "Quitar los 231 huecos de prueba" para empezar limpio (las herramientas se quedan).</div>
+  </section>
+</div>
+<div class="notes">
+  <h3>Qué cambia por dentro</h3>
+  <ul>
+    <li>Sin tabla nueva: se usa la tabla de ubicaciones que ya existe. Contenedor = <code>zona</code>, lado = <code>estanteria</code>, fila = <code>balda</code>, hueco = <code>posicion</code>; "dónde está" y el tipo van en la descripción. Los QR y el Colocar por escáner siguen igual.</li>
+    <li>Nueva pantalla <b>Contenedores</b> (desde la Vista de la nave): crear, editar, etiquetas, borrar contenedor, lado o hueco con aviso de lo que se queda sin hueco. Al borrar también se desvinculan EPI de stock y EPI individual (hoy solo herramientas y materiales).</li>
+    <li>La Vista de la nave agrupa por contenedor y dibuja cada lado como una cara; en móvil, los lados van uno debajo de otro.</li>
+  </ul>
+</div>
+</body>
+</html>

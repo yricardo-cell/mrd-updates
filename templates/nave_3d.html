@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Zonas en 3D{% endblock %}
+{% block breadcrumb %}
+<a href="/">Inicio</a>
+<span class="sep">/</span>
+<a href="/nave">Vista de la nave</a>
+<span class="sep">/</span>
+<span class="current">Zonas en 3D</span>
+{% endblock %}
+{% block content %}
+<style>
+#vista3d{width:100%;height:58vh;min-height:360px;border-radius:12px;background:radial-gradient(circle at 50% 30%,#16213a,#0b1220);border:1px solid rgba(148,163,184,.3);cursor:grab;touch-action:none;display:block}
+.zona-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.zona-tabs .btn.active{border-color:#0891b2;color:#0891b2;font-weight:700}
+.leyenda3d{display:flex;gap:12px;flex-wrap:wrap;font-size:.82rem;color:var(--text-muted);margin-top:8px}.leyenda3d i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+#panel3d .list-group-item{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.form3d{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.form3d .full{grid-column:1/-1}.form3d label{font-size:.78rem;color:var(--text-muted);margin-bottom:2px;display:block}
+@media (max-width:600px){ #vista3d{height:48vh}.form3d{grid-template-columns:1fr 1fr}}
+</style>
+<div class="page-header-row mb-3">
+  <div>
+    <h1 class="page-title"><i class="bi bi-badge-3d"></i> Zonas en 3D</h1>
+    <p class="page-subtitle">{{ almacen.nombre }} · Cada zona con sus medidas y, dentro, estanterías, cajoneras y máquinas donde tú digas. Arrastra para girar, rueda para acercar, toca para ver.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap"><a class="btn btn-outline-secondary" href="/nave"><i class="bi bi-grid-3x3-gap-fill"></i> Vista de la nave</a><a class="btn btn-primary" href="/nave/colocar"><i class="bi bi-upc-scan"></i> Colocar por escáner</a></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-body">
+        <div class="zona-tabs" id="zona-tabs"></div>
+        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
+          <div><strong id="zona-titulo">—</strong><div class="small text-muted" id="zona-sub"></div></div>
+          <div class="d-flex gap-1 flex-wrap"><button class="btn btn-sm btn-outline-secondary" id="v-3d" type="button">3D</button><button class="btn btn-sm btn-outline-secondary" id="v-top" type="button">Desde arriba</button><button class="btn btn-sm btn-outline-secondary" id="v-puerta" type="button">Desde la puerta</button></div>
+        </div>
+        <canvas id="vista3d"></canvas>
+        <div class="leyenda3d"><span><i style="background:#0e7490"></i>Herramientas</span><span><i style="background:#166534"></i>Stock</span><span><i style="background:#9a3412"></i>Debía volver o bajo mínimo</span><span><i style="background:#64748b"></i>Hueco vacío</span><span><i style="background:#8a5a14"></i>Cajonera / armario</span><span><i style="background:#6d28d9"></i>Máquina suelta</span><span><i style="background:#0e7490;opacity:.55"></i>Zona (vista general)</span></div>
+        <div id="sin-zonas" class="alert alert-info mt-3" hidden>Todavía no hay zonas. Crea la primera con el formulario de la derecha: nombre, medidas y dónde está. Después añade sus estanterías, cajoneras y máquinas.</div>
+      </div>
+    </div>
+    <div class="card mt-3" id="panel3d">
+      <div class="card-header"><div class="card-title" id="panel-titulo"><i class="bi bi-hand-index"></i> Toca una cosa de la zona</div></div>
+      <div class="card-body">
+        <p class="small text-muted mb-2" id="panel-sub">Verás sus medidas, dónde está y lo que contiene.</p>
+        <div class="list-group list-group-flush" id="panel-lista"></div>
+        <div class="d-flex gap-2 flex-wrap mt-3" id="panel-acciones" hidden>
+          <a class="btn btn-primary btn-sm" id="p-colocar" href="#"><i class="bi bi-upc-scan"></i> Colocar aquí</a>
+          <a class="btn btn-outline-secondary btn-sm" id="p-qr" href="#" target="_blank" rel="noopener"><i class="bi bi-qr-code"></i> Etiqueta QR</a>
+          {% if puede_editar %}<button class="btn btn-outline-secondary btn-sm" id="p-editar" type="button"><i class="bi bi-pencil"></i> Editar medidas y sitio</button>
+          <button class="btn btn-outline-danger btn-sm" id="p-borrar" type="button"><i class="bi bi-trash"></i> Borrar (las cosas se quedan)</button>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    {% if puede_editar %}
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-rulers"></i> Zona</div><button class="btn btn-sm btn-outline-secondary" id="z-nueva" type="button"><i class="bi bi-plus-lg"></i> Nueva zona</button></div>
+      <div class="card-body">
+        <form id="form-zona" class="form3d" autocomplete="off">
+          <input type="hidden" name="id">
+          <div class="full"><label>Nombre</label><input class="form-control" name="nombre" required placeholder="Contenedor 1"></div>
+          <div><label>Tipo</label><select class="form-select" name="tipo"><option value="contenedor">Contenedor</option><option value="nave">Nave</option><option value="furgoneta">Furgoneta</option><option value="patio">Patio</option><option value="armario">Armario</option><option value="otro">Otro</option></select></div>
+          <div><label>Largo (cm)</label><input class="form-control" name="largo" type="number" min="10" value="606"></div>
+          <div><label>Ancho (cm)</label><input class="form-control" name="ancho" type="number" min="10" value="244"></div>
+          <div><label>Alto (cm)</label><input class="form-control" name="alto" type="number" min="10" value="259"></div>
+          <div><label>En la nave: desde el fondo</label><input class="form-control" name="pos_x" type="number" min="0" placeholder="cm"></div>
+          <div><label>Desde la izquierda</label><input class="form-control" name="pos_z" type="number" min="0" placeholder="cm"></div>
+          <div class="full"><label>Dónde está</label><input class="form-control" name="donde" placeholder="Pared del fondo, junto a la puerta grande"></div>
+          <div class="full form-check ms-1"><input class="form-check-input" type="checkbox" name="fuera" id="z-fuera"><label class="form-check-label" for="z-fuera">Está fuera de la nave (patio, obra)</label></div>
+          <div class="full d-flex gap-2 flex-wrap"><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check-lg"></i> Guardar zona</button><button class="btn btn-outline-danger btn-sm" type="button" id="z-borrar" hidden><i class="bi bi-trash"></i> Borrar zona</button></div>
+        </form>
+      </div>
+    </div>
+    <div class="card mt-3">
+      <div class="card-header"><div class="card-title"><i class="bi bi-box"></i> Elemento de la zona</div><button class="btn btn-sm btn-outline-secondary" id="e-nuevo" type="button"><i class="bi bi-plus-lg"></i> Nuevo</button></div>
+      <div class="card-body">
+        <form id="form-el" class="form3d" autocomplete="off">
+          <input type="hidden" name="id"><input type="hidden" name="zona_id">
+          <div><label>Tipo</label><select class="form-select" name="tipo"><option value="estanteria">Estantería</option><option value="cajonera">Cajonera</option><option value="armario">Armario</option><option value="maquina">Máquina suelta</option><option value="caja">Caja / palé</option></select></div>
+          <div class="full" style="grid-column:2/-1"><label>Nombre</label><input class="form-control" name="nombre" required placeholder="Estantería izquierda"></div>
+          <div><label>Ancho (cm)</label><input class="form-control" name="ancho" type="number" min="1" value="100"></div>
+          <div><label>Fondo (cm)</label><input class="form-control" name="fondo" type="number" min="1" value="40"></div>
+          <div><label>Alto (cm)</label><input class="form-control" name="alto" type="number" min="1" value="200"></div>
+          <div><label>Pegado a</label><select class="form-select" name="pared"><option value="izquierda">Pared izquierda</option><option value="fondo">Pared del fondo</option><option value="derecha">Pared derecha</option><option value="suelto">Suelto (en medio)</option></select></div>
+          <div><label id="l-puerta">Desde la puerta</label><input class="form-control" name="desde_puerta" type="number" min="0" value="0"></div>
+          <div><label id="l-pared">Desde la pared</label><input class="form-control" name="desde_pared" type="number" min="0" value="0"></div>
+          <div><label id="l-baldas">Baldas</label><input class="form-control" name="baldas" type="number" min="1" max="60" value="1"></div>
+          <div><label>Huecos por balda</label><input class="form-control" name="huecos_por_balda" type="number" min="1" max="60" value="1"></div>
+          <div><label>Giro</label><select class="form-select" name="giro"><option value="0">0°</option><option value="90">90°</option></select></div>
+          <div class="full"><label>Máquina de la ficha (opcional)</label><select class="form-select" name="maquinaria_id"><option value="">—</option>{% for m in datos.maquinaria %}<option value="{{ m.id }}">{{ m.nombre }}{% if m.estado %} · {{ m.estado }}{% endif %}</option>{% endfor %}</select></div>
+          <div class="full d-flex gap-2 flex-wrap"><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check-lg"></i> Guardar elemento</button><button class="btn btn-outline-danger btn-sm" type="button" id="e-borrar" hidden><i class="bi bi-trash"></i> Borrar elemento</button></div>
+          <div class="full small text-muted">Cada balda o cajón crea sus huecos con QR. Si reduces baldas o huecos, los sobrantes se quitan y lo que tenían pasa a "sin hueco".</div>
+        </form>
+      </div>
+    </div>
+    <div class="card mt-3" id="card-prueba" {% if not datos.huecos_prueba %}hidden{% endif %}>
+      <div class="card-body">
+        <strong><i class="bi bi-eraser"></i> Huecos antiguos: <span id="n-prueba">{{ datos.huecos_prueba }}</span></strong>
+        <p class="small text-muted mb-2">Huecos que no salen de ninguna zona 3D (por ejemplo, los de la prueba CONTENEDOR A1…). Se pueden quitar de golpe: lo que tuvieran se queda sin hueco, nada se borra.</p>
+        <button class="btn btn-outline-danger btn-sm" id="b-prueba" type="button"><i class="bi bi-trash"></i> Quitar los huecos antiguos</button>
+      </div>
+    </div>
+    {% else %}
+    <div class="card"><div class="card-body small text-muted">Solo administración o quien pueda editar cambia las zonas. Tú puedes verlas, buscar y colocar.</div></div>
+    {% endif %}
+  </div>
+</div>
+<script src="/static/js/three.min.js"></script>
+<script>
+(()=>{
+  let DATA={{ datos_json|safe }};
+  const PUEDE={{ 'true' if puede_editar else 'false' }};
+  const cv=document.getElementById('vista3d');const renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  const S=0.01,COL={lleno:0x0e7490,stock:0x166534,alerta:0x9a3412,vacio:0x64748b};
+  let scene,cam,L,A,AL,target,pick=[],zonaActual=null,general=false,theta=-.9,phi=1.05,dist=8.5,drag=null,sel=null,elSel=null;
+  const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const TIPOS={herramienta:'Herramienta',material:'Material',stock_epi:'EPI de stock',epi_individual:'EPI individual'};
+  const ZT={contenedor:'Contenedor',nave:'Nave',furgoneta:'Furgoneta',patio:'Patio',armario:'Armario',otro:'Zona'};
+  const mkBox=(w,h,d,color,op=1)=>new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color,transparent:op<1,opacity:op}));
+  const label=(txt,x,y,z,sz)=>{const c=document.createElement('canvas');c.width=512;c.height=128;const g=c.getContext('2d');g.fillStyle='rgba(11,18,32,.75)';g.fillRect(0,0,512,128);g.font='bold 54px system-ui';g.fillStyle='#e2e8f0';g.textAlign='center';g.textBaseline='middle';g.fillText(String(txt).slice(0,26),256,64);const t=new THREE.CanvasTexture(c);const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false}));sp.scale.set(sz*4,sz,1);sp.position.set(x,y,z);scene.add(sp)};
+  function caja(z,abierta){L=z.largo*S;A=z.ancho*S;AL=z.alto*S;target=new THREE.Vector3(L/2,AL/2.4,A/2);
+    const floor=mkBox(L,.02,A,0x1e293b);floor.position.set(L/2,-.01,A/2);scene.add(floor);
+    const grid=new THREE.GridHelper(Math.max(L,A),Math.max(2,Math.round(Math.max(L,A)/(general?1:.5))),0x334155,0x1f2a44);grid.position.set(L/2,.005,A/2);scene.add(grid);
+    if(!abierta){const wall=(w,h,x,zz,ry)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshLambertMaterial({color:0x22d3ee,transparent:true,opacity:.07,side:THREE.DoubleSide}));m.position.set(x,h/2,zz);m.rotation.y=ry;scene.add(m)};wall(L,AL,L/2,0,0);wall(A,AL,0,A/2,Math.PI/2);wall(A,AL,L,A/2,Math.PI/2);wall(L,AL,L/2,A,0)}
+    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(L,AL,A)),new THREE.LineBasicMaterial({color:0x22d3ee}));edges.position.set(L/2,AL/2,A/2);scene.add(edges);
+    if(!abierta){const door=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(A*.9,AL*.9)),new THREE.LineDashedMaterial({color:0xf59e0b,dashSize:.1,gapSize:.06}));door.computeLineDistances();door.position.set(L+.002,AL/2,A/2);door.rotation.y=Math.PI/2;scene.add(door);label('PUERTA',L+.1,AL+.15,A/2,general?AL*.35:.36)}}
+  function addEl(e){const g=new THREE.Group();const w=e.w*S,d=e.d*S,h=e.alto*S,x0=e.x*S,z0=e.z*S;const sz=general?Math.max(.5,L*.04):.3;
+    if(e.tipo==='estanteria'){const frame=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w,h,d)),new THREE.LineBasicMaterial({color:0x94a3b8}));frame.position.set(x0+w/2,h/2,z0+d/2);g.add(frame);
+      const nb=Math.max(1,e.baldas),nh=Math.max(1,e.huecos_por_balda),rot=e.giro===90;for(let b=0;b<nb;b++){const y=(h/nb)*b;const shelf=mkBox(w,.02,d,0x334155);shelf.position.set(x0+w/2,y+.01,z0+d/2);g.add(shelf);
+        for(let i=0;i<nh;i++){const hu=e.huecos.find(q=>q.balda===b+1&&q.posicion===i+1)||{clase:'vacio',n:0};const along=rot?d:w;const cw=along/nh*.8;const box=mkBox(rot?w*.7:cw,h/nb*.45,rot?cw:d*.7,COL[hu.clase]||COL.vacio,hu.clase==='vacio'?.35:1);
+          const px=rot?x0+w/2:x0+along/nh*(i+.5),pz=rot?z0+along/nh*(i+.5):z0+d/2;box.position.set(px,y+h/nb*.25,pz);box.userData={el:e,hueco:hu.id?hu:null};g.add(box);pick.push(box)}}
+      const hit=mkBox(w,h,d,0xffffff,.001);hit.position.set(x0+w/2,h/2,z0+d/2);hit.userData={el:e};g.add(hit);pick.push(hit)}
+    else{const nb=Math.max(1,e.baldas);const base=e.tipo==='zona'?0x0e7490:(e.tipo==='cajonera'||e.tipo==='armario')?0x8a5a14:(e.tipo==='caja'?0x475569:0x6d28d9);const op=e.tipo==='zona'?(e.fuera?.3:.55):(e.fuera?.45:1);
+      if(e.tipo!=='zona'&&nb>1){for(let b=0;b<nb;b++){const hu=e.huecos.find(q=>q.balda===b+1)||{clase:'vacio'};const slab=mkBox(w,h/nb*.92,d,hu.n?COL[hu.clase]:base,op);slab.position.set(x0+w/2,h/nb*(b+.5),z0+d/2);slab.userData={el:e,hueco:hu.id?hu:null};g.add(slab);pick.push(slab)}}
+      else{const box=mkBox(w,h,d,(e.tipo!=='zona'&&e.huecos&&e.huecos[0]&&e.huecos[0].n)?COL[e.huecos[0].clase]:base,op);box.position.set(x0+w/2,h/2,z0+d/2);box.userData={el:e,hueco:e.huecos&&e.huecos[0]||null};g.add(box);pick.push(box)}
+      const ed=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w,h,d)),new THREE.LineBasicMaterial({color:0xe2e8f0}));ed.position.set(x0+w/2,h/2,z0+d/2);g.add(ed)}
+    label(e.nombre,x0+w/2,h+sz*.7,z0+d/2,sz);scene.add(g)}
+  function ROT(){cam.position.set(target.x+dist*Math.sin(phi)*Math.cos(theta),target.y+dist*Math.cos(phi),target.z+dist*Math.sin(phi)*Math.sin(theta));cam.lookAt(target)}
+  function size(){const w=cv.clientWidth,h=cv.clientHeight;renderer.setSize(w,h,false);if(cam){cam.aspect=w/h;cam.updateProjectionMatrix()}}
+  function zonaNave(){return DATA.zonas.find(z=>z.tipo==='nave')||{id:0,nombre:'Nave completa',tipo:'nave',largo:3000,ancho:1500,alto:600,donde:'Vista general (crea una zona de tipo "Nave" con sus medidas reales)',elementos:[],virtual:true}}
+  function build(zonaId){scene=new THREE.Scene();pick=[];sel=null;elSel=null;scene.add(new THREE.AmbientLight(0xffffff,.75));const dl=new THREE.DirectionalLight(0xffffff,.7);dl.position.set(4,8,6);scene.add(dl);
+    general=zonaId===0;const z=general?zonaNave():DATA.zonas.find(q=>q.id===zonaId);if(!z){return}zonaActual=z;caja(z,z.tipo==='patio'||(general&&z.virtual));
+    (z.elementos||[]).forEach(addEl);
+    if(general){let i=0;DATA.zonas.filter(q=>q.tipo!=='nave').forEach(q=>{const px=q.pos_x??(100+i*(q.largo+150)),pz=q.pos_z??100;i++;addEl({tipo:'zona',nombre:q.nombre,zona:q,alto:q.alto,w:q.largo,d:q.ancho,x:px,z:pz,fuera:q.fuera,huecos:[],baldas:1,huecos_por_balda:1,giro:0})})}
+    cam=new THREE.PerspectiveCamera(42,1,.05,500);dist=Math.max(3,Math.max(L,A)*(general?1.4:1.5));theta=-.9;phi=1.05;size();ROT();
+    document.getElementById('zona-titulo').textContent=z.nombre;document.getElementById('zona-sub').innerHTML=`${z.largo} × ${z.ancho} × ${z.alto} cm · ${esc(z.donde||ZT[z.tipo]||'')}${z.fuera?' · <span class="text-warning">fuera de la nave</span>':''}${general?'':' · '+(z.huecos||0)+' huecos · '+(z.n||0)+' cosas'}`;
+    document.querySelectorAll('#zona-tabs .btn').forEach(b=>b.classList.toggle('active',Number(b.dataset.id)===zonaId));
+    panelVacio(general?'Toca una zona para entrar en ella':'Toca una cosa de la zona');
+    if(PUEDE){if(general&&z.virtual)nuevaZona();else cargarZona(z);nuevoEl();document.querySelector('#form-el [name=zona_id]').value=z.virtual?'':z.id}}
+  function tabs(){const box=document.getElementById('zona-tabs');box.innerHTML='';const mk=(id,txt,ic)=>{const b=document.createElement('button');b.type='button';b.className='btn btn-sm btn-outline-secondary';b.dataset.id=id;b.innerHTML=`<i class="bi ${ic}"></i> ${esc(txt)}`;b.onclick=()=>build(id);box.appendChild(b)};
+    mk(0,'Nave completa','bi-buildings');DATA.zonas.filter(z=>z.tipo!=='nave').forEach(z=>mk(z.id,z.nombre,z.tipo==='furgoneta'?'bi-truck':z.tipo==='patio'?'bi-tree':z.tipo==='armario'?'bi-door-closed':'bi-box'));
+    document.getElementById('sin-zonas').hidden=DATA.zonas.length>0}
+  const panelT=document.getElementById('panel-titulo'),panelS=document.getElementById('panel-sub'),panelL=document.getElementById('panel-lista'),panelA=document.getElementById('panel-acciones');
+  function panelVacio(t){panelT.innerHTML='<i class="bi bi-hand-index"></i> '+esc(t);panelS.textContent='Verás sus medidas, dónde está y lo que contiene.';panelL.innerHTML='';panelA.hidden=true}
+  function badge(i){if(i.fuera)return `<span class="badge ${i.vencida?'badge-danger':'badge-info'}">${i.quien?'la tiene '+esc(i.quien):esc(i.estado||'fuera')}${i.desde?' desde '+esc(i.desde):''}</span>`;if(i.bajo_minimo)return `<span class="badge badge-danger">bajo mínimo · ${esc(i.cantidad)} ${esc(i.unidad)}</span>`;if(i.tipo==='herramienta'||i.tipo==='epi_individual')return '<span class="badge badge-success">en nave</span>';return `<span class="badge badge-info">${esc(i.cantidad)} ${esc(i.unidad)}</span>`}
+  function donde(e){const p={izquierda:'pared izquierda',fondo:'pared del fondo',derecha:'pared derecha',suelto:'suelto'}[e.pared]||e.pared;return `${p}${e.pared==='fondo'?', a '+e.desde_pared+' cm del fondo y '+e.desde_puerta+' cm de la izquierda':', a '+e.desde_puerta+' cm de la puerta y '+e.desde_pared+' cm de la pared'}`}
+  function mostrar(e,hu){elSel=e;panelT.innerHTML=`<i class="bi bi-geo-alt-fill"></i> ${esc(e.nombre)} <small class="text-muted fw-normal">· ${esc(zonaActual.nombre)}</small>`;
+    panelS.textContent=`${e.ancho} × ${e.fondo} × ${e.alto} cm · ${donde(e)}${e.maquinaria?' · máquina: '+e.maquinaria:''}${e.fuera?' · '+e.fuera:''}`;
+    const et=e.tipo==='cajonera'?'Cajón':'Balda';let html='';const huecos=hu?[hu]:e.huecos;
+    huecos.forEach(h=>{const nom=e.huecos.length>1?`${et} ${h.balda} · ${h.posicion}`:esc(e.nombre);html+=`<div class="list-group-item"><span><strong>${nom}</strong><br><small class="text-muted">${esc(h.nombre)}</small></span><span><a class="btn btn-sm btn-outline-primary" href="/nave/colocar?ubicacion=${h.id}"><i class="bi bi-upc-scan"></i></a> <a class="btn btn-sm btn-outline-secondary" href="/almacenes/${DATA.almacen_id}/ubicaciones/${h.id}/qr" target="_blank" rel="noopener"><i class="bi bi-qr-code"></i></a> <span class="badge ${h.n?'badge-info':'badge-secondary'}">${h.n?h.n+' cosas':'vacío'}</span></span></div>`;
+      (h.items||[]).forEach(i=>{html+=`<a class="list-group-item list-group-item-action ps-4" href="${esc(i.url)}"><span>${esc(i.nombre)}<br><small class="text-muted">${esc(TIPOS[i.tipo]||i.tipo)}${i.codigo?' · '+esc(i.codigo):''}</small></span>${badge(i)}</a>`})});
+    if(hu&&e.huecos.length>1)html+=`<button type="button" class="btn btn-link btn-sm" id="p-todo">Ver todos los huecos de ${esc(e.nombre)}</button>`;
+    panelL.innerHTML=html||'<div class="text-muted small py-2">Sin huecos.</div>';const primero=hu||e.huecos[0];
+    document.getElementById('p-colocar').href=primero?'/nave/colocar?ubicacion='+primero.id:'/nave/colocar';document.getElementById('p-qr').href=primero?`/almacenes/${DATA.almacen_id}/ubicaciones/${primero.id}/qr`:'#';panelA.hidden=false;
+    const t=document.getElementById('p-todo');if(t)t.onclick=()=>mostrar(e,null);
+    if(PUEDE)cargarEl(e);if(window.innerWidth<992)document.getElementById('panel3d').scrollIntoView({block:'start',behavior:'smooth'})}
+  cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,moved:false};cv.setPointerCapture(e.pointerId);cv.style.cursor='grabbing'});
+  cv.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>3)drag.moved=true;theta+=dx*.006;phi=Math.min(1.5,Math.max(.15,phi-dy*.006));drag.x=e.clientX;drag.y=e.clientY;ROT()});
+  cv.addEventListener('pointerup',e=>{cv.style.cursor='grab';if(drag&&!drag.moved)clickAt(e);drag=null});
+  cv.addEventListener('wheel',e=>{e.preventDefault();dist=Math.min(Math.max(L,A)*6,Math.max(1,dist+e.deltaY*.004*Math.max(1,L/3)));ROT()},{passive:false});
+  document.getElementById('v-3d').onclick=()=>{theta=-.9;phi=1.05;dist=Math.max(3,Math.max(L,A)*1.5);ROT()};
+  document.getElementById('v-top').onclick=()=>{theta=-Math.PI/2;phi=.16;dist=Math.max(3,Math.max(L,A)*1.6);ROT()};
+  document.getElementById('v-puerta').onclick=()=>{theta=0;phi=1.35;dist=Math.max(3,Math.max(L,A)*1.3);ROT()};
+  const ray=new THREE.Raycaster();
+  function clickAt(e){const r=cv.getBoundingClientRect();const m=new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);ray.setFromCamera(m,cam);const hits=ray.intersectObjects(pick);if(!hits.length)return;const o=hits[0].object,el=o.userData.el;
+    if(el.tipo==='zona'){build(el.zona.id);return}
+    if(sel&&sel.material.emissive)sel.material.emissive.setHex(0);sel=o;if(o.material.emissive&&o.material.opacity>.01)o.material.emissive.setHex(0x22d3ee);mostrar(el,o.userData.hueco)}
+  addEventListener('resize',size);
+  async function reload(){const r=await fetch('/api/nave/3d',{headers:{Accept:'application/json'}});DATA=await r.json();tabs();const np=document.getElementById('n-prueba');if(np){np.textContent=DATA.huecos_prueba;document.getElementById('card-prueba').hidden=!DATA.huecos_prueba}}
+  async function post(url,body){const r=await fetchCsrf(url,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(body||{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail?(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail)):'No se pudo guardar');return d}
+  const fz=document.getElementById('form-zona'),fe=document.getElementById('form-el');
+  function cargarZona(z){if(!fz)return;fz.id.value=z.virtual?'':z.id;fz.nombre.value=z.virtual?'':z.nombre;fz.tipo.value=z.tipo;fz.largo.value=z.largo;fz.ancho.value=z.ancho;fz.alto.value=z.alto;fz.pos_x.value=z.pos_x??'';fz.pos_z.value=z.pos_z??'';fz.donde.value=z.donde||'';fz.fuera.checked=!!z.fuera;document.getElementById('z-borrar').hidden=!!z.virtual}
+  function nuevaZona(){if(!fz)return;fz.reset();fz.id.value='';fz.largo.value=606;fz.ancho.value=244;fz.alto.value=259;document.getElementById('z-borrar').hidden=true}
+  function cargarEl(e){if(!fe)return;fe.id.value=e.id;fe.zona_id.value=e.zona_id;['tipo','nombre','ancho','fondo','alto','pared','desde_puerta','desde_pared','baldas','huecos_por_balda','giro'].forEach(k=>fe[k].value=e[k]);fe.maquinaria_id.value=e.maquinaria_id||'';document.getElementById('e-borrar').hidden=false;etiquetas()}
+  function nuevoEl(){if(!fe)return;const zid=fe.zona_id.value;fe.reset();fe.id.value='';fe.zona_id.value=zid;document.getElementById('e-borrar').hidden=true;etiquetas()}
+  function etiquetas(){if(!fe)return;const fondo=fe.pared.value==='fondo';document.getElementById('l-puerta').textContent=fondo?'Desde la izquierda':'Desde la puerta';document.getElementById('l-pared').textContent=fondo?'Desde el fondo':'Desde la pared';document.getElementById('l-baldas').textContent=fe.tipo.value==='cajonera'?'Cajones':'Baldas'}
+  if(PUEDE){
+    fe.pared.onchange=etiquetas;fe.tipo.onchange=etiquetas;
+    document.getElementById('z-nueva').onclick=()=>{nuevaZona();fz.nombre.focus()};document.getElementById('e-nuevo').onclick=nuevoEl;
+    fz.onsubmit=async ev=>{ev.preventDefault();try{const b={id:fz.id.value?Number(fz.id.value):null,nombre:fz.nombre.value.trim(),tipo:fz.tipo.value,largo:Number(fz.largo.value),ancho:Number(fz.ancho.value),alto:Number(fz.alto.value),pos_x:fz.pos_x.value===''?null:Number(fz.pos_x.value),pos_z:fz.pos_z.value===''?null:Number(fz.pos_z.value),fuera:fz.fuera.checked,donde:fz.donde.value.trim()};const d=await post('/api/nave/zonas',b);await reload();build(b.tipo==='nave'?0:d.id)}catch(e){alert(e.message)}};
+    fe.onsubmit=async ev=>{ev.preventDefault();if(!fe.zona_id.value){alert('Guarda primero la zona.');return}try{const b={id:fe.id.value?Number(fe.id.value):null,zona_id:Number(fe.zona_id.value),tipo:fe.tipo.value,nombre:fe.nombre.value.trim(),ancho:Number(fe.ancho.value),fondo:Number(fe.fondo.value),alto:Number(fe.alto.value),pared:fe.pared.value,desde_puerta:Number(fe.desde_puerta.value),desde_pared:Number(fe.desde_pared.value),giro:Number(fe.giro.value),baldas:Number(fe.baldas.value),huecos_por_balda:Number(fe.huecos_por_balda.value),maquinaria_id:fe.maquinaria_id.value?Number(fe.maquinaria_id.value):null};const d=await post('/api/nave/elementos',b);await reload();build(zonaActual.tipo==='nave'?0:zonaActual.id);const e=(DATA.zonas.find(z=>z.id===d.zona_id)||{elementos:[]}).elementos.find(q=>q.id===d.id);if(e)mostrar(e,null);if(d.desvinculados)alert(`Se han quitado ${d.eliminados} huecos sobrantes; ${d.desvinculados} cosas se han quedado sin hueco (no se han borrado).`)}catch(e){alert(e.message)}};
+    const impactoTxt=i=>`${i.huecos} huecos. Lo que hay dentro NO se borra, se queda sin hueco: ${i.herramientas} herramientas, ${i.materiales} materiales, ${i.stock_epi} EPI de stock, ${i.epi_individual} EPI individual.`;
+    document.getElementById('z-borrar').onclick=async()=>{const id=Number(fz.id.value);if(!id)return;try{const i=await (await fetch(`/api/nave/zonas/${id}/impacto`)).json();if(!confirm(`Borrar la zona "${fz.nombre.value}": ${i.elementos} elementos y ${impactoTxt(i)}\n¿Seguro?`))return;await post(`/api/nave/zonas/${id}/eliminar`);await reload();build(0)}catch(e){alert(e.message)}};
+    document.getElementById('e-borrar').onclick=async()=>{const id=Number(fe.id.value);if(!id)return;try{const i=await (await fetch(`/api/nave/elementos/${id}/impacto`)).json();if(!confirm(`Borrar "${fe.nombre.value}": ${impactoTxt(i)}\n¿Seguro?`))return;await post(`/api/nave/elementos/${id}/eliminar`);await reload();build(zonaActual.tipo==='nave'?0:zonaActual.id)}catch(e){alert(e.message)}};
+    const pe=document.getElementById('p-editar'),pb=document.getElementById('p-borrar');if(pe)pe.onclick=()=>{if(elSel){cargarEl(elSel);fe.nombre.focus();fe.scrollIntoView({block:'center',behavior:'smooth'})}};if(pb)pb.onclick=()=>{if(elSel){cargarEl(elSel);document.getElementById('e-borrar').click()}};
+    const bp=document.getElementById('b-prueba');if(bp)bp.onclick=async()=>{try{const i=await (await fetch('/api/nave/huecos-prueba/impacto')).json();if(!confirm(`Quitar los huecos antiguos: ${impactoTxt(i)}\n¿Seguro?`))return;await post('/api/nave/huecos-prueba/eliminar');await reload();build(zonaActual?(zonaActual.tipo==='nave'?0:zonaActual.id):0)}catch(e){alert(e.message)}};
+  }
+  tabs();const pre=Number(new URLSearchParams(location.search).get('zona'));build(pre&&DATA.zonas.some(z=>z.id===pre)?pre:(DATA.zonas.filter(z=>z.tipo!=='nave')[0]?.id||0));
+  (function loop(){if(scene&&cam)renderer.render(scene,cam);requestAnimationFrame(loop)})();
+})();
+</script>
+{% endblock %}

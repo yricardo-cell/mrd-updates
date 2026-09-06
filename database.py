@@ -693,6 +693,8 @@ def apply_migrations(target_engine=None):
         ("push_suscripciones", "trabajador_id",  "INTEGER REFERENCES trabajadores(id)"),
         # Pedidos a proveedor en tres pasos (2.7.50)
         ("pedidos_proveedor", "proveedor_id",    "INTEGER REFERENCES proveedores(id)"),
+        # Zonas y elementos en 3D (2.7.54): cada hueco sabe de qué elemento sale
+        ("ubicaciones", "elemento_id",          "INTEGER REFERENCES nave_elementos(id)"),
         # catalogo_epi — campos marca y notas
         ("catalogo_epi", "marca",            "VARCHAR(100)"),
         ("catalogo_epi", "notas",            "TEXT"),

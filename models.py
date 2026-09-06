@@ -450,6 +450,7 @@ class Ubicacion(Base):
     estanteria  = Column(String(50), nullable=True)
     balda       = Column(String(50), nullable=True)
     posicion    = Column(String(50), nullable=True)
+    elemento_id = Column(Integer, ForeignKey("nave_elementos.id"), nullable=True, index=True)  # 3D (2.7.54)
     activo      = Column(Boolean, default=True)
     created_at  = Column(DateTime, server_default=func.now())
 
@@ -463,6 +464,54 @@ class Ubicacion(Base):
     def ruta_completa(self):
         partes = [self.zona, self.pasillo, self.estanteria or self.nombre, self.balda, self.posicion]
         return " → ".join(str(parte).strip() for parte in partes if parte and str(parte).strip())
+
+
+class NaveZona(Base):
+    """Zona en 3D (2.7.54): contenedor, nave, furgoneta, patio o armario con
+    sus medidas en cm y su sitio dentro de la nave (pos_x desde la pared del
+    fondo, pos_z desde la pared izquierda)."""
+    __tablename__ = "nave_zonas"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    almacen_id = Column(Integer, ForeignKey("almacenes.id"), nullable=False, index=True)
+    nombre     = Column(String(120), nullable=False)
+    tipo       = Column(String(30), nullable=False, default="contenedor")  # contenedor | nave | furgoneta | patio | armario | otro
+    largo      = Column(Integer, nullable=False, default=600)
+    ancho      = Column(Integer, nullable=False, default=244)
+    alto       = Column(Integer, nullable=False, default=259)
+    pos_x      = Column(Integer, nullable=True)
+    pos_z      = Column(Integer, nullable=True)
+    fuera      = Column(Boolean, default=False)
+    donde      = Column(String(255), nullable=True)
+    activo     = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    elementos  = relationship("NaveElemento", back_populates="zona", cascade="all, delete-orphan")
+
+
+class NaveElemento(Base):
+    """Cosa dentro de una zona (2.7.54): estantería, cajonera, armario, máquina
+    suelta o caja, con medidas y sitio (pared, distancia a la puerta y a la
+    pared). Cada balda o cajón genera sus huecos en `ubicaciones`."""
+    __tablename__ = "nave_elementos"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    zona_id          = Column(Integer, ForeignKey("nave_zonas.id"), nullable=False, index=True)
+    tipo             = Column(String(30), nullable=False, default="estanteria")  # estanteria | cajonera | armario | maquina | caja
+    nombre           = Column(String(120), nullable=False)
+    ancho            = Column(Integer, nullable=False, default=100)
+    fondo            = Column(Integer, nullable=False, default=40)
+    alto             = Column(Integer, nullable=False, default=200)
+    pared            = Column(String(20), nullable=False, default="izquierda")  # izquierda | fondo | derecha | suelto
+    desde_puerta     = Column(Integer, nullable=False, default=0)
+    desde_pared      = Column(Integer, nullable=False, default=0)
+    giro             = Column(Integer, nullable=False, default=0)  # 0 | 90
+    baldas           = Column(Integer, nullable=False, default=1)
+    huecos_por_balda = Column(Integer, nullable=False, default=1)
+    maquinaria_id    = Column(Integer, ForeignKey("maquinaria.id"), nullable=True)
+    created_at       = Column(DateTime, server_default=func.now())
+
+    zona       = relationship("NaveZona", back_populates="elementos")
 
 
 # ─── Obras ───────────────────────────────────────────────────────────────────
