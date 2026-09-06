@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}{{ obra.nombre }} — Obra{% endblock %}
+{% block breadcrumb %}
+<a href="/">Inicio</a>
+<span class="sep">/</span>
+<a href="/obras">Obras</a>
+<span class="sep">/</span>
+<span class="current">{{ obra.numero }}</span>
+{% endblock %}
+{% block content %}
+<div class="card mb-3">
+  <div class="detail-header">
+    <div class="detail-photo"><i class="bi bi-building"></i></div>
+    <div class="detail-info">
+      <div class="detail-code">{{ obra.numero }}</div>
+      <div class="detail-name">{{ obra.nombre }}</div>
+      <div class="detail-meta">
+        {% if obra.cliente %}<span><i class="bi bi-person-vcard"></i> {{ obra.cliente }}</span>{% endif %}
+        {% if obra.responsable %}<span><i class="bi bi-person-badge"></i> {{ obra.responsable }}</span>{% endif %}
+        {% if obra.direccion %}<span><i class="bi bi-geo-alt"></i> {{ obra.direccion }}</span>{% endif %}
+        <span><i class="bi bi-calendar3"></i> {{ obra.fecha_inicio | fmt_fecha }} → {{ obra.fecha_fin | fmt_fecha }}</span>
+      </div>
+      <div class="mt-2">
+        {% if obra.activa %}<span class="badge badge-success">Activa</span>{% else %}<span class="badge badge-gray">Finalizada</span>{% endif %}
+      </div>
+    </div>
+    <div class="d-flex flex-column gap-2">
+      {% if user.rol in ['admin','almacen','encargado_patio'] %}
+      <a class="btn btn-success mrd-btn" href="/mostrador?modo=salida&obra={{ obra.id }}"><i class="bi bi-lightning-fill me-1"></i>Salida a esta obra</a>
+      <a class="btn btn-primary mrd-btn" href="/mostrador?modo=entrada&obra={{ obra.id }}"><i class="bi bi-box-arrow-in-down me-1"></i>Devolución desde esta obra</a>
+      {% endif %}
+      <a class="btn btn-outline-secondary mrd-btn" href="/obras"><i class="bi bi-arrow-left me-1"></i>Volver a obras</a>
+    </div>
+  </div>
+</div>
+
+<div class="kpi-grid mb-3">
+  <a class="kpi-card kpi-link" href="#herramientas"><div class="kpi-icon blue"><i class="bi bi-tools"></i></div><div class="kpi-value">{{ herramientas_obra | length }}</div><div class="kpi-label">Herramientas en la obra</div></a>
+  <div class="kpi-card"><div class="kpi-icon orange"><i class="bi bi-cash-coin"></i></div><div class="kpi-value">{{ valor_obra | fmt_precio }}</div><div class="kpi-label">Valor de compra fuera</div></div>
+  <a class="kpi-card kpi-link" href="#materiales"><div class="kpi-icon green"><i class="bi bi-boxes"></i></div><div class="kpi-value">{{ consumos | length }}</div><div class="kpi-label">Materiales consumidos (referencias)</div></a>
+  <a class="kpi-card kpi-link" href="#albaranes"><div class="kpi-icon info"><i class="bi bi-file-earmark-text"></i></div><div class="kpi-value">{{ albaranes_abiertos }}</div><div class="kpi-label">Albaranes abiertos</div></a>
+  <a class="kpi-card kpi-link" href="#incidencias"><div class="kpi-icon red"><i class="bi bi-exclamation-octagon"></i></div><div class="kpi-value">{{ incidencias_abiertas }}</div><div class="kpi-label">Incidencias abiertas</div></a>
+</div>
+
+<div class="card mb-3" id="herramientas">
+  <div class="card-header"><div class="card-title"><i class="bi bi-tools"></i> Qué hay ahora en la obra</div><span class="table-meta">{{ herramientas_obra | length }} herramientas</span></div>
+  <div class="card-body p-0">
+    {% if herramientas_obra %}
+    <div class="table-responsive"><table class="mrd-table mb-0"><thead><tr><th>Herramienta</th><th>Código</th><th>Estado</th><th>Responsable</th><th>Devolución prevista</th></tr></thead><tbody>
+      {% for h in herramientas_obra %}
+      <tr><td><a href="/herramientas/{{ h.id }}">{{ h.nombre }}</a></td><td><code class="mrd-code">{{ h.codigo }}</code></td><td><span class="badge badge-{{ h.estado | estado_color }}">{{ h.estado }}</span></td><td>{{ h.responsable.nombre_completo if h.responsable else '—' }}</td><td>{{ (h.movimientos[0].fecha_devolucion_prevista | fmt_fecha) if h.movimientos and h.movimientos[0].fecha_devolucion_prevista else '—' }}</td></tr>
+      {% endfor %}
+    </tbody></table></div>
+    {% else %}<p class="text-muted p-3 mb-0">No hay herramientas en esta obra ahora mismo.</p>{% endif %}
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card h-100" id="materiales">
+      <div class="card-header"><div class="card-title"><i class="bi bi-boxes"></i> Material consumido</div><span class="table-meta">salidas registradas a esta obra</span></div>
+      <div class="card-body p-0">
+        {% if consumos %}
+        <div class="table-responsive"><table class="mrd-table mb-0"><thead><tr><th>Material</th><th>Cantidad</th></tr></thead><tbody>
+          {% for nombre, codigo, unidad, total in consumos %}
+          <tr><td>{{ nombre }}{% if codigo %} <small class="text-muted">{{ codigo }}</small>{% endif %}</td><td><strong>{{ '%g' % (total or 0) }}</strong> {{ unidad or 'ud' }}</td></tr>
+          {% endfor %}
+        </tbody></table></div>
+        {% else %}<p class="text-muted p-3 mb-0">Sin consumos registrados.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100" id="albaranes">
+      <div class="card-header"><div class="card-title"><i class="bi bi-file-earmark-text"></i> Albaranes</div><span class="table-meta">{{ albaranes | length }} últimos</span></div>
+      <div class="card-body p-0">
+        {% if albaranes %}
+        <div class="table-responsive"><table class="mrd-table mb-0"><thead><tr><th>Número</th><th>Fecha</th><th>Tipo</th><th>Estado</th></tr></thead><tbody>
+          {% for a in albaranes %}
+          <tr><td><a href="/albaranes-salida/{{ a.id }}">{{ a.numero }}</a></td><td>{{ a.fecha_salida | fmt_fecha }}</td><td>{{ a.tipo_documento }}</td><td><span class="badge {{ 'badge-warning' if a.estado in ('abierto','parcial') else 'badge-gray' }}">{{ a.estado }}</span></td></tr>
+          {% endfor %}
+        </tbody></table></div>
+        {% else %}<p class="text-muted p-3 mb-0">Sin albaranes de esta obra.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100" id="incidencias">
+      <div class="card-header"><div class="card-title"><i class="bi bi-exclamation-octagon"></i> Incidencias</div><span class="table-meta">{{ incidencias_abiertas }} abiertas</span></div>
+      <div class="card-body p-0">
+        {% if incidencias %}
+        <div class="table-responsive"><table class="mrd-table mb-0"><thead><tr><th>Número</th><th>Título</th><th>Estado</th></tr></thead><tbody>
+          {% for i in incidencias %}
+          <tr><td><a href="/incidencias/{{ i.id }}">{{ i.numero }}</a></td><td>{{ i.titulo }}</td><td><span class="badge {{ 'badge-danger' if i.estado not in ('cerrada','resuelta') else 'badge-gray' }}">{{ i.estado }}</span></td></tr>
+          {% endfor %}
+        </tbody></table></div>
+        {% else %}<p class="text-muted p-3 mb-0">Sin incidencias en esta obra.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100" id="movimientos">
+      <div class="card-header"><div class="card-title"><i class="bi bi-arrow-left-right"></i> Últimos movimientos</div><span class="table-meta">{{ movimientos | length }} últimos</span></div>
+      <div class="card-body p-0">
+        {% if movimientos %}
+        <div class="table-responsive"><table class="mrd-table mb-0"><thead><tr><th>Fecha</th><th>Herramienta</th><th>Tipo</th></tr></thead><tbody>
+          {% for m in movimientos %}
+          <tr><td>{{ m.fecha | fmt_datetime }}</td><td>{% if m.herramienta %}<a href="/herramientas/{{ m.herramienta.id }}">{{ m.herramienta.nombre }}</a>{% else %}—{% endif %}</td><td>{{ m.tipo }}</td></tr>
+          {% endfor %}
+        </tbody></table></div>
+        {% else %}<p class="text-muted p-3 mb-0">Sin movimientos registrados.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -51,7 +51,7 @@
         {% for o in obras %}
         <tr>
           <td><code class="mrd-code">{{ o.numero }}</code></td>
-          <td class="fw-semibold">{{ o.nombre }}</td>
+          <td class="fw-semibold"><a href="/obras/{{ o.id }}">{{ o.nombre }}</a></td>
           <td class="text-muted">{{ o.cliente or '—' }}</td>
           <td class="text-muted">{{ o.responsable or '—' }}</td>
           <td>
@@ -64,7 +64,7 @@
           <td>
             {% set cnt = o.herramientas | length %}
             {% if cnt > 0 %}
-            <span class="badge bg-warning text-dark">{{ cnt }}</span>
+            <a class="badge bg-warning text-dark" href="/obras/{{ o.id }}#herramientas" title="Ver qué hay en la obra">{{ cnt }}</a>
             {% else %}
             <span class="text-muted">0</span>
             {% endif %}

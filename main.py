@@ -6274,6 +6274,38 @@ def obra_nueva_post(
     return RedirectResponse("/obras", status_code=303)
 
 
+@app.get("/obras/{oid}", response_class=HTMLResponse)
+def obra_detalle(oid: int, request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Ficha de obra (2.7.45): qué hay en la obra ahora, qué se ha consumido,
+    albaranes, incidencias y últimos movimientos, con acciones al Mostrador."""
+    o = db.query(Obra).filter(Obra.id == oid).first()
+    if not o:
+        raise HTTPException(404, "Obra no encontrada")
+    _require_warehouse_access(user, o.almacen_id)
+    herramientas_obra = db.query(Herramienta).filter(
+        Herramienta.obra_id == oid, Herramienta.activa == True,
+        Herramienta.estado.notin_(("disponible", "baja", "archivada")),
+    ).order_by(Herramienta.nombre).all()
+    valor_obra = sum(float(h.precio_compra or 0) for h in herramientas_obra)
+    consumos = (
+        db.query(Material.nombre, Material.codigo, Material.unidad, func.sum(MovimientoMaterial.cantidad))
+        .join(Material, MovimientoMaterial.material_id == Material.id)
+        .filter(MovimientoMaterial.obra_id == oid, MovimientoMaterial.tipo.in_(("salida", "mostrador_salida")))
+        .group_by(Material.id).order_by(func.sum(MovimientoMaterial.cantidad).desc()).limit(50).all()
+    )
+    albaranes = db.query(AlbaranSalida).filter(AlbaranSalida.obra_id == oid).order_by(AlbaranSalida.fecha_salida.desc()).limit(30).all()
+    albaranes_abiertos = sum(1 for a in albaranes if a.estado in ("abierto", "parcial"))
+    incidencias = db.query(Incidencia).filter(Incidencia.obra_id == oid).order_by(Incidencia.id.desc()).limit(20).all()
+    incidencias_abiertas = sum(1 for i in incidencias if i.estado not in ("cerrada", "resuelta"))
+    movimientos = db.query(Movimiento).filter(Movimiento.obra_id == oid).order_by(Movimiento.fecha.desc()).limit(30).all()
+    return templates.TemplateResponse(request, "obra_detalle.html", ctx_base(
+        request, user, db,
+        obra=o, herramientas_obra=herramientas_obra, valor_obra=valor_obra,
+        consumos=consumos, albaranes=albaranes, albaranes_abiertos=albaranes_abiertos,
+        incidencias=incidencias, incidencias_abiertas=incidencias_abiertas, movimientos=movimientos,
+    ))
+
+
 @app.post("/obras/{oid}/editar", response_class=RedirectResponse)
 async def obra_editar(
     oid: int,
