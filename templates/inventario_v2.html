@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Inventario masivo — {{ app_name }}{% endblock %}
+{% block title %}Suministros y variantes — {{ app_name }}{% endblock %}
 
 {% block content %}
 <section class="inventory-v2-hero">
   <div>
-    <span class="inventory-v2-eyebrow">Operación de patio y almacén</span>
-    <h1><i class="bi bi-boxes"></i> Inventario masivo</h1>
-    <p>Conteo ciego, doble validación y cierre transaccional sin perder movimientos simultáneos.</p>
+    <span class="inventory-v2-eyebrow">Ropa, EPI de stock y suministros</span>
+    <h1><i class="bi bi-bag-fill"></i> Suministros y variantes</h1>
+    <p>Alta de suministro con referencia y QR automáticos, variantes por talla y color, y dotaciones pendientes. Para contar existencias usa el <a href="/inventario">inventario guiado</a>.</p>
   </div>
   <div class="d-flex flex-wrap gap-2">
     <a class="btn btn-primary mrd-btn" href="/inventario/estado">
@@ -18,24 +18,24 @@
     <button class="btn btn-outline-primary mrd-btn" data-bs-toggle="modal" data-bs-target="#inventory-supply-modal">
       <i class="bi bi-box-arrow-in-down"></i> Dar de alta suministro
     </button>
-    <button class="btn btn-warning mrd-btn" data-bs-toggle="modal" data-bs-target="#inventory-session-modal">
-      <i class="bi bi-plus-lg"></i> Nueva sesión
-    </button>
+    <a class="btn btn-warning mrd-btn" href="/inventario">
+      <i class="bi bi-clipboard2-check"></i> Inventario guiado
+    </a>
   </div>
 </section>
 
 <div class="inventory-v2-grid">
   <section class="mrd-card inventory-v2-main">
-    <div class="mrd-card-header"><span>Sesiones recientes</span><span class="badge text-bg-secondary">{{ sesiones|length }}</span></div>
+    <div class="mrd-card-header"><span>Inventarios</span><span class="badge text-bg-secondary">{{ sesiones|length }}</span></div>
     <div class="mrd-card-body inventory-session-list">
       {% for sesion in sesiones %}
       <a class="inventory-session-row" href="/inventario/sesiones/{{ sesion.id }}" data-session-id="{{ sesion.id }}">
         <span class="inventory-session-icon"><i class="bi bi-clipboard-check"></i></span>
-        <span><strong>{{ sesion.nombre }}</strong><small>{{ sesion.tipo_articulo|replace('_', ' ') }} · {{ sesion.scope }}</small></span>
+        <span><strong>{{ sesion.nombre }}</strong><small>{{ sesion.tipo_articulo|replace('_', ' ') }}</small></span>
         <span class="inventory-status is-{{ sesion.estado }}">{{ sesion.estado|replace('_', ' ') }}</span>
       </a>
       {% else %}
-      <div class="inventory-empty"><i class="bi bi-clipboard"></i><strong>Sin sesiones</strong><span>Crea una sesión para congelar el punto de partida.</span></div>
+      <div class="inventory-empty"><i class="bi bi-clipboard"></i><strong>Sin inventarios</strong><span>Empieza uno desde el <a href="/inventario">inventario guiado</a>.</span></div>
       {% endfor %}
     </div>
   </section>
@@ -100,20 +100,6 @@
   </div></div>
 </div>
 
-<div class="modal fade" id="inventory-session-modal" tabindex="-1">
-  <div class="modal-dialog"><div class="modal-content mrd-modal-dark">
-    <div class="modal-header"><h2 class="modal-title fs-5">Nueva sesión</h2><button class="btn-close" data-bs-dismiss="modal"></button></div>
-    <form id="inventory-session-form">
-      <div class="modal-body row g-3">
-        <div class="col-12"><label class="form-label">Nombre</label><input name="nombre" class="form-control" required maxlength="200"></div>
-        <div class="col-sm-6"><label class="form-label">Alcance</label><select name="scope" class="form-select"><option value="almacen">Almacén</option><option value="total">Total</option></select></div>
-        <div class="col-sm-6"><label class="form-label">Artículos</label><select name="tipo_articulo" class="form-select"><option value="material">Materiales</option><option value="epi_ropa">Ropa y variantes</option><option value="epi_individual">EPI individual</option><option value="todo">Todo</option></select></div>
-        <div class="col-12"><div id="inventory-form-result" class="inventory-form-result" role="status"></div></div>
-      </div>
-      <div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal" type="button">Cancelar</button><button class="btn btn-warning" type="submit">Crear sesión</button></div>
-    </form>
-  </div></div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -198,28 +184,6 @@
       cameraMessage.textContent = 'Cámara activa. La pistola y el campo manual siguen disponibles.';
     } catch (error) {
       cameraMessage.textContent = 'No se pudo activar la cámara. Comprueba el permiso o usa la pistola/manual.';
-    }
-  });
-
-  const form = document.getElementById('inventory-session-form');
-  form.addEventListener('submit', async function (event) {
-    event.preventDefault();
-    const result = document.getElementById('inventory-form-result');
-    const data = Object.fromEntries(new FormData(form));
-    data.almacen_id = null;
-    data.umbral_desviacion = 5;
-    try {
-      const response = await fetch('/inventario/sesiones/nueva', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
-      const type = response.headers.get('content-type') || '';
-      if (!type.includes('application/json')) throw new Error('La sesión ha caducado. Vuelve a iniciar sesión.');
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.detail || 'No se pudo crear la sesión.');
-      result.className = 'inventory-form-result is-success';
-      result.textContent = 'Sesión creada correctamente.';
-      location.reload();
-    } catch (error) {
-      result.className = 'inventory-form-result is-error';
-      result.textContent = error.message;
     }
   });
 

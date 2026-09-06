@@ -831,7 +831,7 @@ def test_ui_inventario_oculta_camara_en_pc_y_no_acepta_html_como_exito():
     assert "data-item-key" in session_template
     assert "payload.tipo" in session_template and "payload.id" in session_template
     assert "useScannedLine(raw)" in session_template
-    assert 'href="/inventario/v2"' in base
+    assert 'href="/inventario"' in base
     assert "encargado_patio" in base
     assert "nav_user = user if user is defined else" in base
     assert "{% if user.rol" not in base

@@ -224,7 +224,11 @@ def test_alta_nueva_genera_codigos_y_duplicado_obliga_a_usar_existente(tmp_path)
     engine.dispose()
 
 
-def test_api_de_sesion_mantiene_conteo_ciego_hasta_cierre(tmp_path):
+def test_api_de_sesion_mantiene_conteo_ciego_hasta_cierre(tmp_path, monkeypatch):
+    """Modo ciego opcional desde 2.7.33: el inventario guiado muestra lo
+    esperado por defecto; MRD_INVENTARIO_CIEGO=1 recupera el conteo ciego
+    hasta el cierre, que es lo que verifica esta prueba."""
+    monkeypatch.setenv("MRD_INVENTARIO_CIEGO", "1")
     engine, Session = _session_factory(tmp_path)
     with Session() as db:
         user, _catalog, warehouse, location, variant = _seed(db)

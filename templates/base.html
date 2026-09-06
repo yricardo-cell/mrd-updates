@@ -303,7 +303,7 @@
         </li>
         {% if nav_user and nav_user.rol in ['admin', 'almacen', 'encargado_patio'] %}
 <li class="nav-item">
-          <a href="/inventario/v2" class="{% if request.url.path != '/inventario/estado' and '/inventario/' in request.url.path %}active{% endif %}">
+          <a href="/inventario" class="{% if request.url.path != '/inventario/estado' and request.url.path.startswith('/inventario') %}active{% endif %}">
             <i class="bi bi-clipboard-data"></i>
             <span class="nav-label">Inventario</span>
           </a>

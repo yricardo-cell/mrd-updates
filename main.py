@@ -123,6 +123,8 @@ from inventario_service import (
     InventoryError, approve_count, close_inventory_session,
     ensure_inventory_asset_snapshot, open_inventory_session, register_count, require_inventory_admin,
     require_inventory_operator,
+    open_or_resume_session, close_session_guided, GUIDED_TYPES,
+    ACTIVE_SESSION_STATES,
 )
 from dotacion_service import (
     RESET_PHRASE, change_dotation_line_size, clothing_reset_preview,
@@ -654,7 +656,11 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException):
     # dos rutas del escáner y errores normales del Mostrador (por ejemplo un
     # QR no reconocido) se convertían en una página HTML. El navegador no
     # podía interpretarla y mostraba el engañoso «Respuesta no válida».
-    json_api = scan_api or request_path.startswith("/api/")
+    # Las pantallas operativas (inventario guiado, etc.) piden JSON de forma
+    # explícita: un 409 con su mensaje real, no una página HTML que el
+    # navegador confundía con "sesión caducada".
+    wants_json = "application/json" in (request.headers.get("accept") or "").lower()
+    json_api = scan_api or request_path.startswith("/api/") or wants_json
     # Para redirecciones devolver la respuesta directamente (no re-lanzar)
     if exc.status_code in (301, 302, 303, 307, 308):
         if json_api:
@@ -16941,6 +16947,17 @@ class EscaneoActivoInventarioRequest(BaseModel):
     codigo: str = Field(min_length=1, max_length=512)
 
 
+class IniciarInventarioGuiadoRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    tipo_articulo: Literal["todo", "material", "epi_ropa", "epi_individual"] = "material"
+
+
+class CerrarInventarioGuiadoRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    cierre_event_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    no_contados: Literal["mantener", "cero"] = "mantener"
+
+
 class CerrarSesionRequest(BaseModel):
     model_config = {"extra": "forbid"}
     cierre_event_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
@@ -17033,6 +17050,84 @@ def inventario_variantes(user: Usuario = Depends(requiere_login), db: Session = 
         "referencia_interna": row.referencia_interna, "codigo_qr": row.codigo_qr,
         "referencia_proveedor": row.referencia_proveedor,
     } for row in rows]})
+
+
+@app.get("/inventario", response_class=HTMLResponse)
+def inventario_guiado(
+    request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db),
+):
+    """Paso 1 del inventario guiado: qué contar. No crea nada."""
+    _ensure_inventory_operator(user)
+    warehouse = _active_warehouse(db, user, request)
+    abiertas, recientes, recuentos = [], [], {}
+    if warehouse:
+        abiertas = db.query(SesionInventario).filter(
+            SesionInventario.almacen_id == warehouse.id,
+            SesionInventario.estado.in_(tuple(ACTIVE_SESSION_STATES | {"pendiente_cierre"})),
+        ).order_by(SesionInventario.id.desc()).all()
+        recientes = db.query(SesionInventario).filter(
+            SesionInventario.almacen_id == warehouse.id,
+            SesionInventario.estado == "cerrada",
+        ).order_by(SesionInventario.id.desc()).limit(5).all()
+        recuentos = {
+            "material": db.query(Material).filter(Material.activo == True, Material.almacen_id == warehouse.id).count(),
+            "epi_ropa": db.query(VarianteEPI).filter(VarianteEPI.activo == True).count(),
+            "epi_individual": db.query(EPIIndividual).filter(EPIIndividual.estado != "baja").count(),
+        }
+        recuentos["todo"] = sum(recuentos.values())
+    return templates.TemplateResponse(request, "inventario_guiado.html", ctx_base(
+        request, user, db, almacen=warehouse, abiertas=abiertas, recientes=recientes,
+        recuentos=recuentos, grupos=GUIDED_TYPES,
+    ))
+
+
+@app.post("/inventario/guiado/iniciar")
+def inventario_guiado_iniciar(
+    payload: IniciarInventarioGuiadoRequest,
+    user: Usuario = Depends(requiere_login), db: Session = Depends(get_db),
+    request: Request = None,
+):
+    """Abre el inventario del grupo elegido en el almacén activo, o continúa
+    el que ya estuviera abierto."""
+    try:
+        warehouse = _active_warehouse(db, user, request)
+        start_stock_transaction(db)
+        session, resumed = open_or_resume_session(
+            db, user, tipo_articulo=payload.tipo_articulo,
+            almacen_id=warehouse.id if warehouse else 0,
+        )
+        db.commit()
+        return JSONResponse({
+            "sesion_id": session.id, "reanudada": resumed,
+            "url": f"/inventario/sesiones/{session.id}",
+            "lineas": db.query(LineaInventario).filter_by(sesion_id=session.id).count(),
+        }, status_code=200 if resumed else 201)
+    except InventoryError as exc:
+        db.rollback()
+        _inventory_http_error(exc)
+    except Exception:
+        db.rollback()
+        raise
+
+
+@app.post("/inventario/sesiones/{session_id}/cerrar-guiado")
+def inventario_cerrar_guiado(
+    session_id: int, payload: CerrarInventarioGuiadoRequest,
+    user: Usuario = Depends(requiere_login), db: Session = Depends(get_db),
+):
+    """Acepta todo lo contado y cierra; los no contados se mantienen (o a cero)."""
+    _inventory_session_for_user(db, user, session_id)
+    start_stock_transaction(db)
+    try:
+        result = close_session_guided(
+            db, user, session_id=session_id, cierre_event_id=payload.cierre_event_id,
+            no_contados=payload.no_contados,
+        )
+        db.commit()
+        return JSONResponse(result)
+    except InventoryError as exc:
+        db.rollback()
+        _inventory_http_error(exc)
 
 
 @app.get("/inventario/v2", response_class=HTMLResponse)
@@ -17713,8 +17808,26 @@ def _inventory_session_payload(db: Session, session: SesionInventario) -> dict:
     lines = db.query(LineaInventario).filter_by(sesion_id=session.id).order_by(
         LineaInventario.id,
     ).all()
-    reveal = session.estado in {"pendiente_cierre", "cerrada", "cancelada"}
+    # Inventario guiado: se muestra lo que espera el sistema para detectar
+    # errores de tecleo al momento; MRD_INVENTARIO_CIEGO=1 recupera el modo ciego.
+    blind = os.getenv("MRD_INVENTARIO_CIEGO", "0") == "1"
+    reveal = (not blind) or session.estado in {"pendiente_cierre", "cerrada", "cancelada"}
     serialized = [_inventory_line_view(db, line, reveal) for line in lines]
+    umbral = float(session.umbral_desviacion or 0)
+    for item in serialized:
+        contado = item["cantidad_contada_2"] if item["cantidad_contada_2"] is not None else item["cantidad_contada_1"]
+        if item.get("cantidad_final") is not None and item["estado"] in {"aprobado", "ajustado"}:
+            contado = item["cantidad_final"]
+        esperada = item.get("cantidad_esperada")
+        item["contado"] = contado
+        item["diferencia_conteo"] = None
+        item["porcentaje_diferencia"] = None
+        if contado is not None and esperada is not None:
+            item["diferencia_conteo"] = round(float(contado) - float(esperada), 2)
+            item["porcentaje_diferencia"] = (
+                round(abs(item["diferencia_conteo"]) / float(esperada) * 100, 1) if float(esperada) else (100.0 if item["diferencia_conteo"] else 0.0)
+            )
+        item["con_diferencia"] = bool(item["diferencia_conteo"]) and abs(item["diferencia_conteo"]) > 0.0001
     assets = db.query(ActivoInventarioEscaneado).filter_by(sesion_id=session.id).order_by(
         ActivoInventarioEscaneado.tipo, ActivoInventarioEscaneado.nombre,
     ).all()
@@ -17733,6 +17846,10 @@ def _inventory_session_payload(db: Session, session: SesionInventario) -> dict:
         "total_lineas": total, "lineas_procesadas": completed,
         "progreso": round((completed / total * 100), 1) if total else 100,
         "conteo_ciego": not reveal, "lineas": serialized, "activos": serialized_assets,
+        "umbral_desviacion": umbral,
+        "contadas": sum(1 for item in serialized if item["contado"] is not None),
+        "con_diferencia": sum(1 for item in serialized if item["con_diferencia"]),
+        "sin_contar": sum(1 for item in serialized if item["contado"] is None),
     }
 
 

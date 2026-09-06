@@ -14,7 +14,7 @@ SECCIONES = ["Diario", "Stock", "EPI", "Trabajadores", "Salidas y albaranes",
 SOLO_ADMIN = ["/cierres-diarios", "/localizador", "/multi-almacen", "/buzon-trabajadores",
               "/preparaciones-entrega", "/pedidos-proveedor", "/centro-etiquetas",
               "/configuracion", "/actualizaciones", "/acceso-remoto"]
-ALMACEN_SI = ["/salida-rapida", "/panel-patio", "/tablet", "/pendientes", "/inventario/v2",
+ALMACEN_SI = ["/salida-rapida", "/panel-patio", "/tablet", "/pendientes", "/inventario",
               "/solicitudes-trabajadores", "/operaciones-portal-trabajadores"]
 
 

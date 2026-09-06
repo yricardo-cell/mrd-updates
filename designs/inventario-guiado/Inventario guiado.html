@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MRD · Maqueta del inventario guiado</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  :root{--bg:#0b1220;--surface:#111a2e;--surface2:#16213a;--border:#22304d;--text:#e2e8f0;--muted:#94a3b8;--cyan:#22d3ee;--green:#34d399;--amber:#f59e0b;--red:#f87171}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 28px 8px}
+  header h1{margin:0 0 4px;font-size:20px}
+  header p{margin:0;color:var(--muted);max-width:980px}
+  .steps{display:flex;gap:8px;padding:12px 28px;flex-wrap:wrap}
+  .steps button{border:1px solid var(--border);background:var(--surface);color:var(--muted);padding:8px 14px;border-radius:999px;cursor:pointer;font:inherit;display:flex;gap:8px;align-items:center}
+  .steps button b{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--border);color:#fff;font-size:12px}
+  .steps button.on{color:#fff;border-color:var(--cyan);background:#0e7490}
+  .steps button.on b{background:var(--cyan);color:#0b1220}
+  .screen{display:none;padding:8px 28px 28px}
+  .screen.on{display:block}
+  .app{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;max-width:1040px}
+  .app h2{margin:0 0 2px;font-size:20px}
+  .app .sub{color:var(--muted);margin:0 0 18px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .card{background:var(--surface2);border:2px solid var(--border);border-radius:14px;padding:16px;cursor:pointer}
+  .card.sel{border-color:var(--cyan);box-shadow:0 0 0 3px #22d3ee22}
+  .card i{font-size:26px;color:var(--cyan)}
+  .card strong{display:block;margin:8px 0 2px;font-size:15px}
+  .card span{color:var(--muted);font-size:12.5px}
+  .row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:16px}
+  .pill{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--muted)}
+  .pill b{color:var(--text)}
+  .btn{border:0;border-radius:10px;padding:12px 18px;font:inherit;font-weight:700;cursor:pointer}
+  .btn.primary{background:var(--cyan);color:#0b1220}
+  .btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+  .btn.big{font-size:16px;padding:14px 22px}
+  .progress{height:10px;background:var(--border);border-radius:999px;overflow:hidden;margin:6px 0 14px}
+  .progress div{height:100%;background:linear-gradient(90deg,#0891b2,var(--cyan));width:38%}
+  .count{display:grid;grid-template-columns:1.2fr .8fr;gap:18px}
+  .scanbox{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .scanbox input{width:100%;font-size:20px;padding:12px 14px;border-radius:10px;border:2px solid var(--cyan);background:#0b1220;color:#fff}
+  .item{background:#0b1220;border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:12px}
+  .item h3{margin:0;font-size:17px}
+  .item small{color:var(--muted)}
+  .qty{display:flex;gap:10px;align-items:center;margin-top:12px}
+  .qty input{font-size:28px;width:140px;padding:8px 12px;border-radius:10px;border:2px solid var(--border);background:var(--surface2);color:#fff;text-align:center}
+  .qty .btn{padding:14px 18px}
+  .list{background:var(--surface2);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  .list header{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;color:var(--muted);font-size:12.5px}
+  .list ul{list-style:none;margin:0;padding:0;max-height:330px;overflow:auto}
+  .list li{display:flex;justify-content:space-between;padding:9px 14px;border-bottom:1px solid #1c2740;font-size:13px}
+  .list li span:last-child{font-weight:700}
+  .ok{color:var(--green)}.warn{color:var(--amber)}.bad{color:var(--red)}.dim{color:var(--muted)}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:600;font-size:12.5px}
+  td b{font-size:15px}
+  .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:700}
+  .tag.ok{background:#064e3b;color:var(--green)}.tag.warn{background:#4a2e05;color:var(--amber)}.tag.bad{background:#4c1d1d;color:var(--red)}
+  .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:14px 0}
+  .summary div{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+  .summary small{color:var(--muted);display:block}.summary strong{font-size:22px}
+  .notes{padding:0 28px 40px;max-width:1040px}
+  .notes h3{font-size:15px;margin:18px 0 6px}
+  .notes ul{padding-left:18px}.notes li{margin:4px 0;color:var(--text)}
+  .notes .muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Inventario guiado en tres pasos</h1>
+  <p>Sustituye la pantalla actual "Inventario masivo" (sesiones, escáner, alta de suministro y variantes mezclados) por un asistente: <b>1 Qué contar → 2 Contar → 3 Revisar y cerrar</b>. Una sola cantidad por artículo, sin ventanas emergentes, y el cierre no exige aprobar línea a línea.</p>
+</header>
+<div class="steps">
+  <button class="on" data-step="1"><b>1</b> Qué contar</button>
+  <button data-step="2"><b>2</b> Contar</button>
+  <button data-step="3"><b>3</b> Revisar y cerrar</button>
+</div>
+
+<section class="screen on" data-screen="1">
+  <div class="app">
+    <h2>¿Qué vas a contar hoy?</h2>
+    <p class="sub">Elige un grupo. El almacén es el tuyo (Madrid) y el nombre se pone solo. Si ya hay un inventario abierto de ese grupo, se continúa en vez de dar error.</p>
+    <div class="cards">
+      <div class="card sel"><i class="bi bi-boxes"></i><strong>Materiales y consumibles</strong><span>128 referencias con stock · guantes, discos, tornillería…</span></div>
+      <div class="card"><i class="bi bi-bag-fill"></i><strong>Ropa y EPI de stock</strong><span>54 variantes por talla y color</span></div>
+      <div class="card"><i class="bi bi-life-preserver"></i><strong>Arneses y EPI individual</strong><span>2 arneses configurados · uno a uno por código</span></div>
+      <div class="card"><i class="bi bi-wrench-adjustable"></i><strong>Herramientas y maquinaria</strong><span>Comprobación por escaneo: está / no está</span></div>
+    </div>
+    <div class="row">
+      <div class="pill">Almacén: <b>Madrid</b></div>
+      <div class="pill">Nombre: <b>Inventario 06/09/2026 · Materiales</b></div>
+      <div class="pill">Quién cuenta: <b>tú y quien tenga rol almacén</b></div>
+    </div>
+    <div class="row">
+      <button class="btn primary big" data-go="2"><i class="bi bi-play-fill"></i> Empezar a contar</button>
+      <button class="btn ghost">Continuar el inventario abierto del 02/09</button>
+    </div>
+  </div>
+</section>
+
+<section class="screen" data-screen="2">
+  <div class="app">
+    <h2>Contar · Materiales · Madrid</h2>
+    <p class="sub">Escanea o escribe el código, teclea la cantidad que ves y pulsa Enter. Lo que no cuentes se queda como está.</p>
+    <div style="display:flex;justify-content:space-between;color:var(--muted);font-size:12.5px"><span><b style="color:#fff">49 de 128</b> contados</span><span>2 con diferencia · 0 pendientes de recontar</span></div>
+    <div class="progress"><div></div></div>
+    <div class="count">
+      <div>
+        <div class="scanbox">
+          <label class="dim" style="display:block;margin-bottom:6px">Código, referencia o nombre</label>
+          <input value="MAT-0041" readonly>
+          <div class="item">
+            <h3>Guantes nitrilo talla 9</h3>
+            <small>MAT-0041 · Estantería B3 · Unidad: par</small>
+            <div class="qty">
+              <input value="86">
+              <button class="btn primary">Guardar (Enter)</button>
+              <button class="btn ghost">Por cajas ×</button>
+            </div>
+            <small class="warn"><i class="bi bi-exclamation-triangle-fill"></i> El sistema esperaba 92. Diferencia −6 (6,5 %). Se guarda igualmente y se marca para revisar en el paso 3.</small>
+          </div>
+        </div>
+        <p class="dim" style="margin:12px 0 0">Sin conteo ciego por defecto: ves lo que espera el sistema para detectar errores de tecleo al momento. El administrador puede activar "conteo ciego" en Configuración si quiere el modo auditoría.</p>
+      </div>
+      <div class="list">
+        <header><span>Artículos</span><span>Filtrar: <u>todos</u> · pendientes · con diferencia</span></header>
+        <ul>
+          <li><span>Guantes nitrilo talla 9</span><span class="warn">86 (−6)</span></li>
+          <li><span>Guantes nitrilo talla 10</span><span class="ok">40</span></li>
+          <li><span>Disco corte 115 mm</span><span class="ok">210</span></li>
+          <li><span>Disco corte 230 mm</span><span class="warn">12 (+3)</span></li>
+          <li><span>Cinta americana</span><span class="ok">18</span></li>
+          <li><span>Tornillo M8x80 (caja 100)</span><span class="ok">1.400</span></li>
+          <li><span>Silicona neutra</span><span class="dim">pendiente</span></li>
+          <li><span>Spray marcador rojo</span><span class="dim">pendiente</span></li>
+          <li><span>Cinta señalización</span><span class="dim">pendiente</span></li>
+          <li><span>Brocas SDS 12 mm</span><span class="dim">pendiente</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn primary big" data-go="3"><i class="bi bi-check2-circle"></i> He terminado, revisar</button>
+      <button class="btn ghost">Pausar y seguir más tarde</button>
+    </div>
+  </div>
+</section>
+
+<section class="screen" data-screen="3">
+  <div class="app">
+    <h2>Revisar y cerrar · Materiales · Madrid</h2>
+    <p class="sub">Solo se muestran las diferencias. Puedes recontar una línea, aceptar la cantidad contada o dejar la que había. Al cerrar, el stock se ajusta y queda registrado quién y cuándo.</p>
+    <div class="summary">
+      <div><small>Contados</small><strong>128</strong></div>
+      <div><small>Sin diferencia</small><strong class="ok">121</strong></div>
+      <div><small>Con diferencia</small><strong class="warn">5</strong></div>
+      <div><small>No contados</small><strong class="dim">2</strong></div>
+    </div>
+    <table>
+      <thead><tr><th>Artículo</th><th>Había</th><th>Contado</th><th>Diferencia</th><th>Decisión</th></tr></thead>
+      <tbody>
+        <tr><td><b>Guantes nitrilo talla 9</b><br><small class="dim">MAT-0041</small></td><td>92</td><td><b>86</b></td><td><span class="tag warn">−6 (6,5 %)</span></td><td><button class="btn ghost">Recontar</button> <button class="btn primary">Aceptar 86</button></td></tr>
+        <tr><td><b>Disco corte 230 mm</b><br><small class="dim">MAT-0113</small></td><td>9</td><td><b>12</b></td><td><span class="tag warn">+3</span></td><td><button class="btn ghost">Recontar</button> <button class="btn primary">Aceptar 12</button></td></tr>
+        <tr><td><b>Brocas SDS 12 mm</b><br><small class="dim">MAT-0097</small></td><td>30</td><td><b>0</b></td><td><span class="tag bad">−30 (100 %)</span></td><td><button class="btn ghost">Recontar</button> <button class="btn primary">Aceptar 0</button></td></tr>
+        <tr><td><b>Silicona neutra</b><br><small class="dim">MAT-0150</small></td><td>24</td><td class="dim">no contado</td><td><span class="tag ok">se mantiene 24</span></td><td><button class="btn ghost">Contar ahora</button></td></tr>
+      </tbody>
+    </table>
+    <div class="row">
+      <button class="btn primary big"><i class="bi bi-lock-fill"></i> Aceptar todo lo contado y cerrar</button>
+      <button class="btn ghost">Descargar diferencias (Excel)</button>
+      <span class="dim">Requiere rol administrador o encargado. Se crea un ajuste por línea con motivo "inventario 06/09/2026".</span>
+    </div>
+  </div>
+</section>
+
+<div class="notes">
+  <h3>Qué se conserva y qué cambia por dentro</h3>
+  <ul>
+    <li><b>Se conserva</b> el motor actual (sesiones, líneas, intentos de conteo, ajustes al cierre, protección contra doble envío y contra movimientos simultáneos): no se pierde nada de lo ya construido.</li>
+    <li><b>Un solo conteo</b> por artículo: el segundo conteo solo se pide al recontar una diferencia en el paso 3. Hoy son dos obligatorios para todo.</li>
+    <li><b>Sin aprobar línea a línea</b>: "Aceptar todo lo contado y cerrar" aprueba en bloque; los no contados se mantienen como estaban (o se ponen a cero, si el administrador lo elige al cerrar).</li>
+    <li><b>Sin jerga</b>: desaparecen "alcance", "tipo de artículo", "conteo ciego", "pendiente de cierre" y los avisos técnicos; los errores se explican con lo que hay que hacer.</li>
+    <li><b>Sesión abierta</b>: en vez del error "Ya existe una sesión activa", se ofrece continuarla.</li>
+    <li class="muted">El alta de suministro, las variantes y las dotaciones salen de esta pantalla y se quedan en Ropa y variantes / Pedidos y recepción, donde corresponden.</li>
+  </ul>
+</div>
+
+<script>
+  function go(n){
+    document.querySelectorAll('.steps button').forEach(function(b){ b.classList.toggle('on', b.dataset.step === String(n)); });
+    document.querySelectorAll('.screen').forEach(function(s){ s.classList.toggle('on', s.dataset.screen === String(n)); });
+  }
+  document.querySelectorAll('.steps button').forEach(function(b){ b.addEventListener('click', function(){ go(b.dataset.step); }); });
+  document.querySelectorAll('[data-go]').forEach(function(b){ b.addEventListener('click', function(){ go(b.dataset.go); }); });
+  document.querySelectorAll('.card').forEach(function(c){ c.addEventListener('click', function(){ document.querySelectorAll('.card').forEach(function(x){ x.classList.remove('sel'); }); c.classList.add('sel'); }); });
+</script>
+</body>
+</html>

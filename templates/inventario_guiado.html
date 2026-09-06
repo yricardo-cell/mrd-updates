@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Inventario — {{ app_name }}{% endblock %}
+
+{% block content %}
+<section class="inventory-v2-hero">
+  <div>
+    <span class="inventory-v2-eyebrow">Paso 1 de 3 · Qué contar</span>
+    <h1><i class="bi bi-clipboard2-check"></i> Inventario</h1>
+    <p>Elige un grupo y empieza a contar. Una cantidad por artículo, sin ventanas emergentes; al final revisas solo las diferencias y cierras.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-outline-light mrd-btn" href="/inventario/estado"><i class="bi bi-pie-chart-fill"></i> Estado visual</a>
+    <a class="btn btn-outline-light mrd-btn" href="/inventario/v2"><i class="bi bi-bag-fill"></i> Suministros y variantes</a>
+  </div>
+</section>
+
+{% if not almacen %}
+<div class="alert alert-warning"><i class="bi bi-exclamation-triangle-fill me-1"></i> No hay un almacén activo. Elige o crea uno en <a href="/almacenes">Almacenes</a> antes de contar.</div>
+{% else %}
+
+{% if abiertas %}
+<section class="mrd-card mb-4">
+  <div class="mrd-card-header"><span>Inventarios abiertos en {{ almacen.nombre }}</span><span class="badge text-bg-warning">{{ abiertas|length }}</span></div>
+  <div class="mrd-card-body inventory-session-list">
+    {% for sesion in abiertas %}
+    <a class="inventory-session-row" href="/inventario/sesiones/{{ sesion.id }}" data-session-id="{{ sesion.id }}">
+      <span class="inventory-session-icon"><i class="bi bi-play-circle"></i></span>
+      <span><strong>{{ sesion.nombre }}</strong><small>{{ grupos.get(sesion.tipo_articulo, sesion.tipo_articulo) }}</small></span>
+      <span class="inventory-status is-{{ sesion.estado }}">Continuar</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="mrd-card mb-4">
+  <div class="mrd-card-header"><span>¿Qué vas a contar hoy en {{ almacen.nombre }}?</span></div>
+  <div class="mrd-card-body">
+    <div class="row g-3" id="inventory-groups">
+      {% for clave, etiqueta in grupos.items() %}
+      <div class="col-12 col-md-6 col-xl-3">
+        <button type="button" class="inventory-group-card w-100 text-start" data-tipo="{{ clave }}">
+          <i class="bi {% if clave == 'material' %}bi-boxes{% elif clave == 'epi_ropa' %}bi-bag-fill{% elif clave == 'epi_individual' %}bi-life-preserver{% else %}bi-collection{% endif %}"></i>
+          <strong>{{ etiqueta }}</strong>
+          <span>{{ recuentos.get(clave, 0) }} {% if clave == 'epi_ropa' %}variantes{% elif clave == 'epi_individual' %}equipos{% else %}referencias{% endif %}</span>
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+      <button id="inventory-start" class="btn btn-warning btn-lg mrd-btn" type="button" disabled><i class="bi bi-play-fill"></i> Empezar a contar</button>
+      <span class="inventory-help">El nombre se pone solo con la fecha de hoy. Si ya hay un inventario abierto de ese grupo, se continúa en vez de dar error.</span>
+    </div>
+    <div id="inventory-start-result" class="inventory-form-result mt-3" role="status"></div>
+  </div>
+</section>
+
+{% if recientes %}
+<section class="mrd-card">
+  <div class="mrd-card-header"><span>Últimos inventarios cerrados</span></div>
+  <div class="mrd-card-body inventory-session-list">
+    {% for sesion in recientes %}
+    <a class="inventory-session-row" href="/inventario/sesiones/{{ sesion.id }}">
+      <span class="inventory-session-icon"><i class="bi bi-lock-fill"></i></span>
+      <span><strong>{{ sesion.nombre }}</strong><small>{{ grupos.get(sesion.tipo_articulo, sesion.tipo_articulo) }}</small></span>
+      <span class="inventory-status is-cerrada">Cerrado</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endif %}
+
+<style>
+  .inventory-group-card{background:var(--mrd-surface2,#16213a);border:2px solid var(--mrd-border,#22304d);border-radius:14px;padding:16px;color:inherit;cursor:pointer}
+  .inventory-group-card:hover{border-color:#22d3ee88}
+  .inventory-group-card.is-selected{border-color:#22d3ee;box-shadow:0 0 0 3px #22d3ee22}
+  .inventory-group-card i{font-size:26px;color:#22d3ee;display:block}
+  .inventory-group-card strong{display:block;margin:8px 0 2px;font-size:15px}
+  .inventory-group-card span{color:var(--mrd-text-muted,#94a3b8);font-size:12.5px}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const cards = document.querySelectorAll('.inventory-group-card');
+  const start = document.getElementById('inventory-start');
+  const result = document.getElementById('inventory-start-result');
+  let tipo = null;
+  cards.forEach(card => card.addEventListener('click', () => {
+    cards.forEach(other => other.classList.toggle('is-selected', other === card));
+    tipo = card.dataset.tipo;
+    start.disabled = false;
+  }));
+  if (start) start.addEventListener('click', async () => {
+    if (!tipo || start.disabled) return;
+    start.disabled = true;
+    result.className = 'inventory-form-result';
+    result.textContent = 'Preparando el inventario…';
+    try {
+      const response = await fetch('/inventario/guiado/iniciar', {method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json'}, body: JSON.stringify({tipo_articulo: tipo})});
+      const type = response.headers.get('content-type') || '';
+      if (!type.includes('application/json')) throw new Error('La sesión ha caducado. Vuelve a iniciar sesión.');
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || 'No se pudo empezar el inventario.');
+      result.className = 'inventory-form-result is-success';
+      result.textContent = payload.reanudada ? 'Continuando el inventario abierto…' : 'Inventario creado con ' + payload.lineas + ' artículos. Abriendo…';
+      location.href = payload.url;
+    } catch (error) {
+      result.className = 'inventory-form-result is-error';
+      result.textContent = error.message;
+      start.disabled = false;
+    }
+  });
+}());
+</script>
+{% endblock %}

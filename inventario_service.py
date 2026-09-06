@@ -1,5 +1,6 @@
 """Servicios transaccionales de inventario masivo V2."""
 import hashlib
+from datetime import datetime
 import json
 import uuid
 from dataclasses import dataclass
@@ -215,6 +216,98 @@ def open_inventory_session(
     ensure_inventory_asset_snapshot(db, session)
     db.flush()
     return session
+
+
+GUIDED_TYPES = {
+    "material": "Materiales y consumibles",
+    "epi_ropa": "Ropa y EPI de stock",
+    "epi_individual": "Arneses y EPI individual",
+    "todo": "Todo el almacén",
+}
+
+
+def open_or_resume_session(
+    db: Session, user: Usuario, *, tipo_articulo: str, almacen_id: int,
+    umbral_desviacion: float = 5.0,
+) -> tuple[SesionInventario, bool]:
+    """Inventario guiado: si ya hay una sesión activa de ese grupo en el
+    almacén, se continúa (antes fallaba con 409); si no, se abre una nueva
+    con nombre automático. Devuelve (sesión, reanudada)."""
+    require_inventory_operator(user)
+    if tipo_articulo not in GUIDED_TYPES:
+        raise InventoryError(400, "Elige qué quieres contar: materiales, ropa, EPI individual o todo")
+    if not almacen_id:
+        raise InventoryError(409, "No hay un almacén activo. Elige uno en Almacenes antes de contar")
+    active = db.execute(select(SesionInventario).where(
+        SesionInventario.almacen_id == almacen_id,
+        SesionInventario.scope == "almacen",
+        SesionInventario.tipo_articulo == tipo_articulo,
+        SesionInventario.estado.in_(ACTIVE_SESSION_STATES | {"pendiente_cierre"}),
+    ).order_by(SesionInventario.id.desc())).scalars().first()
+    if active:
+        return active, True
+    nombre = f"Inventario {datetime.now():%d/%m/%Y} · {GUIDED_TYPES[tipo_articulo]}"
+    session = open_inventory_session(
+        db, user, nombre=nombre, almacen_id=almacen_id, scope="almacen",
+        tipo_articulo=tipo_articulo, umbral_desviacion=umbral_desviacion,
+    )
+    return session, False
+
+
+def close_session_guided(
+    db: Session, user: Usuario, *, session_id: int, cierre_event_id: str,
+    no_contados: str = "mantener",
+) -> dict:
+    """Cierre en bloque del inventario guiado: acepta la última cantidad
+    contada de cada línea; las líneas sin contar se mantienen como estaban
+    (o se ponen a cero si el administrador lo pide). Después aplica el cierre
+    transaccional de siempre (close_inventory_session)."""
+    require_inventory_admin(user)
+    if no_contados not in {"mantener", "cero"}:
+        raise InventoryError(400, "Opción para los artículos no contados no válida")
+    session = db.get(SesionInventario, session_id)
+    if not session:
+        raise InventoryError(404, "Sesión no encontrada")
+    if session.estado == "cerrada":
+        return close_inventory_session(db, user, session_id=session_id, cierre_event_id=cierre_event_id)
+    if session.estado not in ACTIVE_SESSION_STATES | {"pendiente_cierre"}:
+        raise InventoryError(409, "Este inventario ya no admite cierre")
+    pending = db.execute(select(LineaInventario).where(
+        LineaInventario.sesion_id == session_id,
+        LineaInventario.estado != "aprobado",
+    ).order_by(LineaInventario.id)).scalars().all()
+    for line in pending:
+        counted = line.cantidad_contada_2 if line.cantidad_contada_2 is not None else line.cantidad_contada_1
+        if counted is None:
+            final = float(line.cantidad_esperada or 0) if no_contados == "mantener" else 0.0
+        else:
+            final = float(counted)
+        if not line.material_id:
+            final = float(round(final))
+        changed = db.execute(update(LineaInventario).where(
+            LineaInventario.id == line.id,
+            LineaInventario.sesion_id == session_id,
+            LineaInventario.estado != "aprobado",
+        ).values(
+            cantidad_final=final, estado="aprobado",
+            aprobado_por_id=user.id, aprobado_en=func.now(),
+        ).execution_options(synchronize_session=False))
+        if changed.rowcount != 1:
+            raise InventoryError(409, "Una línea cambió mientras se cerraba el inventario")
+    if session.estado != "pendiente_cierre":
+        changed = db.execute(update(SesionInventario).where(
+            SesionInventario.id == session_id,
+            SesionInventario.estado.in_(ACTIVE_SESSION_STATES),
+        ).values(estado="pendiente_cierre").execution_options(synchronize_session=False))
+        if changed.rowcount != 1:
+            raise InventoryError(409, "La sesión cambió durante el cierre")
+    # Las aprobaciones son un estado válido por sí mismo (igual que aprobar
+    # línea a línea desde la pantalla): se confirman antes de delegar en el
+    # cierre transaccional, que abre su propia transacción con
+    # start_stock_transaction() y descartaría cambios solo volcados con flush().
+    db.commit()
+    db.expire_all()
+    return close_inventory_session(db, user, session_id=session_id, cierre_event_id=cierre_event_id)
 
 
 def _calculated_count(mode: str, amount: float, units_per_box: int | None) -> float:
