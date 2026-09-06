@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.31",
-    "nombre":  "MRD TOOL CONTROL -- Eliminado el modulo Surtidor",
+    "version_actual":  "2.7.32",
+    "nombre":  "MRD TOOL CONTROL -- Menu reordenado por logica de trabajo",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Eliminado el modulo Surtidor"
+                    "Menu reordenado por logica de trabajo"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.31.zip",
-    "sha256":  "0bd406ea33a3a62c1684f12896addc15580c18c0426620771bc1ac7dbb102e93"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.32.zip",
+    "sha256":  "d24ba2b8f0cc0b5bdf7acb0977ed4a290c7de54da2a9e35693a01aa80d969666"
 }
