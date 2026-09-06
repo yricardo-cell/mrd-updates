@@ -71,3 +71,5 @@ config/cpu_excluir.txt
 
 # Copia fuera del PC (2.7.56): configuracion local, no se publica
 config/backup_externo.json
+# Tamaño de etiqueta de la etiquetadora (2.7.61): configuracion local
+config/etiquetas.json

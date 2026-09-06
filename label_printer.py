@@ -328,3 +328,183 @@ def generar_pdf_etiquetas_ubicaciones(ubicaciones: List, empresa: str = "MRD Est
         except Exception:
             pass
         return buffer.getvalue()
+
+
+# ─── Tamaño de etiqueta configurable (2.7.61) ────────────────────────────────
+# La etiquetadora del usuario (Brother QL, Dymo, Niimbot…) usa rollos de un
+# tamaño concreto. Se guarda una vez y lo usan las etiquetas HTML y los PDF.
+PRESETS_ETIQUETA = [
+    ("brother-62x90",  "Brother QL · rollo continuo 62 mm (62 × 90)", 62, 90),
+    ("brother-62x100", "Brother QL · 62 × 100 (DK-11202)",            62, 100),
+    ("brother-62x40",  "Brother QL · 62 × 40 corta",                  62, 40),
+    ("brother-29x90",  "Brother QL · 29 × 90 (DK-11201)",             90, 29),
+    ("dymo-89x36",     "Dymo LabelWriter · 89 × 36 (30252)",          89, 36),
+    ("dymo-57x32",     "Dymo LabelWriter · 57 × 32 (11354)",          57, 32),
+    ("dymo-101x54",    "Dymo LabelWriter · 101 × 54 (envío)",         101, 54),
+    ("niimbot-50x30",  "Niimbot / Phomemo · 50 × 30",                 50, 30),
+    ("niimbot-40x30",  "Niimbot / Phomemo · 40 × 30",                 40, 30),
+    ("niimbot-60x40",  "Niimbot / Phomemo · 60 × 40",                 60, 40),
+    ("a4-105x55",      "Hojas A4 de etiquetas 105 × 55",              105, 55),
+    ("personalizado",  "Personalizado (pon ancho y alto)",            62, 90),
+]
+
+
+def _etiqueta_cfg_path():
+    from config import BASE_DIR
+    return BASE_DIR / "config" / "etiquetas.json"
+
+
+def get_tamano_etiqueta() -> dict:
+    """Tamaño guardado (mm). Por defecto 62 × 90, el rollo continuo Brother más común."""
+    import json as _json
+    try:
+        p = _etiqueta_cfg_path()
+        d = _json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    except Exception:
+        d = {}
+    try:
+        ancho = int(float(d.get("ancho_mm") or 62)); alto = int(float(d.get("alto_mm") or 90))
+    except (TypeError, ValueError):
+        ancho, alto = 62, 90
+    ancho, alto = max(20, min(300, ancho)), max(15, min(300, alto))
+    return {"ancho_mm": ancho, "alto_mm": alto, "preset": str(d.get("preset") or "personalizado")}
+
+
+def set_tamano_etiqueta(ancho_mm: int, alto_mm: int, preset: str = "personalizado") -> dict:
+    import json as _json
+    ancho, alto = max(20, min(300, int(ancho_mm))), max(15, min(300, int(alto_mm)))
+    claves = {p[0] for p in PRESETS_ETIQUETA}
+    p = _etiqueta_cfg_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(_json.dumps({"ancho_mm": ancho, "alto_mm": alto, "preset": preset if preset in claves else "personalizado"},
+                             ensure_ascii=False, indent=2), encoding="utf-8")
+    return get_tamano_etiqueta()
+
+
+def layout_etiqueta(ancho_mm: int, alto_mm: int) -> dict:
+    """Medidas de la maqueta según el tamaño: apaisada si es mucho más ancha que alta."""
+    w, h = float(ancho_mm), float(alto_mm)
+    horizontal = w >= h * 1.35
+    m = max(1.5, min(w, h) * 0.04)
+    if horizontal:
+        qr = max(12.0, min(h - 2 * m, w * 0.42))
+        esc = min(h / 36.0, w / 89.0)
+    else:
+        qr = max(14.0, min(w - 2 * m, h * 0.46))
+        esc = min(w / 62.0, h / 90.0)
+    esc = max(0.45, min(1.6, esc))
+    return {
+        "ancho_mm": int(w), "alto_mm": int(h), "horizontal": horizontal, "margen_mm": round(m, 2), "qr_mm": round(qr, 1),
+        "f_sup": round(6.5 * esc, 1), "f_grande": round((16 if horizontal else 22) * esc, 1), "f_detalle": round(7 * esc, 1),
+        "f_codigo": round(5.5 * esc, 1), "f_ref": round(8 * esc, 1), "f_pie": round(5.5 * esc, 1),
+    }
+
+
+def _ajustar_fuente(texto: str, fuente: str, max_w: float, max_pt: float, min_pt: float = 5.0) -> float:
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    pt = max_pt
+    while pt > min_pt and stringWidth(texto, fuente, pt) > max_w:
+        pt -= 0.5
+    return pt
+
+
+def _recortar(texto: str, fuente: str, pt: float, max_w: float) -> str:
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    if stringWidth(texto, fuente, pt) <= max_w:
+        return texto
+    while texto and stringWidth(texto + "…", fuente, pt) > max_w:
+        texto = texto[:-1]
+    return texto + "…"
+
+
+def generar_pdf_etiquetas_tamano(items: List[Dict], ancho_mm: int, alto_mm: int, empresa: str = "MRD Estructuras") -> bytes:
+    """Una etiqueta por página del tamaño exacto del rollo. Cada item:
+    {sup, grande, detalle, codigo, qr, pie}. Sirve para huecos y herramientas."""
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas
+    from reportlab.lib import colors
+    from reportlab.lib.utils import ImageReader
+    import qrcode
+
+    lay = layout_etiqueta(ancho_mm, alto_mm)
+    W, H, M = ancho_mm * mm, alto_mm * mm, lay["margen_mm"] * mm
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=(W, H))
+    for it in items:
+        sup = str(it.get("sup") or empresa)
+        grande = str(it.get("grande") or "")
+        detalle = str(it.get("detalle") or "")
+        codigo = str(it.get("codigo") or "")
+        pie = str(it.get("pie") or "")
+        qr_img = qrcode.make(it.get("qr") or codigo or grande, border=1)
+        qr_buf = io.BytesIO(); qr_img.save(qr_buf, format="PNG"); qr_buf.seek(0)
+        c.setStrokeColor(colors.black); c.setLineWidth(0.4)
+        c.rect(0.3 * mm, 0.3 * mm, W - 0.6 * mm, H - 0.6 * mm, fill=0, stroke=1)
+        c.setFillColor(colors.black)
+        qr_s = lay["qr_mm"] * mm
+        if lay["horizontal"]:
+            c.drawImage(ImageReader(qr_buf), M, (H - qr_s) / 2, qr_s, qr_s)
+            tx = M + qr_s + M
+            tw = W - tx - M
+            y = H - M - lay["f_sup"]
+            c.setFont("Helvetica-Bold", lay["f_sup"]); c.drawString(tx, y, _recortar(sup.upper(), "Helvetica-Bold", lay["f_sup"], tw))
+            pt = _ajustar_fuente(grande, "Helvetica-Bold", tw, lay["f_grande"], 7)
+            y -= pt + 1.2 * mm
+            c.setFont("Helvetica-Bold", pt); c.drawString(tx, y, _recortar(grande, "Helvetica-Bold", pt, tw))
+            if detalle:
+                y -= lay["f_detalle"] + 0.8 * mm
+                c.setFont("Helvetica", lay["f_detalle"]); c.drawString(tx, y, _recortar(detalle, "Helvetica", lay["f_detalle"], tw))
+            if codigo:
+                y -= lay["f_ref"] + 1.2 * mm
+                c.setFont("Courier-Bold", lay["f_ref"]); c.drawString(tx, y, codigo[-8:])
+                pt2 = _ajustar_fuente(codigo, "Courier", tw, lay["f_codigo"], 3.5)
+                y -= pt2 + 0.6 * mm
+                c.setFont("Courier", pt2); c.drawString(tx, y, _recortar(codigo, "Courier", pt2, tw))
+            if pie:
+                c.setFont("Helvetica", lay["f_pie"]); c.setFillColor(colors.HexColor("#555555"))
+                c.drawRightString(W - M, M, _recortar(pie, "Helvetica", lay["f_pie"], tw))
+        else:
+            tw = W - 2 * M
+            y = H - M - lay["f_sup"]
+            c.setFont("Helvetica-Bold", lay["f_sup"]); c.drawCentredString(W / 2, y, _recortar(sup.upper(), "Helvetica-Bold", lay["f_sup"], tw))
+            pt = _ajustar_fuente(grande, "Helvetica-Bold", tw, lay["f_grande"], 7)
+            y -= pt + 1.5 * mm
+            c.setFont("Helvetica-Bold", pt); c.drawCentredString(W / 2, y, _recortar(grande, "Helvetica-Bold", pt, tw))
+            if detalle:
+                y -= lay["f_detalle"] + 0.8 * mm
+                c.setFont("Helvetica", lay["f_detalle"]); c.drawCentredString(W / 2, y, _recortar(detalle, "Helvetica", lay["f_detalle"], tw))
+            y -= qr_s + 1.2 * mm
+            y_qr = max(M, y)
+            c.drawImage(ImageReader(qr_buf), (W - qr_s) / 2, y_qr, qr_s, qr_s)
+            y = y_qr - 1.0 * mm
+            if codigo:
+                y -= lay["f_ref"]
+                y = max(M + lay["f_pie"] + 2 * mm, y)
+                c.setFont("Courier-Bold", lay["f_ref"]); c.drawCentredString(W / 2, y, codigo[-8:])
+                pt2 = _ajustar_fuente(codigo, "Courier", tw, lay["f_codigo"], 3.5)
+                y -= pt2 + 0.6 * mm
+                if y > M + lay["f_pie"] + 1.5 * mm:
+                    c.setFont("Courier", pt2); c.drawCentredString(W / 2, y, _recortar(codigo, "Courier", pt2, tw))
+            if pie:
+                c.setFont("Helvetica", lay["f_pie"]); c.setFillColor(colors.HexColor("#555555"))
+                c.drawCentredString(W / 2, M * 0.8, _recortar(pie, "Helvetica", lay["f_pie"], tw))
+        c.showPage()
+    c.save()
+    return buffer.getvalue()
+
+
+def item_etiqueta_ubicacion(u) -> Dict:
+    partes = [p for p in (u.estanteria, u.balda, u.posicion) if p]
+    if len(partes) == 2 and not u.balda and u.estanteria and len(u.estanteria) <= 2:
+        grande = f"{u.estanteria}{u.posicion}"
+    else:
+        grande = " · ".join(partes) if partes else (u.nombre or "")
+    codigo = u.codigo or f"ALM{u.almacen_id}-UBI{u.id}"
+    return {"sup": u.zona or "", "grande": grande, "detalle": u.nombre if (partes and u.nombre != grande) else (u.descripcion or ""),
+            "codigo": codigo, "qr": codigo, "pie": f"Hueco {u.id}"}
+
+
+def item_etiqueta_herramienta(h, empresa: str = "MRD Estructuras") -> Dict:
+    detalle = " · ".join(p for p in (h.marca, h.modelo) if p)
+    return {"sup": empresa, "grande": h.nombre or "", "detalle": detalle, "codigo": h.codigo or "", "qr": h.codigo or "",
+            "pie": f"Nº serie {h.num_serie}" if h.num_serie else ""}

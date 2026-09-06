@@ -124,6 +124,10 @@ from scan_service import (
     reserve_event,
 )
 from label_printer import generar_zpl_herramienta, generar_zpl_lote, generar_pdf_etiquetas, generar_pdf_etiquetas_ubicaciones
+from label_printer import (
+    get_tamano_etiqueta, set_tamano_etiqueta, layout_etiqueta, PRESETS_ETIQUETA,
+    generar_pdf_etiquetas_tamano, item_etiqueta_ubicacion, item_etiqueta_herramienta,
+)
 from stock_service import (
     StockError, move_material, move_stock_epi, move_variante, require_stock_permission,
     start_stock_transaction,
@@ -6242,6 +6246,45 @@ async def almacen_inventario(
     return RedirectResponse(f"/almacenes/{aid}?ok=inventario&tab=mat", status_code=303)
 
 
+# ─── Tamaño de etiqueta para la etiquetadora (2.7.61) ────────────────────────
+
+def _etiqueta_ctx() -> dict:
+    tam = get_tamano_etiqueta()
+    lay = layout_etiqueta(tam["ancho_mm"], tam["alto_mm"])
+    lay.update({"preset": tam["preset"], "presets": PRESETS_ETIQUETA})
+    return lay
+
+
+@app.get("/api/etiquetas/tamano")
+def api_etiquetas_tamano(user: Usuario = Depends(requiere_login)):
+    tam = get_tamano_etiqueta()
+    return {"ok": True, **tam, "presets": [{"clave": p[0], "nombre": p[1], "ancho_mm": p[2], "alto_mm": p[3]} for p in PRESETS_ETIQUETA]}
+
+
+class EtiquetaTamanoRequest(BaseModel):
+    ancho_mm: int = Field(..., ge=20, le=300)
+    alto_mm: int = Field(..., ge=15, le=300)
+    preset: str = "personalizado"
+
+
+@app.post("/api/etiquetas/tamano")
+def api_etiquetas_tamano_guardar(payload: EtiquetaTamanoRequest, user: Usuario = Depends(requiere_login)):
+    """Guarda el tamaño del rollo de la etiquetadora: lo usan todas las etiquetas y los PDF."""
+    if user.rol not in ("admin", "almacen") and not tiene_permiso(user, "editar"):
+        raise HTTPException(403, "Sin permiso")
+    return {"ok": True, **set_tamano_etiqueta(payload.ancho_mm, payload.alto_mm, payload.preset)}
+
+
+def _tamano_pdf(ancho: str, alto: str) -> tuple[int, int]:
+    tam = get_tamano_etiqueta()
+    try:
+        a = int(ancho) if ancho else tam["ancho_mm"]
+        b = int(alto) if alto else tam["alto_mm"]
+    except ValueError:
+        a, b = tam["ancho_mm"], tam["alto_mm"]
+    return max(20, min(300, a)), max(15, min(300, b))
+
+
 # ─── Almacenes — QR por ubicación ───────────────────────────────────────────────
 @app.get("/almacenes/{aid}/ubicaciones/{uid}/qr", response_class=HTMLResponse)
 def ubicacion_qr(
@@ -6262,6 +6305,7 @@ def ubicacion_qr(
         qr_b64=qr_b64,
         herramientas_count=len(ub.herramientas),
         materiales_count=len(ub.materiales),
+        tam=_etiqueta_ctx(),
     ))
 
 
@@ -6271,6 +6315,8 @@ def almacen_etiquetas_ubicaciones_pdf(
     user: Usuario = Depends(requiere_login),
     db: Session = Depends(get_db),
     zona: str = "",
+    ancho: str = "",
+    alto: str = "",
 ):
     """PDF por lotes de etiquetas de ubicación (QR + Code128 + código grande), estilo almacén industrial."""
     a = db.query(Almacen).get(aid)
@@ -6283,7 +6329,8 @@ def almacen_etiquetas_ubicaciones_pdf(
     ubicaciones = query.order_by(Ubicacion.zona, Ubicacion.estanteria, Ubicacion.balda, Ubicacion.posicion).all()
     if not ubicaciones:
         raise HTTPException(404, "No hay ubicaciones activas para imprimir")
-    pdf_bytes = generar_pdf_etiquetas_ubicaciones(ubicaciones, COMPANY_NAME)
+    a_mm, b_mm = _tamano_pdf(ancho, alto)
+    pdf_bytes = generar_pdf_etiquetas_tamano([item_etiqueta_ubicacion(u) for u in ubicaciones], a_mm, b_mm, COMPANY_NAME)
     filename = f"etiquetas_ubicaciones_{a.nombre.replace(' ', '_')}" + (f"_{zona.replace(' ', '_')}" if zona else "") + ".pdf"
     return Response(content=pdf_bytes, media_type="application/pdf",
                     headers={"Content-Disposition": f"attachment; filename={filename}"})
@@ -6854,7 +6901,8 @@ def etiquetas_pdf(
     if not id_list:
         raise HTTPException(400, "Sin herramientas seleccionadas")
     herramientas = db.query(Herramienta).filter(Herramienta.id.in_(id_list)).all()
-    pdf_bytes = generar_pdf_etiquetas(herramientas, COMPANY_NAME)
+    a_mm, b_mm = _tamano_pdf("", "")
+    pdf_bytes = generar_pdf_etiquetas_tamano([item_etiqueta_herramienta(h, COMPANY_NAME) for h in herramientas], a_mm, b_mm, COMPANY_NAME)
     return Response(content=pdf_bytes, media_type="application/pdf",
                     headers={"Content-Disposition": "attachment; filename=etiquetas_mrd.pdf"})
 
@@ -6872,7 +6920,7 @@ def etiqueta_imprimir(
         raise HTTPException(404)
     qr_b64 = generar_qr_base64(h.codigo)
     return templates.TemplateResponse(request, "etiqueta_imprimir.html",
-        ctx_base(request, user, herramienta=h, qr_b64=qr_b64, empresa=COMPANY_NAME))
+        ctx_base(request, user, herramienta=h, qr_b64=qr_b64, empresa=COMPANY_NAME, tam=_etiqueta_ctx()))
 
 
 @app.post("/etiquetas/{herramienta_id}/reimprimir")
@@ -9950,6 +9998,7 @@ def qr_imprimir(
         "ubicacion": "Estantería / ubicación", "vehiculo": "Vehículo",
     }
     return templates.TemplateResponse(request, "qr_imprimir.html", {
+        "tam": _etiqueta_ctx(),
         "request": request, "user": user,
         "tipo": tipo, "tipo_label": tipos_label.get(tipo, tipo),
         "item_id": item_id, "codigo": codigo, "nombre": nombre,
@@ -13263,6 +13312,7 @@ def maquinaria_etiqueta(
         codigo=codigo,
         qr_b64=qr_b64,
         empresa=COMPANY_NAME,
+        tam=_etiqueta_ctx(),
     ))
 
 

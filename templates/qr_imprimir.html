@@ -14,13 +14,13 @@
 
 /* ── Etiqueta imprimible ── */
 @media print{
-  @page{size:105mm 55mm;margin:0}
+  @page{size:{{ tam.ancho_mm if tam is defined else 105 }}mm {{ tam.alto_mm if tam is defined else 55 }}mm;margin:0}
   body *{visibility:hidden}
   #etiqueta-print,#etiqueta-print *{visibility:visible}
-  #etiqueta-print{position:fixed;inset:0;width:105mm;height:55mm;max-width:none;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
-  #etiqueta-print .qr-card{width:105mm;height:55mm;border-radius:0;box-shadow:none;padding:3mm;display:grid;grid-template-columns:1fr 32mm;grid-template-rows:auto auto 1fr;align-items:center}
+  #etiqueta-print{position:fixed;inset:0;width:{{ tam.ancho_mm if tam is defined else 105 }}mm;height:{{ tam.alto_mm if tam is defined else 55 }}mm;max-width:none;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+  #etiqueta-print .qr-card{width:{{ tam.ancho_mm if tam is defined else 105 }}mm;height:{{ tam.alto_mm if tam is defined else 55 }}mm;border-radius:0;box-shadow:none;padding:2mm;display:grid;grid-template-columns:1fr calc({{ tam.qr_mm if tam is defined else 30 }}mm + 2mm);grid-template-rows:auto auto 1fr;align-items:center}
   #etiqueta-print .qr-tipo,#etiqueta-print .qr-nombre,#etiqueta-print>div>div:last-of-type{grid-column:1}
-  #etiqueta-print .qr-card img{grid-column:2;grid-row:1/4;width:30mm;height:30mm;margin:0 auto}
+  #etiqueta-print .qr-card img{grid-column:2;grid-row:1/4;width:{{ tam.qr_mm if tam is defined else 30 }}mm;height:{{ tam.qr_mm if tam is defined else 30 }}mm;margin:0 auto}
   #etiqueta-print .qr-codigo{font-size:7pt;overflow-wrap:anywhere;margin:0}
   .qr-actions,.qr-tip,header,nav,.card-header{display:none!important}
 }

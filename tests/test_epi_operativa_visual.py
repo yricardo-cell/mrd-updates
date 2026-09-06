@@ -174,7 +174,9 @@ def test_vistas_de_impresion_declaran_105_por_55_mm():
     root = Path(__file__).resolve().parents[1] / "templates"
     for filename in ("qr_imprimir.html", "etiqueta_imprimir.html", "maquinaria_etiqueta.html"):
         html = (root / filename).read_text(encoding="utf-8")
-        assert "size:105mm55mm" in html.replace(" ", "")
+        compacto = html.replace(" ", "")
+        # 2.7.61: el tamaño puede venir de la etiquetadora configurada (tam) o ser el fijo de 105 × 55.
+        assert "size:105mm55mm" in compacto or re.search(r"size:\{\{tam\.ancho_mm[^}]*\}\}mm\{\{tam\.alto_mm[^}]*\}\}mm", compacto)
 
 
 def test_consulta_no_puede_imprimir_paquetes(tmp_path):

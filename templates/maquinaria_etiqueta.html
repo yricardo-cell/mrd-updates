@@ -41,8 +41,8 @@
     background: #fff;
     border: 1px solid #d1d5db;
     border-radius: 8px;
-    width: 105mm;
-    height: 55mm;
+    width: {{ tam.ancho_mm if tam is defined else 105 }}mm;
+    height: {{ tam.alto_mm if tam is defined else 55 }}mm;
     padding: 3mm 4mm;
     display: flex;
     flex-direction: column;
@@ -148,13 +148,13 @@
     .etiqueta {
       border: 1px solid #000;
       box-shadow: none;
-      width: 105mm;
-      height: 55mm;
+      width: {{ tam.ancho_mm if tam is defined else 105 }}mm;
+      height: {{ tam.alto_mm if tam is defined else 55 }}mm;
       margin: 0;
       overflow: hidden;
     }
     .foto-etiqueta,.descripcion{display:none!important}
-    @page { size: 105mm 55mm; margin: 0; }
+    @page { size: {{ tam.ancho_mm if tam is defined else 105 }}mm {{ tam.alto_mm if tam is defined else 55 }}mm; margin: 0; }
   }
 </style>
 </head>
