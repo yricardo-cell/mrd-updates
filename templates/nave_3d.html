@@ -148,7 +148,7 @@
     cam=new THREE.PerspectiveCamera(42,1,.05,500);dist=Math.max(3,Math.max(L,A)*(general?1.4:1.5));theta=-.9;phi=1.05;size();ROT();
     document.getElementById('zona-titulo').textContent=z.nombre;document.getElementById('zona-sub').innerHTML=`${z.largo} × ${z.ancho} × ${z.alto} cm · ${esc(z.donde||ZT[z.tipo]||'')}${z.fuera?' · <span class="text-warning">fuera de la nave</span>':''}${general?'':' · '+(z.huecos||0)+' huecos · '+(z.n||0)+' cosas'}`;
     document.querySelectorAll('#zona-tabs .btn').forEach(b=>b.classList.toggle('active',Number(b.dataset.id)===zonaId));
-    document.getElementById('z-etiquetas').href='/almacenes/'+DATA.almacen_id+'/etiquetas-ubicaciones/pdf'+(general||z.virtual?'':'?zona='+encodeURIComponent(z.nombre));
+    document.getElementById('z-etiquetas').href=`/almacenes/${DATA.almacen_id}/etiquetas-ubicaciones/pdf${general||z.virtual?'':'?zona='+encodeURIComponent(z.nombre)}`;
     panelVacio(general?'Toca una zona para entrar en ella':'Toca una cosa de la zona');
     if(PUEDE){if(general&&z.virtual)nuevaZona();else cargarZona(z);nuevoEl();document.querySelector('#form-el [name=zona_id]').value=z.virtual?'':z.id}}
   function tabs(){const box=document.getElementById('zona-tabs');box.innerHTML='';const mk=(id,txt,ic)=>{const b=document.createElement('button');b.type='button';b.className='btn btn-sm btn-outline-secondary';b.dataset.id=id;b.innerHTML=`<i class="bi ${ic}"></i> ${esc(txt)}`;b.onclick=()=>build(id);box.appendChild(b)};
