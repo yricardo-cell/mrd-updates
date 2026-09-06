@@ -1634,7 +1634,22 @@ def dashboard(request: Request, user: Usuario = Depends(requiere_login), db: Ses
     }
     dias_semana = [hoy - timedelta(days=i) for i in range(6, -1, -1)]
     _semana = [int(movimientos_por_dia.get(dia.isoformat(), 0)) for dia in dias_semana]
-    _semana_labels = [dia.strftime("%a %d") for dia in dias_semana]
+    _dias_es = ("lun", "mar", "mié", "jue", "vie", "sáb", "dom")
+    _semana_labels = [f"{_dias_es[dia.weekday()]} {dia.day}" for dia in dias_semana]
+    # Desglose por tipo (entregas / devoluciones / otros) para barras apiladas legibles.
+    _por_dia_tipo: dict = {}
+    for key, tipo, count in db.query(func.date(Movimiento.fecha), Movimiento.tipo, func.count(Movimiento.id)) \
+            .join(Herramienta, Movimiento.herramienta_id == Herramienta.id) \
+            .filter(Herramienta.almacen_id == warehouse_id,
+                    Movimiento.fecha >= datetime.combine(semana_inicio, datetime.min.time())) \
+            .group_by(func.date(Movimiento.fecha), Movimiento.tipo).all():
+        clave = key.isoformat() if hasattr(key, "isoformat") else str(key)
+        grupo = tipo if tipo in ("entrega", "devolucion") else "otros"
+        _por_dia_tipo.setdefault(clave, {"entrega": 0, "devolucion": 0, "otros": 0})[grupo] += int(count)
+    _semana_tipos = {
+        grupo: [int(_por_dia_tipo.get(dia.isoformat(), {}).get(grupo, 0)) for dia in dias_semana]
+        for grupo in ("entrega", "devolucion", "otros")
+    }
 
     # Top obras con más herramientas en este momento
     top_obras = (
@@ -1853,6 +1868,7 @@ def dashboard(request: Request, user: Usuario = Depends(requiere_login), db: Ses
         alertas_count=len(alertas),
         movimientos_semana=_semana,
         movimientos_semana_labels=_semana_labels,
+        movimientos_semana_tipos=_semana_tipos,
         top_obras=top_obras,
         # KPIs EPIs para el dashboard
         dash_epis_vencidos=epis_vencidos,
