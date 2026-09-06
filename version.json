@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.47",
-    "nombre":  "MRD TOOL CONTROL -- En almacen cuenta las disponibles, pasaporte de costes por herramienta y bandeja completa del portal",
+    "version_actual":  "2.7.48",
+    "nombre":  "MRD TOOL CONTROL -- Gasto por herramienta y consumo por obra con Excel; avisos push al movil del trabajador",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "En almacen cuenta las disponibles, pasaporte de costes por herramienta y bandeja completa del portal"
+                    "Gasto por herramienta y consumo por obra con Excel; avisos push al movil del trabajador"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.47.zip",
-    "sha256":  "0268c4226a28a1808d6c49df8c74f7a491220625fb89da49ca4d8bbdd17fb380"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.48.zip",
+    "sha256":  "483005842e180d3bb0a264a5521cf4aa3381af57f923bcad1509cb00058cdbc6"
 }
