@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Recuento por hueco{% endblock %}
+{% block breadcrumb %}
+<a href="/">Inicio</a>
+<span class="sep">/</span>
+<a href="/nave">Vista de la nave</a>
+<span class="sep">/</span>
+<span class="current">Recuento</span>
+{% endblock %}
+{% block content %}
+<style>
+.rc-hueco{border:2px dashed rgba(148,163,184,.6);border-radius:14px;padding:14px;text-align:center}
+.rc-hueco.activo{border-style:solid;border-color:#0891b2;background:rgba(8,145,178,.06)}
+.rc-hueco h2{margin:0;font-size:1.3rem}
+#rc-lista .list-group-item{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.rc-presente{background:rgba(22,163,74,.12)}.rc-falta{background:rgba(220,38,38,.10)}.rc-fuera{opacity:.6}.rc-nuevo{background:rgba(8,145,178,.10)}
+.rc-kpis{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}.rc-kpis span{border:1px solid rgba(148,163,184,.4);border-radius:999px;padding:4px 10px;font-size:.85rem}
+</style>
+<div class="page-header-row mb-3">
+  <div>
+    <h1 class="page-title"><i class="bi bi-clipboard-check"></i> Recuento por hueco</h1>
+    <p class="page-subtitle">{{ almacen.nombre }} · Escanea el hueco, después escanea lo que hay dentro. Lo que no escanees queda como que falta. Un contenedor entero en minutos.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap"><a class="btn btn-outline-secondary" href="/nave"><i class="bi bi-grid-3x3-gap-fill"></i> Vista de la nave</a><a class="btn btn-outline-secondary" href="/nave/colocar"><i class="bi bi-upc-scan"></i> Colocar</a></div>
+</div>
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card"><div class="card-body">
+      <div id="rc-box" class="rc-hueco {% if hueco_actual %}activo{% endif %}" data-id="{{ hueco_actual.id if hueco_actual else '' }}">
+        <div class="small text-muted">Recontando</div>
+        <h2 id="rc-nombre">{{ hueco_actual.nombre if hueco_actual else 'Escanea un hueco' }}</h2>
+        <div class="small text-muted" id="rc-sub"></div>
+      </div>
+      <select id="rc-select" class="form-select mt-2"><option value="">…o elige el hueco en la lista</option>{% for u in huecos %}<option value="{{ u.id }}" {% if hueco_actual and u.id == hueco_actual.id %}selected{% endif %}>{{ u.nombre }}</option>{% endfor %}</select>
+      <div class="input-group input-group-lg mt-3"><input id="rc-scan" class="form-control" placeholder="Escanea lo que hay dentro…" autocomplete="off" autofocus><button id="rc-scan-btn" class="btn btn-primary" type="button"><i class="bi bi-check-lg"></i></button></div>
+      <div id="rc-estado" class="scan-state small mt-2"></div>
+      <div class="rc-kpis"><span id="k-esp">0 esperadas</span><span id="k-pres" class="text-success">0 vistas</span><span id="k-falt" class="text-danger">0 sin ver</span><span id="k-fuera" class="text-muted">0 fuera</span></div>
+      {% if puede_cerrar %}<button id="rc-cerrar" class="btn btn-success btn-lg w-100" type="button" disabled><i class="bi bi-check2-all"></i> Cerrar recuento de este hueco</button>{% endif %}
+      <div class="small text-muted mt-2">Al cerrar, lo no escaneado se apunta como que falta, queda en la auditoría y en la Vista de la nave, y si falta algo sale un aviso con la lista.</div>
+    </div></div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-list-check"></i> Lo que debería haber</div><span class="table-meta" id="rc-meta"></span></div>
+      <div class="card-body p-0"><div class="list-group list-group-flush" id="rc-lista"><div class="text-muted small p-3">Elige o escanea un hueco.</div></div></div>
+    </div>
+  </div>
+</div>
+<script>
+(()=>{
+  const box=document.getElementById('rc-box'),nombre=document.getElementById('rc-nombre'),subt=document.getElementById('rc-sub'),sel=document.getElementById('rc-select');
+  const scan=document.getElementById('rc-scan'),estado=document.getElementById('rc-estado'),lista=document.getElementById('rc-lista'),meta=document.getElementById('rc-meta'),cerrar=document.getElementById('rc-cerrar');
+  const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const TIPOS={herramienta:'Herramienta',material:'Material',stock_epi:'EPI de stock',epi_individual:'EPI individual'};
+  let hueco=null,esperados=[],vistos=new Set(),nuevos=[],busy=false;
+  const clave=i=>i.tipo+':'+i.id;
+  function render(){const esp=esperados.filter(i=>i.esperado),fuera=esperados.filter(i=>!i.esperado);const pres=esp.filter(i=>vistos.has(clave(i))),falt=esp.filter(i=>!vistos.has(clave(i)));
+    document.getElementById('k-esp').textContent=esp.length+' esperadas';document.getElementById('k-pres').textContent=pres.length+' vistas';document.getElementById('k-falt').textContent=falt.length+' sin ver';document.getElementById('k-fuera').textContent=fuera.length+' fuera';
+    meta.textContent=hueco?`${esp.length} cosas`:'';if(cerrar)cerrar.disabled=!hueco;
+    if(!hueco){lista.innerHTML='<div class="text-muted small p-3">Elige o escanea un hueco.</div>';return}
+    const fila=(i,cls,badge)=>`<div class="list-group-item ${cls}"><span><strong>${esc(i.nombre)}</strong><br><small class="text-muted">${esc(TIPOS[i.tipo]||i.tipo)}${i.codigo?' · '+esc(i.codigo):''}${i.cantidad&&i.tipo!=='herramienta'&&i.tipo!=='epi_individual'?' · '+esc(i.cantidad)+' '+esc(i.unidad||'ud'):''}</small></span>${badge}</div>`;
+    let html='';nuevos.forEach(i=>html+=fila(i,'rc-nuevo','<span class="badge badge-info">colocado aquí ahora</span>'));
+    falt.forEach(i=>html+=fila(i,'','<span class="badge badge-secondary">sin escanear</span>'));
+    pres.forEach(i=>html+=fila(i,'rc-presente','<span class="badge badge-success">visto</span>'));
+    fuera.forEach(i=>html+=fila(i,'rc-fuera',`<span class="badge badge-info">${i.quien?'la tiene '+esc(i.quien):esc(i.estado||'fuera')}</span>`));
+    lista.innerHTML=html||'<div class="text-muted small p-3">Este hueco no tiene nada asignado. Escanea lo que haya y se colocará aquí.</div>'}
+  async function cargar(id,n){hueco=id;vistos=new Set();nuevos=[];nombre.textContent=n||'…';box.classList.add('activo');if(sel.value!==String(id))sel.value=String(id);
+    try{const r=await fetch('/api/nave/recuento/'+id,{headers:{Accept:'application/json'}});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo cargar');esperados=d.esperados;nombre.textContent=d.hueco.nombre;subt.textContent=(d.hueco.ruta||'')+(d.hueco.ultimo_recuento?` · último recuento ${d.hueco.ultimo_recuento}`+(d.hueco.ultimo_recuento_faltan?` (faltaban ${d.hueco.ultimo_recuento_faltan})`:' (todo bien)'):' · nunca recontado');estado.className='scan-state ok';estado.textContent='Hueco cargado. Escanea lo que haya dentro.'}catch(e){estado.className='scan-state err';estado.textContent=e.message}
+    render();scan.focus()}
+  sel.onchange=()=>{const o=sel.selectedOptions[0];if(o&&o.value)cargar(Number(o.value),o.textContent.trim())};
+  async function procesar(raw){const code=String(raw||scan.value).trim();if(!code||busy)return;busy=true;scan.value='';estado.className='scan-state';estado.textContent='Identificando '+code+'…';
+    try{const r=await fetch('/api/mostrador/resolver?codigo='+encodeURIComponent(code),{headers:{Accept:'application/json'}});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No reconocido');const it=d.item;
+      if(it.tipo==='ubicacion'){if(hueco&&hueco!==it.id&&esperados.length&&!confirm('¿Cambiar de hueco sin cerrar el recuento actual?')){return}await cargar(it.id,it.nombre);return}
+      if(!hueco){estado.className='scan-state err';estado.textContent='Escanea primero el hueco.';return}
+      const k=it.tipo+':'+it.id;const esp=esperados.find(i=>clave(i)===k);
+      if(esp){vistos.add(k);estado.className='scan-state ok';estado.textContent=`${esp.nombre}: visto`+(esp.esperado?'':' (constaba como fuera)');render();if(navigator.vibrate)navigator.vibrate(40);return}
+      if(!['herramienta','material','stock_epi','epi_individual'].includes(it.tipo)){estado.className='scan-state err';estado.textContent='Este tipo no se cuenta en huecos.';return}
+      if(!confirm(`${it.nombre} no consta en este hueco${it.ubicacion_nombre&&it.ubicacion_nombre!=='Sin ubicación exacta'?' (está en '+it.ubicacion_nombre+')':''}. ¿Colocarlo aquí?`))return;
+      const rc=await fetchCsrf('/api/nave/colocar',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({codigo:code,ubicacion_id:hueco})});const dc=await rc.json();if(!rc.ok)throw new Error(dc.detail||'No se pudo colocar');
+      nuevos.unshift({tipo:dc.tipo,id:dc.id,nombre:dc.nombre,codigo:dc.codigo});vistos.add(dc.tipo+':'+dc.id);estado.className='scan-state ok';estado.textContent=`${dc.nombre} colocado aquí${dc.anterior?' (antes en '+dc.anterior+')':''}`;render()}
+    catch(e){estado.className='scan-state err';estado.textContent=e.message}finally{busy=false;scan.focus()}}
+  scan.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();procesar()}});document.getElementById('rc-scan-btn').onclick=()=>procesar();
+  document.addEventListener('mrd:scanner-code',e=>{e.preventDefault();procesar(e.detail.code)});
+  if(cerrar)cerrar.onclick=async()=>{if(!hueco)return;const falt=esperados.filter(i=>i.esperado&&!vistos.has(clave(i)));if(!confirm(falt.length?`Cerrar el recuento: ${falt.length} sin escanear quedarán como que faltan. ¿Seguro?`:'Cerrar el recuento: todo visto. ¿Seguro?'))return;cerrar.disabled=true;
+    try{const r=await fetchCsrf(`/api/nave/recuento/${hueco}/cerrar`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({presentes:[...vistos].map(k=>{const [tipo,id]=k.split(':');return {tipo,id:Number(id)}})})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo cerrar');
+      estado.className='scan-state ok';estado.textContent=`Recuento cerrado ${d.hecho}: ${d.presentes} vistas, ${d.faltan.length} faltan.`+(d.faltan.length?' Se ha creado un aviso con la lista.':'');hueco=null;esperados=[];vistos=new Set();nuevos=[];nombre.textContent='Escanea el siguiente hueco';subt.textContent='';box.classList.remove('activo');sel.value='';render()}
+    catch(e){estado.className='scan-state err';estado.textContent=e.message;cerrar.disabled=false}};
+  if(box.dataset.id)cargar(Number(box.dataset.id),nombre.textContent);
+})();
+</script>
+{% endblock %}

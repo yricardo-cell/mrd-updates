@@ -695,6 +695,9 @@ def apply_migrations(target_engine=None):
         ("pedidos_proveedor", "proveedor_id",    "INTEGER REFERENCES proveedores(id)"),
         # Zonas y elementos en 3D (2.7.54): cada hueco sabe de qué elemento sale
         ("ubicaciones", "elemento_id",          "INTEGER REFERENCES nave_elementos(id)"),
+        # Recuento por hueco (2.7.59)
+        ("ubicaciones", "ultimo_recuento",      "DATETIME"),
+        ("ubicaciones", "ultimo_recuento_faltan", "INTEGER"),
         # catalogo_epi — campos marca y notas
         ("catalogo_epi", "marca",            "VARCHAR(100)"),
         ("catalogo_epi", "notas",            "TEXT"),

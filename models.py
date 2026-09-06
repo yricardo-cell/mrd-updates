@@ -451,6 +451,8 @@ class Ubicacion(Base):
     balda       = Column(String(50), nullable=True)
     posicion    = Column(String(50), nullable=True)
     elemento_id = Column(Integer, ForeignKey("nave_elementos.id"), nullable=True, index=True)  # 3D (2.7.54)
+    ultimo_recuento = Column(DateTime, nullable=True)          # recuento por hueco (2.7.59)
+    ultimo_recuento_faltan = Column(Integer, nullable=True)
     activo      = Column(Boolean, default=True)
     created_at  = Column(DateTime, server_default=func.now())
 

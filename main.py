@@ -8709,6 +8709,8 @@ def _nave_huecos(db: Session, warehouse_id: int) -> tuple[list[dict], dict]:
             "id": u.id, "nombre": u.nombre, "codigo": u.codigo or "", "ruta": u.ruta_completa,
             "posicion": (f"{_nave_int(u.balda)}·{u.posicion}" if (u.elemento_id and u.balda and u.posicion) else (u.posicion or u.balda or "")),
             "clase": clase, "n": len(items),
+            "recuento": u.ultimo_recuento.strftime("%d/%m/%Y") if u.ultimo_recuento else "",
+            "recuento_faltan": u.ultimo_recuento_faltan or 0,
             "items": items,
         })
     filas = sorted(filas_map.values(), key=lambda f: (_nave_clave_natural(f["zona"]), _nave_clave_natural(f["fila"])))
@@ -9410,6 +9412,86 @@ def api_nave_huecos_prueba_eliminar(request: Request = None, user: Usuario = Dep
                         {"huecos": len(huecos)}, {"desvinculados": desv})
     db.commit()
     return JSONResponse({"ok": True, "huecos": len(huecos), "desvinculados": desv})
+
+
+# ─── Recuento por hueco (2.7.59) ─────────────────────────────────────────────
+
+def _recuento_hueco_de(db: Session, warehouse, uid: int) -> Ubicacion:
+    u = db.get(Ubicacion, int(uid))
+    if not u or not u.activo or (warehouse and u.almacen_id != warehouse.id):
+        raise HTTPException(404, "Ese hueco no existe en este almacén")
+    return u
+
+
+def _recuento_esperados(db: Session, u: Ubicacion) -> list[dict]:
+    """Lo que debería haber físicamente en el hueco: lo ubicado allí que no está fuera."""
+    items = _nave_contenido(db, [u])[u.id]
+    for i in items:
+        i["esperado"] = not i.get("fuera")
+    return items
+
+
+@app.get("/nave/recuento", response_class=HTMLResponse)
+def nave_recuento_page(request: Request, ubicacion: int | None = None,
+                       user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Recuento por hueco (2.7.59): escaneas el hueco y lo que hay; lo que no
+    escaneas se marca como que falta. Inventario de un contenedor en minutos."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _operation_warehouse(request, user, db)
+    huecos = db.query(Ubicacion).filter(Ubicacion.almacen_id == warehouse.id, Ubicacion.activo == True).all()
+    huecos.sort(key=lambda u: (_nave_clave_natural(u.zona), _nave_clave_natural(u.estanteria), _nave_clave_natural(u.balda), _nave_clave_natural(u.posicion), _nave_clave_natural(u.nombre)))
+    actual = next((u for u in huecos if u.id == ubicacion), None) if ubicacion else None
+    return templates.TemplateResponse(request, "nave_recuento.html", ctx_base(
+        request, user, db, almacen=warehouse, huecos=huecos, hueco_actual=actual,
+        puede_cerrar=_nave_editor(user) or tiene_permiso(user, "stock_operar"),
+    ))
+
+
+@app.get("/api/nave/recuento/{uid}")
+def api_nave_recuento(uid: int, request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    u = _recuento_hueco_de(db, _active_warehouse(db, user, request), uid)
+    return JSONResponse({
+        "ok": True, "hueco": {"id": u.id, "nombre": u.nombre, "ruta": u.ruta_completa, "codigo": u.codigo or "",
+                             "ultimo_recuento": u.ultimo_recuento.strftime("%d/%m/%Y %H:%M") if u.ultimo_recuento else "",
+                             "ultimo_recuento_faltan": u.ultimo_recuento_faltan},
+        "esperados": _recuento_esperados(db, u),
+    })
+
+
+class RecuentoCerrarRequest(BaseModel):
+    presentes: list[dict] = Field(default_factory=list)
+
+
+@app.post("/api/nave/recuento/{uid}/cerrar")
+def api_nave_recuento_cerrar(uid: int, payload: RecuentoCerrarRequest, request: Request = None,
+                             user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    """Cierra el recuento: lo esperado que no se ha escaneado falta. Se guarda en el
+    hueco y en la auditoría, y si falta algo se crea un aviso con enlaces."""
+    if not (_nave_editor(user) or tiene_permiso(user, "stock_operar")):
+        raise HTTPException(403, "Sin permiso para cerrar recuentos")
+    u = _recuento_hueco_de(db, _active_warehouse(db, user, request), uid)
+    vistos = {(str(p.get("tipo")), int(p.get("id") or 0)) for p in payload.presentes}
+    esperados = _recuento_esperados(db, u)
+    presentes = [i for i in esperados if (i["tipo"], int(i["id"])) in vistos]
+    faltan = [i for i in esperados if i["esperado"] and (i["tipo"], int(i["id"])) not in vistos]
+    fuera = [i for i in esperados if not i["esperado"]]
+    u.ultimo_recuento = datetime.now()
+    u.ultimo_recuento_faltan = len(faltan)
+    resumen = lambda lista: [{"tipo": i["tipo"], "id": i["id"], "nombre": i["nombre"], "codigo": i.get("codigo", "")} for i in lista]
+    registrar_auditoria(db, "ubicaciones", u.id, "recuento", user.id, None,
+                        {"hueco": u.nombre, "presentes": resumen(presentes), "faltan": resumen(faltan), "fuera": resumen(fuera)},
+                        resumen=f"Recuento de {u.nombre}: {len(presentes)} presentes, {len(faltan)} faltan")
+    if faltan:
+        lineas = [f"  - {i['nombre']}" + (f" ({i['codigo']})" if i.get("codigo") else "") for i in faltan]
+        db.add(Aviso(titulo=f"Recuento {u.nombre}: faltan {len(faltan)}", tipo="alerta", prioridad="media",
+                     enlace=f"/nave?ubicacion={u.id}",
+                     mensaje=f"Al recontar el hueco {u.nombre} el {datetime.now().strftime('%d/%m/%Y %H:%M')} no se ha encontrado:\n" + "\n".join(lineas)))
+    db.commit()
+    return JSONResponse({"ok": True, "presentes": len(presentes), "faltan": resumen(faltan), "fuera": len(fuera),
+                         "hecho": u.ultimo_recuento.strftime("%d/%m/%Y %H:%M")})
 
 
 @app.get("/nave/colocar", response_class=HTMLResponse)

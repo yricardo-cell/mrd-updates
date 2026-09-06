@@ -30,7 +30,7 @@
     <h1 class="page-title"><i class="bi bi-grid-3x3-gap-fill"></i> Vista de la nave</h1>
     <p class="page-subtitle">{{ almacen.nombre }} · Cada caja es un hueco real. El color dice qué hay y el número cuántas cosas. Pulsa una caja para ver la lista.</p>
   </div>
-  <div class="d-flex gap-2 flex-wrap"><a class="btn btn-outline-secondary" href="/nave/3d"><i class="bi bi-badge-3d"></i> Zonas en 3D</a><a class="btn btn-primary" href="/nave/colocar"><i class="bi bi-upc-scan"></i> Colocar por escáner</a></div>
+  <div class="d-flex gap-2 flex-wrap"><a class="btn btn-outline-secondary" href="/nave/3d"><i class="bi bi-badge-3d"></i> Zonas en 3D</a><a class="btn btn-outline-secondary" href="/nave/recuento"><i class="bi bi-clipboard-check"></i> Recuento por hueco</a><a class="btn btn-primary" href="/nave/colocar"><i class="bi bi-upc-scan"></i> Colocar por escáner</a></div>
 </div>
 
 <div class="nave-kpis">
@@ -77,6 +77,7 @@
         <div class="d-flex gap-2 flex-wrap mt-3" id="hueco-acciones" hidden>
           <a id="hueco-colocar" class="btn btn-primary btn-sm" href="#"><i class="bi bi-upc-scan"></i> Colocar aquí</a>
           <a id="hueco-qr" class="btn btn-outline-secondary btn-sm" href="#" target="_blank" rel="noopener"><i class="bi bi-qr-code"></i> Etiqueta QR</a>
+          <a id="hueco-recuento" class="btn btn-outline-secondary btn-sm" href="#"><i class="bi bi-clipboard-check"></i> Recontar</a>
         </div>
       </div>
     </div>
@@ -92,9 +93,9 @@
   const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const TIPOS={herramienta:'Herramienta',material:'Material',stock_epi:'EPI de stock',epi_individual:'EPI individual'};
   function badge(i){if(i.fuera)return `<span class="badge ${i.vencida?'badge-danger':'badge-info'}">${i.quien?'la tiene '+esc(i.quien):esc(i.estado||'fuera')}${i.desde?' desde '+esc(i.desde):''}${i.vencida?' · debía volver el '+esc(i.prevista):''}</span>`;if(i.bajo_minimo)return `<span class="badge badge-danger">bajo mínimo · ${esc(i.cantidad)} ${esc(i.unidad)}</span>`;if(i.tipo==='herramienta'||i.tipo==='epi_individual')return '<span class="badge badge-success">en nave</span>';return `<span class="badge badge-info">${esc(i.cantidad)} ${esc(i.unidad)}</span>`}
-  function render(h){titulo.innerHTML=`<i class="bi bi-geo-alt-fill"></i> ${esc(h.nombre)} · ${h.items.length} ${h.items.length===1?'cosa':'cosas'}`;ruta.textContent=h.ruta||'';
+  function render(h){titulo.innerHTML=`<i class="bi bi-geo-alt-fill"></i> ${esc(h.nombre)} · ${h.items.length} ${h.items.length===1?'cosa':'cosas'}`;ruta.textContent=(h.ruta||'')+(h.recuento?` · recontado el ${h.recuento}`+(h.recuento_faltan?` (faltaban ${h.recuento_faltan})`:' (todo bien)'):' · sin recuento');
     lista.innerHTML=h.items.length?h.items.map(i=>`<a class="list-group-item list-group-item-action" href="${esc(i.url)}"><span><strong>${esc(i.nombre)}</strong><br><small class="text-muted">${esc(TIPOS[i.tipo]||i.tipo)}${i.codigo?' · '+esc(i.codigo):''}</small></span>${badge(i)}</a>`).join(''):'<div class="text-muted small py-2">Vacío. Pulsa "Colocar aquí" y escanea lo que metas.</div>';
-    document.getElementById('hueco-colocar').href='/nave/colocar?ubicacion='+h.id;document.getElementById('hueco-qr').href=`/almacenes/${ALMACEN_ID}/ubicaciones/${h.id}/qr`;acciones.hidden=false}
+    document.getElementById('hueco-colocar').href='/nave/colocar?ubicacion='+h.id;document.getElementById('hueco-qr').href=`/almacenes/${ALMACEN_ID}/ubicaciones/${h.id}/qr`;document.getElementById('hueco-recuento').href='/nave/recuento?ubicacion='+h.id;acciones.hidden=false}
   // Al tocar una caja la página no se mueve (el panel es fijo en pantalla grande);
   // en móvil el panel queda debajo, así que se baja hasta él. Solo el buscador
   // desplaza hasta la caja encontrada.
