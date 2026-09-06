@@ -2023,7 +2023,11 @@ def herramientas_list(
             Herramienta.num_serie.ilike(f"%{q}%"),
             Herramienta.marca.ilike(f"%{q}%"),
         ))
-    if estado:
+    if estado == "en_almacen":
+        # "En almacén" son las que están físicamente en la nave: disponibles y
+        # las marcadas con el estado antiguo en_almacen (2.7.47).
+        query = query.filter(Herramienta.estado.in_(("disponible", "en_almacen")))
+    elif estado:
         query = query.filter(Herramienta.estado == estado)
     if categoria:
         query = query.filter(Herramienta.categoria == categoria)
@@ -2057,6 +2061,7 @@ def herramientas_list(
         .all()
     )
     kpis = {estado_k: cnt for estado_k, cnt in kpi_raw}
+    kpis["en_almacen_total"] = kpis.get("disponible", 0) + kpis.get("en_almacen", 0)
 
     # Total incluyendo inactivas para baja/archivada
     kpis_inactivos = (
@@ -2357,6 +2362,20 @@ def herramienta_detalle(
         .all()
     )
 
+    mantenimientos_h = db.query(MantenimientoProgramado).filter(
+        MantenimientoProgramado.tipo_activo == "herramienta", MantenimientoProgramado.activo_id == h.id,
+    ).order_by(MantenimientoProgramado.fecha_programada.desc()).all()
+    coste_rep = sum(float(r.coste_final if r.coste_final is not None else (r.coste_estimado or 0)) for r in reparaciones)
+    coste_mant = sum(float(m.coste_real if m.coste_real is not None else (m.coste_estimado or 0)) for m in mantenimientos_h)
+    precio_h = float(h.precio_compra or 0)
+    pasaporte = {
+        "precio_compra": precio_h, "reparaciones": len(reparaciones), "coste_reparaciones": coste_rep,
+        "mantenimientos": len(mantenimientos_h), "coste_mantenimiento": coste_mant,
+        "gasto": coste_rep + coste_mant, "coste_total": precio_h + coste_rep + coste_mant,
+        "porcentaje_sobre_compra": round((coste_rep + coste_mant) / precio_h * 100) if precio_h else None,
+        "antiguedad_dias": (date.today() - h.fecha_compra).days if h.fecha_compra else None,
+        "mantenimientos_lista": mantenimientos_h[:10],
+    }
     contenido_maletin = [p for p in h.contenido if p.activa] if getattr(h, "es_maletin", False) else []
     maletin_incompleto = any(p.estado != h.estado or p.obra_id != h.obra_id for p in contenido_maletin)
     return templates.TemplateResponse(request, "herramienta_detalle.html", ctx_base(
@@ -2377,6 +2396,7 @@ def herramienta_detalle(
         auditoria_logs=auditoria_logs,
         contenido_maletin=contenido_maletin,
         maletin_incompleto=maletin_incompleto,
+        pasaporte=pasaporte,
     ))
 
 
@@ -5171,10 +5191,12 @@ def api_almacen_metricas(
         filtro_material = or_(Material.almacen_id == aid, Material.almacen_id.is_(None))
     materiales = db.query(Material).filter(Material.activo == True, filtro_material).all()
     herr_en_almacen = db.query(Herramienta).filter(
-        Herramienta.almacen_id == aid, Herramienta.activa == True, Herramienta.estado == "en_almacen",
+        Herramienta.almacen_id == aid, Herramienta.activa == True,
+        Herramienta.estado.in_(("disponible", "en_almacen")),
     ).count()
     herr_fuera = db.query(Herramienta).filter(
-        Herramienta.almacen_id == aid, Herramienta.activa == True, Herramienta.estado != "en_almacen",
+        Herramienta.almacen_id == aid, Herramienta.activa == True,
+        Herramienta.estado.in_(("entregada", "en_obra", "en_furgoneta", "en_transporte")),
     ).count()
     hoy_inicio = datetime.combine(datetime.utcnow().date(), datetime.min.time())
     movs_herr_hoy = (
@@ -15826,10 +15848,25 @@ def operaciones_portal_trabajadores(
     if user.rol != "admin":
         incidents = incidents.filter(IncidenciaPortalTrabajador.almacen_id == user.almacen_id)
         returns = returns.filter(SolicitudDevolucionTrabajador.almacen_id == user.almacen_id)
+    # Bandeja completa (2.7.47): también solicitudes activas y buzón, para que
+    # "lo que envían los trabajadores" se vea entero desde una sola pantalla.
+    solicitudes_q = db.query(SolicitudTrabajador).filter(
+        SolicitudTrabajador.estado.in_(("pendiente", "revision", "aprobada", "preparando", "lista")),
+    )
+    if user.rol != "admin":
+        solicitudes_q = solicitudes_q.filter(SolicitudTrabajador.almacen_id == user.almacen_id)
+    solicitudes_activas_portal = solicitudes_q.count()
+    buzon_pendiente = None
+    if user.rol == "admin":
+        buzon_pendiente = db.query(ComunicacionTrabajador).filter(
+            ComunicacionTrabajador.estado.notin_(("cerrada", "resuelta", "archivada")),
+        ).count()
     return templates.TemplateResponse(request, "operaciones_portal_trabajadores.html", ctx_base(
         request, user, db,
         incidencias_portal=incidents.order_by(IncidenciaPortalTrabajador.creado_en.desc()).limit(150).all(),
         devoluciones_portal=returns.order_by(SolicitudDevolucionTrabajador.creado_en.desc()).limit(150).all(),
+        solicitudes_activas_portal=solicitudes_activas_portal,
+        buzon_pendiente=buzon_pendiente,
     ))
 
 

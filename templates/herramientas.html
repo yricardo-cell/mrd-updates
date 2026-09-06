@@ -52,7 +52,7 @@
   </div>
   <div class="kpi-card inventory-kpi is-muted{% if estado_filtro=='en_almacen' %} is-active{% endif %}" onclick="filtrarEstado('en_almacen')">
     <div class="kpi-icon gray inventory-kpi-icon"><i class="bi bi-house"></i></div>
-    <div class="kpi-value inventory-kpi-value">{{ kpis.get('en_almacen', 0) }}</div>
+    <div class="kpi-value inventory-kpi-value">{{ kpis.get('en_almacen_total', kpis.get('en_almacen', 0)) }}</div>
     <div class="kpi-label">En almacén</div>
   </div>
   <div class="kpi-card inventory-kpi is-warning{% if estado_filtro=='en_furgoneta' %} is-active{% endif %}" onclick="filtrarEstado('en_furgoneta')">

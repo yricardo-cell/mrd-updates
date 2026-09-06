@@ -48,6 +48,7 @@
         <span><i class="bi bi-folder"></i> {{ herramienta.categoria }}</span>
         {% endif %}
         <span><i class="bi bi-calendar3"></i> Alta: {{ herramienta.created_at | fmt_fecha }}</span>
+        {% if pasaporte is defined %}<span title="Reparaciones y mantenimiento acumulados"><i class="bi bi-cash-coin"></i> Gasto: {{ pasaporte.gasto | fmt_precio }}</span>{% endif %}
       </div>
 
       <!-- Barra de estado -->
@@ -152,7 +153,7 @@
     <button class="tab-btn" data-tab="incidencias"><i class="bi bi-exclamation-triangle"></i> Incidencias
       {% if incidencias | length > 0 %}<span class="badge badge-warning" style="font-size:.65rem">{{ incidencias | length }}</span>{% endif %}
     </button>
-    <button class="tab-btn" data-tab="reparaciones"><i class="bi bi-hammer"></i> Reparaciones
+    <button class="tab-btn" data-tab="reparaciones"><i class="bi bi-hammer"></i> Reparaciones y costes
       {% if reparaciones | length > 0 %}<span class="badge badge-orange" style="font-size:.65rem">{{ reparaciones | length }}</span>{% endif %}
     </button>
     <button class="tab-btn" data-tab="documentos"><i class="bi bi-file-earmark"></i> Documentos</button>
@@ -436,8 +437,29 @@
     {% endif %}
   </div>
 
-  <!-- Tab: Reparaciones -->
+  <!-- Tab: Reparaciones y costes (pasaporte de la herramienta, 2.7.47) -->
   <div class="tab-content" data-tab="reparaciones">
+    {% if pasaporte is defined %}
+    <div class="p-3 pb-0">
+      <div class="form-section-title"><i class="bi bi-passport"></i> Pasaporte de la herramienta: lo que costó y lo que nos gastamos</div>
+      <div class="kpi-grid" id="pasaporte-herramienta">
+        <div class="kpi-card"><div class="kpi-icon blue"><i class="bi bi-cart-check"></i></div><div class="kpi-value">{{ pasaporte.precio_compra | fmt_precio }}</div><div class="kpi-label">Precio de compra{% if herramienta.fecha_compra %} · {{ herramienta.fecha_compra | fmt_fecha }}{% endif %}{% if pasaporte.antiguedad_dias is not none %} · {{ (pasaporte.antiguedad_dias / 365) | round(1) }} años{% endif %}</div></div>
+        <div class="kpi-card"><div class="kpi-icon orange"><i class="bi bi-hammer"></i></div><div class="kpi-value">{{ pasaporte.coste_reparaciones | fmt_precio }}</div><div class="kpi-label">{{ pasaporte.reparaciones }} reparaciones</div></div>
+        <div class="kpi-card"><div class="kpi-icon info"><i class="bi bi-wrench-adjustable-circle"></i></div><div class="kpi-value">{{ pasaporte.coste_mantenimiento | fmt_precio }}</div><div class="kpi-label">{{ pasaporte.mantenimientos }} mantenimientos</div></div>
+        <div class="kpi-card"><div class="kpi-icon {{ 'red' if pasaporte.porcentaje_sobre_compra is not none and pasaporte.porcentaje_sobre_compra >= 50 else 'green' }}"><i class="bi bi-cash-stack"></i></div><div class="kpi-value">{{ pasaporte.coste_total | fmt_precio }}</div><div class="kpi-label">Coste total (compra + gasto){% if pasaporte.porcentaje_sobre_compra is not none %} · gasto = {{ pasaporte.porcentaje_sobre_compra }} % de la compra{% endif %}</div></div>
+      </div>
+      {% if pasaporte.porcentaje_sobre_compra is not none and pasaporte.porcentaje_sobre_compra >= 50 %}
+      <div class="alert alert-warning py-2 mt-3"><i class="bi bi-exclamation-triangle me-1"></i> Esta herramienta lleva gastado en reparaciones y mantenimiento más de la mitad de lo que costó. Valora sustituirla.</div>
+      {% endif %}
+      {% if pasaporte.mantenimientos_lista %}
+      <div class="table-responsive mt-3"><table class="smart-table"><thead><tr><th>Mantenimiento</th><th>Tipo</th><th>Fecha</th><th>Estado</th><th>Coste</th></tr></thead><tbody>
+        {% for m in pasaporte.mantenimientos_lista %}
+        <tr><td>{{ m.descripcion or m.tipo }}</td><td>{{ m.tipo }}</td><td>{{ (m.fecha_realizada or m.fecha_programada) | fmt_fecha }}</td><td>{{ m.estado }}</td><td>{{ (m.coste_real if m.coste_real is not none else m.coste_estimado) | fmt_precio }}</td></tr>
+        {% endfor %}
+      </tbody></table></div>
+      {% endif %}
+    </div>
+    {% endif %}
     <div style="padding:12px 18px;display:flex;justify-content:flex-end">
       <a href="/reparaciones/nueva?herramienta={{ herramienta.id }}" class="btn btn-primary btn-sm">
         <i class="bi bi-plus-lg"></i> Nueva reparación
