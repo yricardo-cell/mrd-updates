@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.30",
-    "nombre":  "MRD TOOL CONTROL -- Afinidad de CPU por maquina y DR4 con backups comprimidos",
+    "version_actual":  "2.7.31",
+    "nombre":  "MRD TOOL CONTROL -- Eliminado el modulo Surtidor",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Afinidad de CPU por maquina y DR4 con backups comprimidos"
+                    "Eliminado el modulo Surtidor"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.30.zip",
-    "sha256":  "f24c5994048cc963d8b21fc8d682384f5fc512a2522bdd61e5254a0d6b0896df"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.31.zip",
+    "sha256":  "0bd406ea33a3a62c1684f12896addc15580c18c0426620771bc1ac7dbb102e93"
 }
