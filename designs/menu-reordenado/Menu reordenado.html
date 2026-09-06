@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MRD · Maqueta del menú reordenado</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  :root{--sidebar-bg:#0f172a;--sidebar-text:#94a3b8;--sidebar-active:#22d3ee;--sidebar-active-bg:#0e749022;--sidebar-hover-bg:#ffffff0a;--sidebar-section:#475569;--bg:#f1f5f9;--text:#0f172a;--muted:#64748b;--border:#e2e8f0}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 28px 6px}
+  header h1{margin:0 0 4px;font-size:20px}
+  header p{margin:0;color:var(--muted);max-width:980px}
+  .controls{display:flex;gap:10px;align-items:center;padding:10px 28px 14px;flex-wrap:wrap}
+  .controls label{font-weight:600}
+  .controls button{border:1px solid var(--border);background:#fff;padding:6px 12px;border-radius:8px;cursor:pointer;font:inherit}
+  .controls button.on{background:var(--sidebar-bg);color:#fff;border-color:var(--sidebar-bg)}
+  .boards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px;padding:0 28px 32px;align-items:start}
+  .board{background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px #0f172a0d}
+  .board h2{margin:0;padding:12px 16px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+  .board h2 span{font-weight:500;text-transform:none;letter-spacing:0}
+  .sidebar{background:var(--sidebar-bg);padding:12px 0 16px;min-height:640px}
+  .brand{display:flex;align-items:center;gap:10px;padding:4px 16px 14px;color:#f1f5f9}
+  .brand i{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#0891b2,#22d3ee);display:grid;place-items:center;color:#0f172a;font-size:18px}
+  .brand strong{display:block;font-size:13px}.brand span{font-size:11px;color:var(--sidebar-section)}
+  .section{padding:14px 16px 4px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--sidebar-section);font-weight:700}
+  .section.new{color:#22d3ee99}
+  ul{list-style:none;margin:0;padding:0}
+  li a{display:flex;align-items:center;gap:10px;padding:7px 16px;color:var(--sidebar-text);text-decoration:none;font-size:13px}
+  li a:hover{background:var(--sidebar-hover-bg);color:#e2e8f0}
+  li a.active{background:var(--sidebar-active-bg);color:var(--sidebar-active);border-left:3px solid var(--sidebar-active);padding-left:13px}
+  li a i{width:20px;text-align:center;font-size:15px;flex-shrink:0}
+  .badge{margin-left:auto;background:#f59e0b;color:#0f172a;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px}
+  .moved a::after{content:"\2194";margin-left:auto;color:#f59e0b99;font-size:12px}
+  .gone a{text-decoration:line-through;opacity:.45}
+  .notes{padding:0 28px 40px;max-width:980px;color:var(--text)}
+  .notes h3{font-size:15px;margin:18px 0 6px}
+  .notes ul{padding-left:18px;list-style:disc}
+  .notes li{margin:4px 0}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Menú lateral reordenado por lógica de trabajo</h1>
+  <p>Comparación entre el menú actual (46 entradas, con "Inventario" agrupando 13 cosas distintas y "Operaciones" otras 19) y dos propuestas. Mismos colores, iconos y textos que la aplicación real; el Surtidor ya no aparece. La flecha <b>&#8596;</b> marca entradas que cambian de sección.</p>
+</header>
+<div class="controls">
+  <label>Ver:</label>
+  <button class="on" data-show="ahora,a">Ahora vs. Propuesta A</button>
+  <button data-show="ahora,b">Ahora vs. Propuesta B</button>
+  <button data-show="a,b">Propuesta A vs. Propuesta B</button>
+  <button data-show="ahora,a,b">Las tres</button>
+</div>
+
+<div class="boards">
+
+<section class="board" data-board="ahora">
+  <h2>Ahora <span>7 secciones · 46 entradas</span></h2>
+  <div class="sidebar">
+    <div class="brand"><i class="bi bi-tools"></i><div><strong>MRD TOOL CONTROL</strong><span>v2.7.31</span></div></div>
+    <div class="section">Principal</div>
+    <ul><li><a class="active"><i class="bi bi-speedometer2"></i>Dashboard</a></li></ul>
+    <div class="section">Inventario</div>
+    <ul>
+      <li><a><i class="bi bi-wrench-adjustable"></i>Herramientas</a></li>
+      <li><a><i class="bi bi-truck-front"></i>Maquinaria</a></li>
+      <li><a><i class="bi bi-boxes"></i>Materiales</a></li>
+      <li><a><i class="bi bi-exclamation-circle"></i>Stock bajo <span class="badge">3</span></a></li>
+      <li><a><i class="bi bi-truck"></i>Vehículos</a></li>
+      <li class="gone"><a><i class="bi bi-fuel-pump-fill"></i>Surtidor</a></li>
+      <li><a><i class="bi bi-shield-shaded"></i>Entregas de EPI</a></li>
+      <li><a><i class="bi bi-life-preserver"></i>Arneses y absorbedores</a></li>
+      <li><a><i class="bi bi-bag-fill"></i>Ropa y variantes</a></li>
+      <li><a><i class="bi bi-qr-code"></i>Etiquetas</a></li>
+      <li><a><i class="bi bi-upc-scan"></i>Escanear</a></li>
+      <li><a><i class="bi bi-clipboard-data"></i>Inventario masivo</a></li>
+      <li><a><i class="bi bi-pie-chart-fill"></i>Estado visual</a></li>
+    </ul>
+    <div class="section">Operaciones</div>
+    <ul>
+      <li><a><i class="bi bi-lightning"></i>Mostrador Único</a></li>
+      <li><a><i class="bi bi-command"></i>Centro de Patio</a></li>
+      <li><a><i class="bi bi-tablet-landscape"></i>Centro de tableta</a></li>
+      <li><a><i class="bi bi-command"></i>Centro de pendientes</a></li>
+      <li><a><i class="bi bi-bag-check"></i>Solicitudes trabajadores</a></li>
+      <li><a><i class="bi bi-phone"></i>Portal trabajadores</a></li>
+      <li><a><i class="bi bi-chat-heart-fill"></i>Buzón privado</a></li>
+      <li><a><i class="bi bi-box-arrow-up-right"></i>¿Qué está fuera?</a></li>
+      <li><a><i class="bi bi-file-earmark-text"></i>Registro de albaranes</a></li>
+      <li><a><i class="bi bi-buildings"></i>Control multi almacén</a></li>
+      <li><a><i class="bi bi-box2-heart"></i>Entregas preparadas</a></li>
+      <li><a><i class="bi bi-cart-check"></i>Pedidos y recepción</a></li>
+      <li><a><i class="bi bi-geo-alt-fill"></i>Localizador visual</a></li>
+      <li><a><i class="bi bi-printer"></i>Centro de etiquetas</a></li>
+      <li><a><i class="bi bi-journal-check"></i>Cierre diario</a></li>
+      <li><a><i class="bi bi-clock-history"></i>Historial global</a></li>
+      <li><a><i class="bi bi-arrow-left-right"></i>Movimientos</a></li>
+      <li><a><i class="bi bi-exclamation-triangle"></i>Incidencias</a></li>
+      <li><a><i class="bi bi-hammer"></i>Reparaciones</a></li>
+    </ul>
+    <div class="section">Empresa</div>
+    <ul>
+      <li><a><i class="bi bi-people"></i>Trabajadores</a></li>
+      <li><a><i class="bi bi-building"></i>Obras</a></li>
+      <li><a><i class="bi bi-house-gear"></i>Almacenes</a></li>
+      <li><a><i class="bi bi-shop"></i>Proveedores</a></li>
+    </ul>
+    <div class="section">Análisis</div>
+    <ul><li><a><i class="bi bi-bar-chart"></i>Informes</a></li></ul>
+    <div class="section">Automatización</div>
+    <ul>
+      <li><a><i class="bi bi-cpu"></i>Panel IA</a></li>
+      <li><a><i class="bi bi-lightning-charge"></i>Automatizaciones</a></li>
+      <li><a><i class="bi bi-bell"></i>Buzón</a></li>
+      <li><a><i class="bi bi-send"></i>Notificaciones</a></li>
+      <li><a><i class="bi bi-activity"></i>Anomalías</a></li>
+      <li><a><i class="bi bi-tools"></i>Mantenimiento</a></li>
+    </ul>
+    <div class="section">Sistema</div>
+    <ul>
+      <li><a><i class="bi bi-gear"></i>Configuración</a></li>
+      <li><a><i class="bi bi-cloud-download"></i>Actualizaciones</a></li>
+      <li><a><i class="bi bi-globe"></i>Acceso remoto</a></li>
+      <li><a><i class="bi bi-phone-fill"></i>Instalar app</a></li>
+      <li><a><i class="bi bi-person-circle"></i>Mi perfil</a></li>
+      <li><a><i class="bi bi-box-arrow-left"></i>Cerrar sesión</a></li>
+    </ul>
+  </div>
+</section>
+
+<section class="board" data-board="a">
+  <h2>Propuesta A <span>10 secciones cortas · sigue el día de trabajo</span></h2>
+  <div class="sidebar">
+    <div class="brand"><i class="bi bi-tools"></i><div><strong>MRD TOOL CONTROL</strong><span>v2.7.32</span></div></div>
+    <div class="section new">Diario</div>
+    <ul>
+      <li><a class="active"><i class="bi bi-speedometer2"></i>Dashboard</a></li>
+      <li class="moved"><a><i class="bi bi-upc-scan"></i>Escanear</a></li>
+      <li class="moved"><a><i class="bi bi-lightning"></i>Mostrador Único</a></li>
+      <li class="moved"><a><i class="bi bi-command"></i>Centro de Patio</a></li>
+      <li class="moved"><a><i class="bi bi-tablet-landscape"></i>Centro de tableta</a></li>
+      <li class="moved"><a><i class="bi bi-command"></i>Centro de pendientes</a></li>
+      <li class="moved"><a><i class="bi bi-journal-check"></i>Cierre diario</a></li>
+    </ul>
+    <div class="section new">Stock</div>
+    <ul>
+      <li><a><i class="bi bi-wrench-adjustable"></i>Herramientas</a></li>
+      <li><a><i class="bi bi-truck-front"></i>Maquinaria</a></li>
+      <li><a><i class="bi bi-boxes"></i>Materiales</a></li>
+      <li><a><i class="bi bi-exclamation-circle"></i>Stock bajo <span class="badge">3</span></a></li>
+      <li><a><i class="bi bi-truck"></i>Vehículos</a></li>
+      <li><a><i class="bi bi-clipboard-data"></i>Inventario</a></li>
+      <li><a><i class="bi bi-pie-chart-fill"></i>Estado visual</a></li>
+      <li class="moved"><a><i class="bi bi-geo-alt-fill"></i>Localizador visual</a></li>
+      <li class="moved"><a><i class="bi bi-buildings"></i>Multi almacén</a></li>
+    </ul>
+    <div class="section new">EPI</div>
+    <ul>
+      <li><a><i class="bi bi-shield-shaded"></i>Entregas de EPI</a></li>
+      <li><a><i class="bi bi-life-preserver"></i>Arneses y absorbedores</a></li>
+      <li><a><i class="bi bi-bag-fill"></i>Ropa y variantes</a></li>
+    </ul>
+    <div class="section new">Trabajadores</div>
+    <ul>
+      <li class="moved"><a><i class="bi bi-bag-check"></i>Solicitudes</a></li>
+      <li class="moved"><a><i class="bi bi-phone"></i>Portal trabajadores</a></li>
+      <li class="moved"><a><i class="bi bi-chat-heart-fill"></i>Buzón privado</a></li>
+      <li class="moved"><a><i class="bi bi-people"></i>Fichas de trabajadores</a></li>
+    </ul>
+    <div class="section new">Salidas y albaranes</div>
+    <ul>
+      <li><a><i class="bi bi-box-arrow-up-right"></i>¿Qué está fuera?</a></li>
+      <li><a><i class="bi bi-file-earmark-text"></i>Registro de albaranes</a></li>
+      <li><a><i class="bi bi-box2-heart"></i>Entregas preparadas</a></li>
+      <li><a><i class="bi bi-cart-check"></i>Pedidos y recepción</a></li>
+    </ul>
+    <div class="section new">Etiquetas y QR</div>
+    <ul>
+      <li class="moved"><a><i class="bi bi-qr-code"></i>Etiquetas</a></li>
+      <li class="moved"><a><i class="bi bi-printer"></i>Centro de etiquetas</a></li>
+    </ul>
+    <div class="section new">Seguimiento</div>
+    <ul>
+      <li><a><i class="bi bi-clock-history"></i>Historial global</a></li>
+      <li><a><i class="bi bi-arrow-left-right"></i>Movimientos</a></li>
+      <li><a><i class="bi bi-exclamation-triangle"></i>Incidencias</a></li>
+      <li><a><i class="bi bi-hammer"></i>Reparaciones</a></li>
+      <li class="moved"><a><i class="bi bi-activity"></i>Anomalías</a></li>
+    </ul>
+    <div class="section new">Empresa</div>
+    <ul>
+      <li><a><i class="bi bi-building"></i>Obras</a></li>
+      <li><a><i class="bi bi-house-gear"></i>Almacenes</a></li>
+      <li><a><i class="bi bi-shop"></i>Proveedores</a></li>
+    </ul>
+    <div class="section new">Análisis y automatización</div>
+    <ul>
+      <li><a><i class="bi bi-bar-chart"></i>Informes</a></li>
+      <li><a><i class="bi bi-cpu"></i>Panel IA</a></li>
+      <li><a><i class="bi bi-lightning-charge"></i>Automatizaciones</a></li>
+      <li><a><i class="bi bi-bell"></i>Buzón de avisos</a></li>
+      <li><a><i class="bi bi-send"></i>Notificaciones</a></li>
+    </ul>
+    <div class="section new">Sistema</div>
+    <ul>
+      <li class="moved"><a><i class="bi bi-tools"></i>Mantenimiento</a></li>
+      <li><a><i class="bi bi-gear"></i>Configuración</a></li>
+      <li><a><i class="bi bi-cloud-download"></i>Actualizaciones</a></li>
+      <li><a><i class="bi bi-globe"></i>Acceso remoto</a></li>
+      <li><a><i class="bi bi-phone-fill"></i>Instalar app</a></li>
+      <li><a><i class="bi bi-person-circle"></i>Mi perfil</a></li>
+      <li><a><i class="bi bi-box-arrow-left"></i>Cerrar sesión</a></li>
+    </ul>
+  </div>
+</section>
+
+<section class="board hidden" data-board="b">
+  <h2>Propuesta B <span>6 secciones · más compacta</span></h2>
+  <div class="sidebar">
+    <div class="brand"><i class="bi bi-tools"></i><div><strong>MRD TOOL CONTROL</strong><span>v2.7.32</span></div></div>
+    <div class="section new">Diario</div>
+    <ul>
+      <li><a class="active"><i class="bi bi-speedometer2"></i>Dashboard</a></li>
+      <li class="moved"><a><i class="bi bi-upc-scan"></i>Escanear</a></li>
+      <li class="moved"><a><i class="bi bi-lightning"></i>Mostrador Único</a></li>
+      <li class="moved"><a><i class="bi bi-command"></i>Patio y tableta</a></li>
+      <li class="moved"><a><i class="bi bi-command"></i>Pendientes</a></li>
+      <li class="moved"><a><i class="bi bi-journal-check"></i>Cierre diario</a></li>
+    </ul>
+    <div class="section new">Almacén</div>
+    <ul>
+      <li><a><i class="bi bi-wrench-adjustable"></i>Herramientas</a></li>
+      <li><a><i class="bi bi-truck-front"></i>Maquinaria</a></li>
+      <li><a><i class="bi bi-boxes"></i>Materiales <span class="badge">3</span></a></li>
+      <li><a><i class="bi bi-truck"></i>Vehículos</a></li>
+      <li><a><i class="bi bi-clipboard-data"></i>Inventario</a></li>
+      <li><a><i class="bi bi-pie-chart-fill"></i>Estado visual</a></li>
+      <li><a><i class="bi bi-geo-alt-fill"></i>Localizador</a></li>
+      <li><a><i class="bi bi-buildings"></i>Multi almacén</a></li>
+      <li class="moved"><a><i class="bi bi-qr-code"></i>Etiquetas</a></li>
+      <li class="moved"><a><i class="bi bi-cart-check"></i>Pedidos y recepción</a></li>
+    </ul>
+    <div class="section new">EPI</div>
+    <ul>
+      <li><a><i class="bi bi-shield-shaded"></i>Entregas de EPI</a></li>
+      <li><a><i class="bi bi-life-preserver"></i>Arneses y absorbedores</a></li>
+      <li><a><i class="bi bi-bag-fill"></i>Ropa y variantes</a></li>
+    </ul>
+    <div class="section new">Personas y obras</div>
+    <ul>
+      <li class="moved"><a><i class="bi bi-bag-check"></i>Solicitudes</a></li>
+      <li class="moved"><a><i class="bi bi-phone"></i>Portal trabajadores</a></li>
+      <li class="moved"><a><i class="bi bi-chat-heart-fill"></i>Buzón privado</a></li>
+      <li class="moved"><a><i class="bi bi-people"></i>Trabajadores</a></li>
+      <li class="moved"><a><i class="bi bi-building"></i>Obras</a></li>
+      <li class="moved"><a><i class="bi bi-shop"></i>Proveedores</a></li>
+      <li class="moved"><a><i class="bi bi-house-gear"></i>Almacenes</a></li>
+    </ul>
+    <div class="section new">Salidas y registro</div>
+    <ul>
+      <li><a><i class="bi bi-box-arrow-up-right"></i>¿Qué está fuera?</a></li>
+      <li><a><i class="bi bi-file-earmark-text"></i>Albaranes</a></li>
+      <li><a><i class="bi bi-box2-heart"></i>Entregas preparadas</a></li>
+      <li><a><i class="bi bi-arrow-left-right"></i>Movimientos</a></li>
+      <li><a><i class="bi bi-clock-history"></i>Historial</a></li>
+      <li><a><i class="bi bi-exclamation-triangle"></i>Incidencias y reparaciones</a></li>
+    </ul>
+    <div class="section new">Administración</div>
+    <ul>
+      <li><a><i class="bi bi-bar-chart"></i>Informes</a></li>
+      <li><a><i class="bi bi-cpu"></i>IA y automatizaciones</a></li>
+      <li><a><i class="bi bi-bell"></i>Avisos y notificaciones</a></li>
+      <li><a><i class="bi bi-activity"></i>Anomalías</a></li>
+      <li><a><i class="bi bi-tools"></i>Mantenimiento</a></li>
+      <li><a><i class="bi bi-gear"></i>Configuración y actualizaciones</a></li>
+      <li><a><i class="bi bi-globe"></i>Acceso remoto</a></li>
+      <li><a><i class="bi bi-person-circle"></i>Mi perfil · Instalar · Salir</a></li>
+    </ul>
+  </div>
+</section>
+</div>
+
+<div class="notes">
+  <h3>Qué cambia y por qué</h3>
+  <ul>
+    <li><b>Diario</b> arriba del todo: lo que se abre cada mañana (escanear, mostrador, patio, pendientes, cierre) deja de estar repartido entre "Inventario" y "Operaciones".</li>
+    <li><b>Stock</b> reúne solo existencias (herramientas, maquinaria, materiales, vehículos, inventario, estado visual, localizador, multi almacén). El inventario pasa a llamarse simplemente "Inventario".</li>
+    <li><b>Trabajadores</b> junta solicitudes, portal, buzón y fichas, que hoy están en tres secciones distintas.</li>
+    <li><b>Etiquetas y QR</b> deja de vivir dentro de "Inventario" (en A) o se integra en Almacén (en B).</li>
+    <li>La <b>Propuesta B</b> fusiona páginas parecidas en una sola entrada (Patio y tableta, Incidencias y reparaciones, Configuración y actualizaciones, Mi perfil · Instalar · Salir); eso exige también cambios en esas páginas, no solo en el menú.</li>
+    <li>El Surtidor desaparece en ambas (ya eliminado en 2.7.31). Ninguna URL cambia: solo el orden y las secciones del menú, así que los enlaces guardados siguen funcionando.</li>
+  </ul>
+</div>
+
+<script>
+  document.querySelectorAll('.controls button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.controls button').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      var show = b.dataset.show.split(',');
+      document.querySelectorAll('.board').forEach(function (s) { s.classList.toggle('hidden', show.indexOf(s.dataset.board) === -1); });
+    });
+  });
+</script>
+</body>
+</html>
