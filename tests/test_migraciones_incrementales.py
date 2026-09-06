@@ -184,7 +184,10 @@ def test_tablas_opcionales_inexistentes_se_omiten_sin_sql_invalido():
     engine.dispose()
 
 
-def test_migraciones_conservan_datos_incluido_surtidor_antiguo():
+def test_migraciones_conservan_datos_y_no_tocan_la_tabla_heredada_del_surtidor():
+    """El módulo de surtidor se eliminó en 2.7.31. Una base antigua que aún
+    tenga su tabla debe conservarla intacta (datos y columnas) sin que ninguna
+    migración la amplíe ni la destruya: el programa simplemente la ignora."""
     engine = _engine()
     _crear_base_antigua_parcial(engine)
     with engine.begin() as conn:
@@ -197,7 +200,10 @@ def test_migraciones_conservan_datos_incluido_surtidor_antiguo():
             "SELECT id, codigo, ubicacion, precio, proveedor "
             "FROM herramientas ORDER BY id"
         )).all()
+        repostajes_antes = conn.execute(text("SELECT * FROM repostajes_surtidor ORDER BY id")).all()
+    columnas_antes = _columnas(engine, "repostajes_surtidor")
 
+    statements = _capturar_sql(engine)
     apply_migrations(engine)
 
     with engine.connect() as conn:
@@ -207,26 +213,13 @@ def test_migraciones_conservan_datos_incluido_surtidor_antiguo():
         )).all()
         total_usuarios = conn.execute(text("SELECT COUNT(*) FROM usuarios")).scalar_one()
         total_trabajadores = conn.execute(text("SELECT COUNT(*) FROM trabajadores")).scalar_one()
-        repostajes = conn.execute(text(
-            "SELECT id, vehiculo_id, fecha, litros, precio_litro, total_euros, "
-            "km_actuales, notas, usuario_id, tipo_registro, tipo_combustible, "
-            "maquinaria_id, proveedor, created_at "
-            "FROM repostajes_surtidor ORDER BY id"
-        )).all()
+        repostajes_despues = conn.execute(text("SELECT * FROM repostajes_surtidor ORDER BY id")).all()
     assert despues == antes
     assert total_usuarios == 2
     assert total_trabajadores == 1
-    assert len(repostajes) == 1
-    assert repostajes[0][:9] == (
-        21, 3, "2025-01-02 08:30:00", 42.5, 1.4, 59.5,
-        120000, "Registro histórico", 2,
-    )
-    assert repostajes[0][9:] == ("repostaje", "gasoil", None, None, None)
-    assert {
-        "tipo_registro", "vehiculo_id", "maquinaria_id", "tipo_combustible",
-        "fecha", "litros", "precio_litro", "total_euros", "km_actuales",
-        "proveedor", "notas", "usuario_id", "created_at",
-    }.issubset(_columnas(engine, "repostajes_surtidor"))
+    assert repostajes_despues == repostajes_antes
+    assert _columnas(engine, "repostajes_surtidor") == columnas_antes
+    assert not [s for s in statements if "repostajes_surtidor" in s.lower() and not s.lstrip().lower().startswith(("select", "pragma"))]
     engine.dispose()
 
 

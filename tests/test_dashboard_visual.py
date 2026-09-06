@@ -79,7 +79,7 @@ def test_sidebar_conserva_urls_permisos_y_rutas_activas():
     routes = set(re.findall(r'href="(/[^"]*)"', source))
     expected = {
         "/", "/herramientas", "/maquinaria", "/materiales",
-        "/materiales/alertas", "/vehiculos", "/surtidor", "/etiquetas",
+        "/materiales/alertas", "/vehiculos", "/etiquetas",
         "/scan", "/panel-salidas", "/albaranes-salida", "/salida-rapida",
         "/historial", "/movimientos", "/incidencias", "/reparaciones",
         "/trabajadores", "/epis", "/obras", "/almacenes", "/proveedores",

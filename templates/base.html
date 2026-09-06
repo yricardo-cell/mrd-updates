@@ -275,12 +275,6 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="/surtidor" class="{% if request.url.path == '/surtidor' or request.url.path.startswith('/surtidor') %}active{% endif %}">
-            <i class="bi bi-fuel-pump-fill"></i>
-            <span class="nav-label">Surtidor</span>
-          </a>
-        </li>
-        <li class="nav-item">
           <a href="/epis" class="{% if '/epis' in request.url.path and '/epis/individuales' not in request.url.path and '/epis/stock' not in request.url.path %}active{% endif %}">
             <i class="bi bi-shield-shaded"></i>
             <span class="nav-label">Entregas de EPI</span>

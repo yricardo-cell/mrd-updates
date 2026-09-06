@@ -2056,7 +2056,7 @@ class CierreDiarioAlmacen(Base):
 
 class RepostajeVehiculo(Base):
     """Repostaje de vehículo en gasolinera externa.
-    Solo vincula a un Vehiculo; para el surtidor interno usar RepostajeSurtidor.
+    Solo vincula a un Vehiculo.
     """
     __tablename__ = "repostajes_vehiculos"
 
@@ -2088,58 +2088,6 @@ class RepostajeVehiculo(Base):
             return (self.vehiculo.tipo or "vehículo").capitalize()
         return "Vehículo"
 
-
-# ─── Surtidor interno (toros + furgonetas en la nave) ─────────────────────────
-
-class RepostajeSurtidor(Base):
-    """Registro del surtidor propio de la nave.
-    Puede ser un Vehiculo (furgoneta) O una Maquinaria (toro/carretilla).
-    Exactamente uno de vehiculo_id / maquinaria_id debe estar relleno.
-    """
-    __tablename__ = "repostajes_surtidor"
-
-    id               = Column(Integer, primary_key=True, index=True)
-    # 'repostaje' = un activo echa combustible | 'compra' = se compra combustible para el depósito
-    tipo_registro    = Column(String(20), nullable=False, default='repostaje')
-    vehiculo_id      = Column(Integer, ForeignKey("vehiculos.id"),  nullable=True, index=True)
-    maquinaria_id    = Column(Integer, ForeignKey("maquinaria.id"), nullable=True, index=True)
-    tipo_combustible = Column(String(20), nullable=True, default='gasoil')  # gasoil | gasolina
-    fecha            = Column(DateTime, default=datetime.utcnow)
-    litros           = Column(Float, nullable=False)
-    precio_litro     = Column(Float, nullable=True)
-    total_euros      = Column(Float, nullable=True)
-    km_actuales      = Column(Integer, nullable=True)
-    proveedor        = Column(String(100), nullable=True)   # para compras: quién suministra
-    notas            = Column(Text, nullable=True)
-    usuario_id       = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
-    created_at       = Column(DateTime, default=datetime.utcnow)
-
-    vehiculo   = relationship('Vehiculo',   foreign_keys=[vehiculo_id])
-    maquinaria = relationship('Maquinaria', foreign_keys=[maquinaria_id])
-    usuario    = relationship('Usuario',    foreign_keys=[usuario_id])
-
-    @property
-    def activo_nombre(self):
-        if self.tipo_registro == 'compra':
-            return self.proveedor or "Compra combustible"
-        if self.vehiculo:
-            v = self.vehiculo
-            return f"{v.matricula} {v.marca or ''}".strip()
-        if self.maquinaria:
-            return self.maquinaria.nombre
-        return "—"
-
-    @property
-    def activo_tipo(self):
-        if self.tipo_registro == 'compra':
-            return "Compra"
-        if self.vehiculo:
-            return (self.vehiculo.tipo or "furgoneta").capitalize()
-        if self.maquinaria:
-            return (self.maquinaria.tipo or "maquinaria").capitalize()
-
-
-# ─── Inventario masivo V2: variantes, lotes y libro append-only ──────────────
 
 class VarianteEPI(Base):
     __tablename__ = "variantes_epi"
