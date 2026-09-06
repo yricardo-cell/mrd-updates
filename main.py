@@ -7270,6 +7270,9 @@ class MostradorOperacionRequest(BaseModel):
     fecha_devolucion_prevista: Optional[datetime] = None
     notas: str = Field(default="", max_length=1000)
     origen: str = Field(default="", max_length=160)
+    # Solicitud del trabajador que se está entregando: al completar la salida
+    # pasa sola a "entregada" y desaparece de la lista de pendientes.
+    solicitud_id: Optional[int] = Field(default=None, gt=0)
 
 
 class TransferLineRequest(BaseModel):
@@ -7437,6 +7440,33 @@ def mostrador_buscar(
         raise HTTPException(exc.status_code, exc.detail)
 
 
+def _entregar_solicitud_por_mostrador(db, user, solicitud_id: int, trabajador_id, warehouse_id: int) -> dict:
+    """Cuando el almacén entrega por Mostrador Único lo que pidió un trabajador,
+    la solicitud avanza sola por los estados permitidos hasta "entregada"
+    (con albarán y aviso al trabajador), en vez de exigir cambiarla a mano."""
+    solicitud = db.get(SolicitudTrabajador, solicitud_id)
+    if not solicitud:
+        raise CounterError(404, "La solicitud indicada no existe")
+    if solicitud.almacen_id and solicitud.almacen_id != warehouse_id:
+        raise CounterError(409, "La solicitud pertenece a otro almacén")
+    if trabajador_id and solicitud.trabajador_id != trabajador_id:
+        raise CounterError(409, "La solicitud es de otro trabajador; revisa el trabajador seleccionado")
+    if solicitud.estado == "entregada":
+        return {"id": solicitud.id, "numero": solicitud.numero, "estado": "entregada", "ya_entregada": True}
+    if solicitud.estado in ("rechazada", "cancelada"):
+        raise CounterError(409, f"La solicitud {solicitud.numero} está {solicitud.estado}")
+    camino = {"pendiente": "aprobada", "revision": "aprobada", "aprobada": "preparando", "preparando": "lista", "lista": "entregada"}
+    try:
+        while solicitud.estado != "entregada":
+            transition_worker_request(
+                db, user, solicitud, new_status=camino[solicitud.estado],
+                notes="Entregada desde Mostrador Único", access_warehouse_id=warehouse_id,
+            )
+    except WorkerPortalError as exc:
+        raise CounterError(exc.status_code, exc.detail)
+    return {"id": solicitud.id, "numero": solicitud.numero, "estado": solicitud.estado}
+
+
 @app.post("/api/mostrador/operar")
 def mostrador_operar(
     payload: MostradorOperacionRequest,
@@ -7458,6 +7488,10 @@ def mostrador_operar(
             expected_return=payload.fecha_devolucion_prevista,
             origin=payload.origen,
         )
+        if payload.solicitud_id and payload.accion == "salida":
+            result["solicitud"] = _entregar_solicitud_por_mostrador(
+                db, user, payload.solicitud_id, payload.trabajador_id, warehouse.id,
+            )
         db.commit()
         return JSONResponse(result)
     except CounterError as exc:
@@ -15527,8 +15561,14 @@ def solicitudes_trabajadores(
         query = query.filter(
             SolicitudTrabajador.almacen_id == (active_warehouse.id if active_warehouse else -1)
         )
-    if estado:
+    # Por defecto solo las activas: lo entregado, rechazado o cancelado sale de
+    # la lista solo (2.7.37); "todos" muestra también el histórico.
+    if estado == "todos":
+        pass
+    elif estado:
         query = query.filter(SolicitudTrabajador.estado == estado)
+    else:
+        query = query.filter(SolicitudTrabajador.estado.in_(("pendiente", "revision", "aprobada", "preparando", "lista")))
     if q:
         term = f"%{q.strip()}%"
         query = query.join(Trabajador).filter(or_(
