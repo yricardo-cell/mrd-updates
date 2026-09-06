@@ -86,6 +86,7 @@ def create_user(username: str, password: str) -> None:
         users[username] = {
             "password_hash": hash_password(password),
             "created_at": datetime.utcnow().isoformat(),
+            "token_version": 0,
         }
         _save_users(users)
 
@@ -109,6 +110,7 @@ def create_initial_user(username: str, password: str) -> bool:
         users[username] = {
             "password_hash": hash_password(password),
             "created_at": datetime.utcnow().isoformat(),
+            "token_version": 0,
         }
         _save_users(users)
         return True
@@ -122,19 +124,52 @@ def authenticate(username: str, password: str) -> bool:
     return verify_password(password, entry["password_hash"])
 
 
+def change_password(username: str, current_password: str, new_password: str) -> bool:
+    """Cambia la contrasena de ``username`` si ``current_password`` es
+    correcta. Incrementa ``token_version``, lo que invalida de inmediato
+    cualquier sesion abierta (en cualquier dispositivo, incluido el que
+    hace el cambio): la proxima comprobacion de token la rechaza y exige
+    volver a iniciar sesion con la contrasena nueva."""
+    with _users_lock:
+        users = _load_users()
+        entry = users.get(username)
+        if not entry or not verify_password(current_password, entry["password_hash"]):
+            return False
+        entry["password_hash"] = hash_password(new_password)
+        entry["token_version"] = int(entry.get("token_version", 0)) + 1
+        users[username] = entry
+        _save_users(users)
+        return True
+
+
 def create_token(username: str) -> str:
+    entry = _load_users().get(username)
+    token_version = entry.get("token_version", 0) if entry else 0
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": username, "exp": expire}
+    payload = {"sub": username, "exp": expire, "tv": token_version}
     return jwt.encode(payload, _get_secret_key(), algorithm=ALGORITHM)
 
 
 def verify_token(token: str) -> Optional[str]:
-    """Devuelve el username si el token es valido, o None."""
+    """Devuelve el username si el token es valido, o None.
+
+    Si el usuario todavia existe, la version de token del JWT (``tv``)
+    debe coincidir con la guardada en users.json; un cambio de
+    contrasena la incrementa, así que los tokens emitidos antes de ese
+    cambio dejan de ser validos. Si el usuario ya no existe en el
+    fichero (comportamiento previo a este cambio, usado por pruebas que
+    solo verifican la cookie), no se exige esa comprobacion."""
     try:
         payload = jwt.decode(token, _get_secret_key(), algorithms=[ALGORITHM])
     except JWTError:
         return None
-    return payload.get("sub")
+    username = payload.get("sub")
+    if username is None:
+        return None
+    entry = _load_users().get(username)
+    if entry is not None and payload.get("tv", 0) != entry.get("token_version", 0):
+        return None
+    return username
 
 
 def current_user(request: Request) -> Optional[str]:

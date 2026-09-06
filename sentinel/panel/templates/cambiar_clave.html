@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Cambiar contraseña{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div class="brand">
+    <span class="brand-mark">{{ app_name[0] }}</span>
+    <h1>{{ app_name }}</h1>
+  </div>
+  <div class="session">
+    <span class="avatar">{{ user[0]|upper }}</span>
+    <span>{{ user }}</span>
+    <a href="/" class="btn-ghost">&larr; Volver al panel</a>
+    <a href="/logout" class="btn-ghost">Salir</a>
+  </div>
+</div>
+
+<div class="page">
+  <section>
+    <h2>Cambiar contraseña</h2>
+    <p class="muted">
+      Al cambiar la contraseña se cierra la sesión en todos los dispositivos
+      (incluido este); tendrás que volver a entrar con la contraseña nueva.
+    </p>
+    {% if error %}
+    <p class="field-error">{{ error }}</p>
+    {% endif %}
+    <form method="post" action="/admin/cambiar-clave">
+      <label>Contraseña actual<input type="password" name="current_password" required autofocus></label>
+      <label>Contraseña nueva<input type="password" name="new_password" minlength="8" required></label>
+      <label>Repite la contraseña nueva<input type="password" name="new_password_confirm" minlength="8" required></label>
+      <button type="submit">Cambiar contraseña</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

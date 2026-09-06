@@ -146,8 +146,11 @@ def build_panel_router(
             return RedirectResponse("/setup", status_code=303)
         if auth.current_user(request):
             return RedirectResponse("/", status_code=303)
+        info = None
+        if request.query_params.get("password_changed") == "1":
+            info = "Contraseña actualizada. Vuelve a iniciar sesión con la contraseña nueva."
         return templates.TemplateResponse(
-            request, "login.html", {"request": request, "app_name": "MRD Sentinel"},
+            request, "login.html", {"request": request, "app_name": "MRD Sentinel", "info": info},
         )
 
     @router.post("/login")
@@ -329,6 +332,49 @@ def build_panel_router(
             f"/admin/acciones?accion={action_id}&resultado={'ok' if resultado.ok else 'error'}",
             status_code=303,
         )
+
+    @router.get("/admin/cambiar-clave", response_class=HTMLResponse)
+    def cambiar_clave_get(request: Request, user: str = Depends(auth.require_login)):
+        return templates.TemplateResponse(
+            request, "cambiar_clave.html",
+            {"request": request, "app_name": "MRD Sentinel", "user": user, "error": None},
+        )
+
+    @router.post("/admin/cambiar-clave")
+    def cambiar_clave_post(
+        request: Request,
+        current_password: str = Form(...),
+        new_password: str = Form(...),
+        new_password_confirm: str = Form(...),
+        user: str = Depends(auth.require_login),
+    ):
+        error = None
+        status_code = 400
+        if len(new_password) < 8:
+            error = "La contraseña nueva debe tener al menos 8 caracteres."
+        elif new_password != new_password_confirm:
+            error = "Las contraseñas nuevas no coinciden."
+        else:
+            start = time.monotonic()
+            ok = auth.change_password(user, current_password, new_password)
+            duration_ms = round((time.monotonic() - start) * 1000, 1)
+            if admin_runner is not None:
+                admin_runner.audit(
+                    user, "cambiar_password", "auth",
+                    "ok" if ok else "error: contrasena_actual_incorrecta", duration_ms,
+                )
+            if not ok:
+                error = "Contraseña actual incorrecta."
+                status_code = 401
+        if error:
+            return templates.TemplateResponse(
+                request, "cambiar_clave.html",
+                {"request": request, "app_name": "MRD Sentinel", "user": user, "error": error},
+                status_code=status_code,
+            )
+        resp = RedirectResponse("/login?password_changed=1", status_code=303)
+        resp.delete_cookie(auth.COOKIE_NAME, path="/")
+        return resp
 
     @router.get("/admin/auditoria", response_class=HTMLResponse)
     def admin_auditoria(request: Request, user: str = Depends(auth.require_login)):

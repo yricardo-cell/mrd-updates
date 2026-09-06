@@ -886,3 +886,201 @@ def test_vista_de_incidencias_requiere_login(monkeypatch, tmp_path):
         response = client.get("/incidencias")
         assert response.status_code == 200
         assert "Incidencias" in response.text
+
+
+def test_cambiar_clave_requiere_login(monkeypatch, tmp_path):
+    monkeypatch.setattr(auth, "USERS_PATH", tmp_path / "users.json")
+    monkeypatch.setattr(auth, "SECRET_KEY_PATH", tmp_path / "secret.key")
+    auth.create_user("admin", "ClaveVieja123")
+
+    with TestClient(create_app()) as client:
+        sin_auth = client.get("/admin/cambiar-clave", follow_redirects=False)
+        assert sin_auth.status_code in (401, 303)
+
+
+def test_cambiar_clave_ok_invalida_la_sesion_en_todos_los_dispositivos(monkeypatch, tmp_path):
+    monkeypatch.setattr(auth, "USERS_PATH", tmp_path / "users.json")
+    monkeypatch.setattr(auth, "SECRET_KEY_PATH", tmp_path / "secret.key")
+    auth.create_user("admin", "ClaveVieja123")
+
+    with TestClient(create_app()) as client:
+        login = client.post(
+            "/login", data={"username": "admin", "password": "ClaveVieja123"},
+            follow_redirects=False,
+        )
+        assert login.status_code == 303
+        token_dispositivo_2 = auth.create_token("admin")
+
+        cambio = client.post(
+            "/admin/cambiar-clave",
+            data={
+                "current_password": "ClaveVieja123",
+                "new_password": "ClaveNueva456",
+                "new_password_confirm": "ClaveNueva456",
+            },
+            follow_redirects=False,
+        )
+        assert cambio.status_code == 303
+        assert cambio.headers["location"] == "/login?password_changed=1"
+
+        # La contrasena vieja deja de servir y la nueva funciona.
+        assert not auth.authenticate("admin", "ClaveVieja123")
+        assert auth.authenticate("admin", "ClaveNueva456")
+
+        # El propio navegador que hizo el cambio queda deslogueado (cookie
+        # borrada y, aunque no lo estuviera, el token viejo ya no es valido).
+        sin_sesion = client.get("/", follow_redirects=False)
+        assert sin_sesion.status_code in (401, 303)
+
+        # Un token emitido para "otro dispositivo" antes del cambio tampoco
+        # sirve ya, porque token_version se incremento.
+        assert auth.verify_token(token_dispositivo_2) is None
+
+
+def test_cambiar_clave_rechaza_contrasena_actual_incorrecta(monkeypatch, tmp_path):
+    monkeypatch.setattr(auth, "USERS_PATH", tmp_path / "users.json")
+    monkeypatch.setattr(auth, "SECRET_KEY_PATH", tmp_path / "secret.key")
+    auth.create_user("admin", "ClaveVieja123")
+
+    with TestClient(create_app()) as client:
+        client.post("/login", data={"username": "admin", "password": "ClaveVieja123"})
+        response = client.post(
+            "/admin/cambiar-clave",
+            data={
+                "current_password": "ClaveIncorrecta",
+                "new_password": "ClaveNueva456",
+                "new_password_confirm": "ClaveNueva456",
+            },
+        )
+        assert response.status_code == 401
+        assert "incorrecta" in response.text.lower()
+        assert auth.authenticate("admin", "ClaveVieja123")
+
+
+def test_cambiar_clave_rechaza_confirmacion_que_no_coincide(monkeypatch, tmp_path):
+    monkeypatch.setattr(auth, "USERS_PATH", tmp_path / "users.json")
+    monkeypatch.setattr(auth, "SECRET_KEY_PATH", tmp_path / "secret.key")
+    auth.create_user("admin", "ClaveVieja123")
+
+    with TestClient(create_app()) as client:
+        client.post("/login", data={"username": "admin", "password": "ClaveVieja123"})
+        response = client.post(
+            "/admin/cambiar-clave",
+            data={
+                "current_password": "ClaveVieja123",
+                "new_password": "ClaveNueva456",
+                "new_password_confirm": "OtraCosa789",
+            },
+        )
+        assert response.status_code == 400
+        assert auth.authenticate("admin", "ClaveVieja123")
+
+
+def test_cambiar_clave_rechaza_contrasena_nueva_corta(monkeypatch, tmp_path):
+    monkeypatch.setattr(auth, "USERS_PATH", tmp_path / "users.json")
+    monkeypatch.setattr(auth, "SECRET_KEY_PATH", tmp_path / "secret.key")
+    auth.create_user("admin", "ClaveVieja123")
+
+    with TestClient(create_app()) as client:
+        client.post("/login", data={"username": "admin", "password": "ClaveVieja123"})
+        response = client.post(
+            "/admin/cambiar-clave",
+            data={
+                "current_password": "ClaveVieja123",
+                "new_password": "corta",
+                "new_password_confirm": "corta",
+            },
+        )
+        assert response.status_code == 400
+        assert auth.authenticate("admin", "ClaveVieja123")
+
+
+def test_cambiar_clave_queda_registrada_en_la_auditoria(monkeypatch, tmp_path):
+    monkeypatch.setattr(auth, "USERS_PATH", tmp_path / "users.json")
+    monkeypatch.setattr(auth, "SECRET_KEY_PATH", tmp_path / "secret.key")
+    auth.create_user("admin", "ClaveVieja123")
+    config_path = tmp_path / "apps.yaml"
+    config_path.write_text(
+        "sentinel:\n  host: 127.0.0.1\n  port: 9100\napps:\n"
+        "  - id: demo\n    display_name: Demo\n    local_url: http://127.0.0.1:9999\n"
+        "    health_path: /health\n    public_hostname: demo.local\n"
+        "    failover_state_root: C:\\\\ProgramData\\\\Demo\\\\failover\n",
+        encoding="utf-8",
+    )
+
+    with TestClient(create_app(config_path)) as client:
+        client.post("/login", data={"username": "admin", "password": "ClaveVieja123"})
+        client.post(
+            "/admin/cambiar-clave",
+            data={
+                "current_password": "ClaveVieja123",
+                "new_password": "ClaveNueva456",
+                "new_password_confirm": "ClaveNueva456",
+            },
+        )
+
+    import json as _json
+    entries = _json.loads((tmp_path / "audit_log.json").read_text(encoding="utf-8"))
+    assert any(
+        e["action_id"] == "cambiar_password" and e["executor"] == "admin" and e["result"] == "ok"
+        for e in entries
+    )
+    # La contrasena en si misma nunca debe aparecer en el log de auditoria.
+    assert "ClaveVieja123" not in _json.dumps(entries)
+    assert "ClaveNueva456" not in _json.dumps(entries)
+
+
+
+def test_dashboard_pinta_sin_datos_en_gris_y_no_como_atencion(monkeypatch, tmp_path):
+    from sentinel import component_checks, tunnel_checks
+
+    monkeypatch.setattr(auth, "USERS_PATH", tmp_path / "users.json")
+    monkeypatch.setattr(auth, "SECRET_KEY_PATH", tmp_path / "secret.key")
+    auth.create_user("admin", "ClaveSegura123")
+    config_path = tmp_path / "apps.yaml"
+    config_path.write_text(
+        "sentinel:\n  host: 127.0.0.1\n  port: 9100\napps:\n"
+        "  - id: demo\n    display_name: Demo\n    local_url: http://127.0.0.1:9999\n"
+        "    health_path: /health\n    public_hostname: demo.local\n"
+        "    failover_state_root: C:\\\\ProgramData\\\\Demo\\\\failover\n",
+        encoding="utf-8",
+    )
+
+    class _FakeTunnelProcess:
+        def __init__(self, stdout):
+            self.returncode = 0
+            self.stdout = stdout
+
+    respuestas = iter(["Running", "Ready"])
+    monkeypatch.setattr(
+        tunnel_checks.subprocess, "run",
+        lambda *a, **k: _FakeTunnelProcess(next(respuestas)),
+    )
+
+    class _FakeComponentProcess:
+        returncode = 0
+        stdout = (
+            '{"ok": true, "result": "sin_datos", '
+            '"timestamp": "2026-09-05T00:00:00+00:00", '
+            '"components": {"nucleo": {"status": "sin_datos", '
+            '"detail": "Recopilando datos: todavia no se ha sellado una linea base."}}, '
+            '"remaining_errors": [], "pending_baseline": ["nucleo"]}'
+        )
+
+    monkeypatch.setattr(
+        component_checks, "REPAIR_CENTER_SCRIPT",
+        component_checks.REPO_ROOT / "sentinel" / "__init__.py",
+    )
+    monkeypatch.setattr(component_checks.subprocess, "run", lambda *a, **k: _FakeComponentProcess())
+
+    with TestClient(create_app(config_path)) as client:
+        client.cookies.set(auth.COOKIE_NAME, auth.create_token("admin"))
+        response = None
+        for _ in range(50):
+            response = client.get("/")
+            if "RECOPILANDO DATOS" in response.text:
+                break
+            time.sleep(0.05)
+        assert response.status_code == 200
+        assert "RECOPILANDO DATOS" in response.text
+        assert "ATENCI\u00d3N" not in response.text

@@ -65,6 +65,7 @@
     <a href="#apps-section" class="btn-hud">{{ icon("grid") }}Aplicaciones ({{ apps|length }})</a>
     <a href="/incidencias" class="btn-hud">{{ icon("alert") }}Ver incidencias</a>
     <a href="/admin/acciones" class="btn-hud">{{ icon("grid") }}Acciones</a>
+    <a href="/admin/cambiar-clave" class="btn-hud">{{ icon("grid") }}Cambiar contraseña</a>
     {% if apps_con_problema %}
     <a href="#app-{{ apps_con_problema[0].id }}" class="btn-hud btn-hud-bad">{{ icon("alert") }}{{ apps_con_problema|length }} con aviso</a>
     {% else %}
@@ -124,6 +125,8 @@
     <span class="badge ok">{{ icon("check") }}OK</span>
     {%- elif status in ("running", "ready") -%}
     <span class="badge ok">{{ icon("check") }}OK</span>
+    {%- elif status == "sin_datos" -%}
+    <span class="badge unknown">{{ icon("clock") }}RECOPILANDO DATOS</span>
     {%- elif status in ("error", "stopped") -%}
     <span class="badge warn">{{ icon("warn") }}ATENCIÓN</span>
     {%- else -%}
@@ -132,6 +135,7 @@
   {%- endmacro %}
   {% macro estado_ring(status) -%}
     {%- if status == "ok" or status in ("running", "ready") -%}ok
+    {%- elif status == "sin_datos" -%}unknown
     {%- elif status in ("error", "stopped") -%}warn
     {%- else -%}unknown
     {%- endif -%}

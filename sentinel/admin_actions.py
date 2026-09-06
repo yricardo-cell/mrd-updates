@@ -121,6 +121,12 @@ class AdminActionRunner:
     def audit_entries(self, limit: int | None = None) -> list[dict]:
         return self._audit_log.recent(limit=limit)
 
+    def audit(self, executor: str, action_id: str, component: str, result: str, duration_ms: float) -> None:
+        """Registra en el mismo log de auditoria un evento que no pasa por
+        execute() (p.ej. cambio de contrasena), sin exponer el atributo
+        privado ``_audit_log`` fuera de este modulo."""
+        self._audit_log.record(executor, action_id, component, result, duration_ms)
+
     def execute(self, action_id: str, executor: str, confirmation: str = "") -> ActionResult:
         action = self._actions.get(action_id)
         if action is None:
