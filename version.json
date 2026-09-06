@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.22",
-    "nombre":  "MRD TOOL CONTROL -- Repara el panel de administracion /servicio (Centro de recuperacion), que devolvia error 500 al acceder por primera vez desde el commit inicial.",
-    "fecha":  "2026-09-04",
+    "version_actual":  "2.7.29",
+    "nombre":  "MRD TOOL CONTROL -- Correcciones de consolidacion y ficha de material",
+    "fecha":  "2026-09-06",
     "cambios":  [
-                    "Repara el panel de administracion /servicio (Centro de recuperacion), que devolvia error 500 al acceder por primera vez desde el commit inicial."
+                    "Correcciones de consolidacion y ficha de material"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.22.zip",
-    "sha256":  "8bfc17ba25effb4f3870db6f4ab1243c4742699f5c2298238970cb904e3c85a2"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.29.zip",
+    "sha256":  "8b76ccde4515a52aa0b1869201d919e1bcbc144e829312494990735e7a87f708"
 }
