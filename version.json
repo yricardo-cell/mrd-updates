@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.34",
-    "nombre":  "MRD TOOL CONTROL -- Estado visual con activos y unidades por separado",
+    "version_actual":  "2.7.35",
+    "nombre":  "MRD TOOL CONTROL -- Dashboard operativo con tareas de hoy y dinero en juego",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Estado visual con activos y unidades por separado"
+                    "Dashboard operativo con tareas de hoy y dinero en juego"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.34.zip",
-    "sha256":  "5d5b6dbd9747569254c218ec4e9aaa5cd942d4c827d5a21ad46f5dd135146298"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.35.zip",
+    "sha256":  "2536ea4673aa2787be7a42905d8398e13a32b64241378275d42c5c3d68a2a610"
 }
