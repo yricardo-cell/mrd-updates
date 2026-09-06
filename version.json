@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.49",
-    "nombre":  "MRD TOOL CONTROL -- Puesta a punto de datos: que falta en cada ficha, con enlaces para completarlo",
+    "version_actual":  "2.7.50",
+    "nombre":  "MRD TOOL CONTROL -- Pedidos a proveedor en tres pasos: que falta, borrador con PDF y WhatsApp, recepcion de un clic",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Puesta a punto de datos: que falta en cada ficha, con enlaces para completarlo"
+                    "Pedidos a proveedor en tres pasos: que falta, borrador con PDF y WhatsApp, recepcion de un clic"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.49.zip",
-    "sha256":  "1a3a1ad8e687a47b216cd2d7276f8517c5bd81d7c80030c9946b360b1f700fd9"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.50.zip",
+    "sha256":  "f5843fbd8c4a71eaccd376b26d24d1211c17e61b693452927b1cdc27b9499eb3"
 }
