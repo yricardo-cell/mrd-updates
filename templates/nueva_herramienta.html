@@ -268,11 +268,13 @@
               <span style="font-size:.78rem">Haz clic para añadir foto</span>
             </div>
           </div>
-          <input type="file" name="foto" id="foto-input" accept="image/*" style="display:none"
-                 onchange="previewFoto(this)">
-          <button type="button" class="btn btn-outline btn-sm w-100" onclick="document.getElementById('foto-input').click()">
-            <i class="bi bi-upload"></i> Seleccionar imagen
-          </button>
+          <input type="file" name="foto" id="foto-input" accept="image/*" style="display:none" onchange="previewFoto(this)">
+          <input type="file" id="foto-camara" accept="image/*" capture="environment" style="display:none" onchange="fotoDesdeCamara(this)">
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary btn-sm w-100" onclick="document.getElementById('foto-camara').click()"><i class="bi bi-camera"></i> Hacer foto</button>
+            <button type="button" class="btn btn-outline btn-sm w-100" onclick="document.getElementById('foto-input').click()"><i class="bi bi-upload"></i> Elegir imagen</button>
+          </div>
+          <div class="small text-muted mt-1">La foto se reduce sola antes de enviarla (máximo 1600 px).</div>
         </div>
       </div>
 
@@ -323,14 +325,43 @@
 
 {% block extra_js %}
 <script>
-function previewFoto(input) {
-  if (!input.files.length) return;
+async function comprimirImagen(file, max = 1600, calidad = 0.85) {
+  // Reduce la foto en el móvil antes de enviarla (2.7.56): menos datos y subida rápida.
+  if (!file || !file.type || !file.type.startsWith('image/')) return file;
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const esc = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    if (esc >= 1 && file.size < 600 * 1024) { if (bmp.close) bmp.close(); return file; }
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * esc); c.height = Math.round(bmp.height * esc);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    if (bmp.close) bmp.close();
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', calidad));
+    if (!blob) return file;
+    return new File([blob], (file.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch (e) { return file; }
+}
+function ponerEnInput(input, file) { try { const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files; } catch (e) {} }
+function mostrarPreviewFoto(file) {
   const reader = new FileReader();
   reader.onload = e => {
     const preview = document.getElementById('foto-preview');
     preview.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`;
   };
-  reader.readAsDataURL(input.files[0]);
+  reader.readAsDataURL(file);
+}
+async function previewFoto(input) {
+  if (!input.files.length) return;
+  const original = input.files[0];
+  const file = await comprimirImagen(original);
+  if (file !== original) ponerEnInput(input, file);
+  mostrarPreviewFoto(file);
+}
+async function fotoDesdeCamara(input) {
+  if (!input.files.length) return;
+  const file = await comprimirImagen(input.files[0]);
+  ponerEnInput(document.getElementById('foto-input'), file);
+  mostrarPreviewFoto(file);
 }
 
 // Validar número de serie duplicado

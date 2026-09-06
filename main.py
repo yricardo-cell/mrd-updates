@@ -9214,6 +9214,56 @@ def api_nave_elemento_eliminar(eid: int, request: Request = None, user: Usuario 
     return JSONResponse({"ok": True, "huecos": len(huecos), "desvinculados": desv})
 
 
+class NaveMoverRequest(BaseModel):
+    x: int = Field(..., ge=0, le=1000000)
+    z: int = Field(..., ge=0, le=1000000)
+
+
+@app.post("/api/nave/zonas/{zid}/mover")
+def api_nave_zona_mover(zid: int, payload: NaveMoverRequest, request: Request = None,
+                        user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    """Arrastrar una zona en la vista general (2.7.56): guarda su sitio en la nave."""
+    if not _nave_editor(user):
+        raise HTTPException(403, "Sin permiso para editar la nave")
+    z = _nave_zona_de(db, _operation_warehouse(request, user, db), zid)
+    anterior = {"pos_x": z.pos_x, "pos_z": z.pos_z}
+    z.pos_x, z.pos_z = payload.x, payload.z
+    registrar_auditoria(db, "nave_zonas", z.id, "mover", user.id, anterior, {"pos_x": z.pos_x, "pos_z": z.pos_z})
+    db.commit()
+    return JSONResponse({"ok": True, "pos_x": z.pos_x, "pos_z": z.pos_z})
+
+
+@app.post("/api/nave/elementos/{eid}/mover")
+def api_nave_elemento_mover(eid: int, payload: NaveMoverRequest, request: Request = None,
+                            user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    """Arrastrar un elemento dentro de su zona (2.7.56): x desde el fondo, z desde
+    la izquierda; se traduce a la pared y distancias que ya usa el elemento."""
+    if not _nave_editor(user):
+        raise HTTPException(403, "Sin permiso para editar la nave")
+    warehouse = _operation_warehouse(request, user, db)
+    el = db.get(NaveElemento, eid)
+    if not el or el.zona.almacen_id != warehouse.id:
+        raise HTTPException(404, "Ese elemento no existe")
+    zona = el.zona
+    L, A = int(zona.largo or 0), int(zona.ancho or 0)
+    _, _, w, d = _nave_geometria(zona, el)
+    x = min(max(0, payload.x), max(0, L - w))
+    z = min(max(0, payload.z), max(0, A - d))
+    anterior = {"pared": el.pared, "desde_puerta": el.desde_puerta, "desde_pared": el.desde_pared}
+    if el.pared == "fondo":
+        el.desde_pared, el.desde_puerta = x, z
+    elif el.pared == "derecha":
+        el.desde_puerta, el.desde_pared = L - x - w, A - z - d
+    else:
+        el.desde_puerta, el.desde_pared = L - x - w, z
+    el.desde_puerta, el.desde_pared = max(0, int(el.desde_puerta)), max(0, int(el.desde_pared))
+    registrar_auditoria(db, "nave_elementos", el.id, "mover", user.id, anterior,
+                        {"pared": el.pared, "desde_puerta": el.desde_puerta, "desde_pared": el.desde_pared})
+    db.commit()
+    nx, nz, _, _ = _nave_geometria(zona, el)
+    return JSONResponse({"ok": True, "x": nx, "z": nz, "pared": el.pared, "desde_puerta": el.desde_puerta, "desde_pared": el.desde_pared})
+
+
 @app.get("/api/nave/huecos-prueba/impacto")
 def api_nave_huecos_prueba_impacto(request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
     if not _nave_permitido(user):
@@ -10028,7 +10078,7 @@ def puesta_a_punto(request: Request, user: Usuario = Depends(requiere_login), db
             "clave": "herramientas", "titulo": "Herramientas", "icono": "bi-tools", "total": total_tools,
             "puntos": [
                 {"nombre": "Sin foto", "por_que": "La foto evita confusiones al entregar y al inventariar.",
-                 "filas": [(h.nombre, h.codigo, f"/herramientas/{h.id}") for h in _tools(Herramienta.foto_path.is_(None))]},
+                 "filas": [(h.nombre, h.codigo, f"/herramientas/{h.id}?foto=1") for h in _tools(Herramienta.foto_path.is_(None))]},
                 {"nombre": "Sin precio de compra", "por_que": "Sin precio no hay pasaporte de costes ni valor de lo que está fuera.",
                  "filas": [(h.nombre, h.codigo, f"/herramientas/{h.id}/editar") for h in _tools(or_(Herramienta.precio_compra.is_(None), Herramienta.precio_compra == 0))]},
                 {"nombre": "Sin ubicación en el almacén", "por_que": "Sin hueco, la Vista de la nave no sabe dónde está. Cada fila abre Colocar por escáner.",
