@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.44",
-    "nombre":  "MRD TOOL CONTROL -- Informes con el criterio del Estado visual: estado real de activos y stock con las mismas cifras",
+    "version_actual":  "2.7.45",
+    "nombre":  "MRD TOOL CONTROL -- Ficha de obra: que hay en la obra, consumos, albaranes, incidencias y acciones al Mostrador",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Informes con el criterio del Estado visual: estado real de activos y stock con las mismas cifras"
+                    "Ficha de obra: que hay en la obra, consumos, albaranes, incidencias y acciones al Mostrador"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.44.zip",
-    "sha256":  "88eae3990137f39f8d6b2925ea8e1613e64947a1bd3215f27a9abeccaa2bca74"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.45.zip",
+    "sha256":  "d811cf43eee1d5198e7c800a7e5ca2198710414dcf1349e4521299e8742c9ef7"
 }
