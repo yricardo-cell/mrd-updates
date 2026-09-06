@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MRD · Maqueta: iconos y contraste</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  body{margin:0;background:#e9edf3;color:#1a202c;font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 28px 8px}header h1{margin:0 0 4px;font-size:20px}header p{margin:0;color:#4a5568;max-width:1100px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:18px;padding:8px 28px 28px}
+  .screen{background:#fff;border:1px solid #cbd5e0;border-radius:16px;padding:18px}
+  .screen h2{margin:0 0 2px;font-size:16px}.screen .sub{color:#4a5568;font-size:13px;margin:0 0 12px}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}.pair>div{border:1px solid #e2e8f0;border-radius:12px;overflow:hidden}
+  .tag{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;background:#f1f5f9;color:#475569}
+  .tag.new{background:#ccfbf1;color:#0f766e}
+  .sb{background:#0f172a;padding:10px 0;font-size:14px}
+  .sb .sec{font-size:.65em;font-weight:700;letter-spacing:.1em;color:#475569;padding:12px 16px 4px;text-transform:uppercase}
+  .sb a{display:flex;gap:10px;align-items:center;padding:9px 16px;margin:1px 8px;color:#94a3b8;font-size:.875em;font-weight:500;border-radius:6px;text-decoration:none}
+  .sb a i{font-size:1em;width:20px;text-align:center}
+  .sb a.active{background:linear-gradient(115deg,#0891b2,#0e7490 45%,#3730a3);color:#fff;font-weight:600}
+  .sb.new{font-size:15px}
+  .sb.new .sec{font-size:.76em;color:#94a3b8;letter-spacing:.08em;padding:14px 16px 6px}
+  .sb.new a{color:#dbe4ee;font-size:.95em;padding:10px 16px}
+  .sb.new a i{font-size:1.2em;width:24px;color:#7dd3fc}
+  .sb.new a.active{color:#fff}.sb.new a.active i{color:#fff}
+  .kpi{padding:14px;background:#fff}
+  .kpi .ic{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2em;background:#cffafe;color:#0891b2;margin-bottom:10px}
+  .kpi .val{font-size:1.9em;font-weight:800;line-height:1}.kpi .lab{font-size:.78em;color:#718096;margin-top:4px;font-weight:500}
+  .kpi.new .ic{width:46px;height:46px;font-size:1.5em;background:#0891b2;color:#fff;border-radius:12px}
+  .kpi.new .lab{font-size:.9em;color:#3f4b5c;font-weight:600}
+  .card-t{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid #e2e8f0;background:#f8f9fb;font-size:.875em;font-weight:700}
+  .card-t i{color:#0891b2;opacity:.7}
+  .card-t.new{font-size:1em}.card-t.new i{opacity:1;font-size:1.2em}
+  table{width:100%;border-collapse:collapse}th{text-align:left;padding:8px 12px;font-size:.72em;text-transform:uppercase;letter-spacing:.05em;color:#718096}td{padding:9px 12px;border-top:1px solid #e2e8f0;font-size:.82em}
+  td small,td .muted{color:#718096;font-size:.9em}
+  .new th{font-size:.8em;color:#3f4b5c}.new td{font-size:.95em;padding:11px 12px}.new td .muted{color:#5b6577;font-size:.92em}
+  .badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:.7em;font-weight:700;background:#dcfce7;color:#15803d}
+  .new .badge{font-size:.8em;padding:4px 10px;background:#15803d;color:#fff}
+  .badge.w{background:#fef3c7;color:#b45309}.new .badge.w{background:#b45309;color:#fff}
+  .phone{width:300px;margin:0 auto;border:8px solid #1f2937;border-radius:26px;overflow:hidden;background:#f4f6f9}
+  .phone .bar{background:#0f172a;color:#fff;padding:10px 12px;display:flex;gap:10px;align-items:center;font-weight:700}
+  .phone .row{display:flex;gap:10px;align-items:center;padding:10px 12px;background:#fff;border-bottom:1px solid #e2e8f0}
+  .phone .row i{font-size:1em;color:#0891b2;opacity:.7;width:20px;text-align:center}
+  .phone .row div{font-size:.82em}.phone .row div small{display:block;color:#718096;font-size:.85em}
+  .phone .row button{margin-left:auto;font:inherit;font-size:.78em;padding:4px 10px;border:0;border-radius:8px;background:#0891b2;color:#fff}
+  .phone.new{font-size:16px}
+  .phone.new .row{padding:12px}.phone.new .row i{font-size:1.35em;opacity:1;width:26px}
+  .phone.new .row div{font-size:.95em}.phone.new .row div small{color:#4a5568;font-size:.88em}
+  .phone.new .row button{font-size:.9em;padding:10px 14px;min-height:44px}
+  .note{background:#e6fffb;border-left:3px solid #0891b2;padding:8px 12px;border-radius:8px;font-size:13px;margin-top:10px}
+  .notes{padding:0 28px 40px;max-width:1100px}.notes h3{font-size:15px;margin:18px 0 6px}.notes ul{padding-left:18px}.notes li{margin:4px 0}
+  .dark{background:#1e293b;color:#f1f5f9;padding:12px 14px}.dark .m{color:#64748b;font-size:.75em}.dark.new .m{color:#a7b4c4;font-size:.85em}
+  code{background:#f1f5f9;padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Iconos y contraste: que se lea todo, en todas partes</h1>
+  <p>Hoy la letra base es de 14 px y muchos textos van a 0,68–0,78 rem, es decir <b>entre 9,5 y 11 px</b>, en gris claro; los iconos van a 1 rem y con opacidad 0,7. La propuesta: letra base 15 px (16 px en móvil), <b>ningún texto por debajo de 12 px</b>, grises más oscuros (contraste mínimo 4,5:1 en claro y oscuro), iconos un 20–35 % más grandes y a color pleno, y botones de 44 px en móvil. Sin cambiar la estructura de ninguna pantalla.</p>
+</header>
+<div class="grid">
+
+  <section class="screen">
+    <h2><i class="bi bi-layout-sidebar"></i> 1 · Menú lateral</h2>
+    <p class="sub">Secciones legibles, iconos más grandes y texto claro sobre el azul oscuro.</p>
+    <div class="pair">
+      <div><span class="tag">Actual</span>
+        <div class="sb"><div class="sec">Diario</div><a class="active"><i class="bi bi-speedometer2"></i>Dashboard</a><a><i class="bi bi-upc-scan"></i>Mostrador Único</a><a><i class="bi bi-qr-code-scan"></i>Escanear</a><div class="sec">Stock</div><a><i class="bi bi-wrench-adjustable"></i>Herramientas</a><a><i class="bi bi-boxes"></i>Materiales</a></div>
+      </div>
+      <div><span class="tag new">Propuesta</span>
+        <div class="sb new"><div class="sec">Diario</div><a class="active"><i class="bi bi-speedometer2"></i>Dashboard</a><a><i class="bi bi-upc-scan"></i>Mostrador Único</a><a><i class="bi bi-qr-code-scan"></i>Escanear</a><div class="sec">Stock</div><a><i class="bi bi-wrench-adjustable"></i>Herramientas</a><a><i class="bi bi-boxes"></i>Materiales</a></div>
+      </div>
+    </div>
+    <div class="note">Sección: de 9 px gris apagado a 11,5 px gris claro. Enlace: de 12 px a 14 px, texto casi blanco. Icono: de 14 px a 18 px, en celeste; en el activo, blanco.</div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-grid-1x2"></i> 2 · Tarjetas KPI y títulos de tarjeta</h2>
+    <p class="sub">Icono sólido con fondo de color, etiqueta legible, título con icono a color pleno.</p>
+    <div class="pair">
+      <div><span class="tag">Actual</span>
+        <div class="kpi"><div class="ic"><i class="bi bi-wrench-adjustable"></i></div><div class="val">128</div><div class="lab">Herramientas disponibles</div></div>
+        <div class="card-t"><i class="bi bi-bar-chart"></i> Movimientos de la semana</div>
+      </div>
+      <div><span class="tag new">Propuesta</span>
+        <div class="kpi new"><div class="ic"><i class="bi bi-wrench-adjustable"></i></div><div class="val">128</div><div class="lab">Herramientas disponibles</div></div>
+        <div class="card-t new"><i class="bi bi-bar-chart"></i> Movimientos de la semana</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-table"></i> 3 · Listados y etiquetas</h2>
+    <p class="sub">Cabeceras y celdas más grandes; texto secundario en gris oscuro; badges rellenos con letra blanca.</p>
+    <div class="pair">
+      <div><span class="tag">Actual</span>
+        <table><tr><th>Herramienta</th><th>Estado</th><th>Responsable</th></tr>
+        <tr><td>Taladro Hilti TE-6<br><small>MRD-HTA-2C1A98</small></td><td><span class="badge">disponible</span></td><td>—</td></tr>
+        <tr><td>Radial 230<br><small>MRD-HTA-53A616</small></td><td><span class="badge w">entregada</span></td><td>Erick Gómez <span class="muted">· Cuadrilla A</span></td></tr></table>
+      </div>
+      <div class="new"><span class="tag new">Propuesta</span>
+        <table><tr><th>Herramienta</th><th>Estado</th><th>Responsable</th></tr>
+        <tr><td>Taladro Hilti TE-6<br><span class="muted">MRD-HTA-2C1A98</span></td><td><span class="badge">disponible</span></td><td>—</td></tr>
+        <tr><td>Radial 230<br><span class="muted">MRD-HTA-53A616</span></td><td><span class="badge w">entregada</span></td><td>Erick Gómez <span class="muted">· Cuadrilla A</span></td></tr></table>
+      </div>
+    </div>
+    <div class="pair" style="margin-top:12px">
+      <div><span class="tag">Tema oscuro actual</span><div class="dark">Batería 36V nº 1 <div class="m">MRD-HTA-2C1A98 · en nave · hace 3 días</div></div></div>
+      <div><span class="tag new">Tema oscuro propuesta</span><div class="dark new">Batería 36V nº 1 <div class="m">MRD-HTA-2C1A98 · en nave · hace 3 días</div></div></div>
+    </div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-phone"></i> 4 · Móvil y tableta</h2>
+    <p class="sub">Letra base 16 px, iconos de 22 px, botones de 44 px de alto para el dedo. Misma pantalla, sin reorganizar.</p>
+    <div class="pair">
+      <div><span class="tag">Actual</span>
+        <div class="phone"><div class="bar"><i class="bi bi-list"></i> MRD TOOL</div>
+          <div class="row"><i class="bi bi-wrench-adjustable"></i><div>Taladro Hilti TE-6<small>MRD-HTA-2C1A98 · disponible</small></div><button>Entregar</button></div>
+          <div class="row"><i class="bi bi-boxes"></i><div>Guantes nitrilo 9<small>86 ud · 14 paquetes</small></div><button>+1 paq</button></div>
+        </div>
+      </div>
+      <div><span class="tag new">Propuesta</span>
+        <div class="phone new"><div class="bar"><i class="bi bi-list"></i> MRD TOOL</div>
+          <div class="row"><i class="bi bi-wrench-adjustable"></i><div>Taladro Hilti TE-6<small>MRD-HTA-2C1A98 · disponible</small></div><button>Entregar</button></div>
+          <div class="row"><i class="bi bi-boxes"></i><div>Guantes nitrilo 9<small>86 ud · 14 paquetes</small></div><button>+1 paq</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="notes">
+  <h3>Qué cambia por dentro</h3>
+  <ul>
+    <li>Una sola capa nueva al final de <code>static/css/mrd.css</code> ("capa de legibilidad"): letra base 15 px en escritorio y 16 px por debajo de 768 px; los tamaños 0,65–0,78 rem pasan a un mínimo de 0,8 rem (12 px); iconos de menú, tarjetas y listados de 1 rem a 1,2 rem sin opacidad; badges rellenos con letra blanca; botones de 44 px en móvil.</li>
+    <li>Colores: gris secundario de <code>#718096</code> a <code>#5b6577</code> (claro) y de <code>#64748b</code> a <code>#a7b4c4</code> (oscuro); secciones del menú de <code>#475569</code> a <code>#94a3b8</code>; enlaces del menú en <code>#dbe4ee</code>. Todos con contraste mínimo 4,5:1.</li>
+    <li>No se toca ninguna plantilla ni el código del escáner; solo CSS. Si algo se ve peor en una pantalla concreta, se ajusta esa regla sin volver atrás en el resto.</li>
+    <li>Se implementa y se prueba primero en el entorno de pruebas (puerto 8001) y se publica como una sola versión.</li>
+  </ul>
+</div>
+</body>
+</html>

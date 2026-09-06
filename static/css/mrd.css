@@ -2703,3 +2703,191 @@ div[style*="font-size:1.6rem"] {
 .dash-dist-bar.w-98 { width: 98%; }
 .dash-dist-bar.w-99 { width: 99%; }
 .dash-dist-bar.w-100 { width: 100%; }
+
+/* ── Capa de legibilidad (2.7.43): iconos y contraste ──
+   Maqueta designs/iconos-contraste/ aprobada "tal cual". Solo CSS: letra base
+   15 px (16 px en móvil), ningún texto por debajo de 12 px, grises con
+   contraste ≥ 4,5:1, iconos más grandes y a color pleno, botones de 44 px en
+   móvil. Las plantillas y el escáner no cambian. ── */
+html { font-size: 15px; }
+@media (max-width: 768px) { html { font-size: 16px; } }
+:root {
+  --text-muted: #5b6577;
+  --sidebar-text: #dbe4ee;
+  --sidebar-section: #94a3b8;
+}
+[data-theme="dark"] { --text-muted: #a7b4c4; --text-2: #d5deea; }
+
+/* Menú lateral */
+.sidebar-section { font-size: .76rem; letter-spacing: .08em; padding: 14px 16px 6px; }
+.nav-item a { font-size: .95rem; padding: 10px 16px; }
+.nav-item a i { font-size: 1.2rem; width: 24px; color: #7dd3fc; }
+.nav-item a:hover i, .nav-item a.active i { color: #fff; }
+.sidebar-user-info strong { font-size: .9rem; }
+.sidebar-user-info span { font-size: .8rem; color: #a7b4c4; }
+
+/* Tarjetas y KPI */
+.card-title { font-size: 1rem; }
+.card-title i { opacity: 1; font-size: 1.2rem; }
+.kpi-icon { width: 46px; height: 46px; font-size: 1.5rem; border-radius: 12px; }
+.kpi-icon.blue   { background: var(--primary); color: #fff; }
+.kpi-icon.green  { background: var(--success); color: #fff; }
+.kpi-icon.yellow { background: var(--warning); color: #fff; }
+.kpi-icon.red    { background: var(--danger); color: #fff; }
+.kpi-icon.gray   { background: var(--gray); color: #fff; }
+.kpi-icon.info   { background: var(--info); color: #fff; }
+.kpi-icon.orange { background: var(--orange); color: #fff; }
+.kpi-label { font-size: .9rem; color: var(--text-2); font-weight: 600; }
+.page-subtitle { font-size: .9rem; }
+
+/* Listados y etiquetas */
+.mrd-table th, .table th { font-size: .8rem; color: var(--text-2); }
+.mrd-table td, .table td { font-size: .95rem; }
+.badge { font-size: .8rem; padding: 4px 10px; font-weight: 700; }
+.badge-success { background: #15803d; color: #fff; border-color: #15803d; }
+.badge-primary, .badge-info { background: #0e7490; color: #fff; border-color: #0e7490; }
+.badge-warning, .badge-orange { background: #b45309; color: #fff; border-color: #b45309; }
+.badge-danger  { background: #b91c1c; color: #fff; border-color: #b91c1c; }
+.badge-gray    { background: #475569; color: #fff; border-color: #475569; }
+.badge-dark    { color: #e2e8f0; }
+.badge.text-dark { color: #fff !important; }
+.text-muted, .form-hint, .info-label, .table-meta { color: var(--text-muted) !important; }
+
+/* Iconos de listados, Mostrador y dashboard */
+.counter-icon i, .dash-task i, .mov-tool i, .thumb i, .detail-meta i { font-size: 1.2rem; }
+.counter-meta, .dash-money-hint, .mov-muted, .mov-destination, .mov-date, .epi-person-role, .timeline-sub { font-size: .85rem; }
+
+/* Móvil y tableta: objetivo táctil de 44 px */
+@media (max-width: 768px) {
+  .btn, .btn-sm, .form-control, .form-select, .nav-item a, .counter-mode button { min-height: 44px; }
+  .btn-sm { padding: 8px 14px; font-size: .9rem; }
+  .nav-item a i { font-size: 1.35rem; }
+  .counter-icon i, .dash-task i { font-size: 1.4rem; }
+}
+
+/* Mínimo de 12 px: reglas del resto del fichero que bajaban de .8rem */
+.sidebar-section,
+.sidebar-user-info span,
+.search-kbd,
+.kpi-label,
+.mov-count,
+.mov-clear-link,
+.mov-field>span,
+.mov-date,
+.mov-tool code,
+.mov-table td::before,
+.table-meta,
+.smart-table th,
+.badge,
+.btn-sm,
+.form-error,
+.form-hint,
+.detail-code,
+.info-label,
+.timeline-sub,
+.firma-clear-btn,
+.search-drop-sub,
+.chart-doughnut-center span,
+.app-sidebar.mini .nav-item a:hover::after,
+.cfg-eyebrow,
+.cfg-version small,
+.cfg-version span,
+.cfg-shortcut small,
+.cfg-count,
+.cfg-user-name small,
+.cfg-role,
+.cfg-status,
+.cfg-role-item p,
+.cfg-modal-lead,
+.cfg-modal-role-help,
+.timeline-dot,
+.sidebar-count-badge,
+.header-alert-count,
+.header-version,
+.dash-hero-greeting,
+.dash-hero-meta,
+.dash-primary-action,
+.dash-action-count,
+.dash-last-update,
+.dash-mini-label,
+.dash-compact-alert,
+.dash-alert-copy,
+.dash-work-number,
+.people-eyebrow, .epi-eyebrow,
+.people-summary-card small, .epi-summary-card small,
+.people-directory-header small, .epi-directory-header small,
+.people-filter,
+.people-status,
+.people-role,
+.people-contact-list,
+.people-assignment,
+.people-empty span,
+.epi-person-role,
+.counter-eyebrow,
+.counter-section-header small, .counter-section-title small, .dev-layout .form-panel-head small,
+.counter-step,
+.counter-tool-code,
+.counter-tool-meta,
+.counter-category-badge,
+.herr-check i,
+.counter-chip,.chip,
+.counter-chip-icon,
+.counter-optional,
+.counter-success-text,
+.counter-progress-text,
+.tc-check,
+.tc-code,
+.tc-who,
+.tc-estado,
+.counter-count-row span,
+.cond-btn span,
+.progress-label,
+.counter-progress-detail,
+.inventory-eyebrow,.analytics-eyebrow,
+.inventory-code,
+.inventory-serial,
+.inventory-cell-text,
+.inventory-cell-empty,
+.inventory-page-meta,
+.kpi-analytics .lbl,
+.analytics-card-meta,
+.analytics-section-label,
+.util-gauge-sub,
+.analytics-gauge-copy,
+.rank-num,
+.rank-sub,
+.rank-val,
+.export-item,
+.inventory-v2-eyebrow,
+.inventory-status,
+.inventory-zpl,
+.dotation-status,
+.epi-console-eyebrow,
+.epi-console-kpis small,
+.epi-create-head p,.epi-stock-head p,.epi-size-starter p,
+.epi-auto-id,
+.epi-field label,
+.epi-filter-pills button,
+.epi-card-main p,
+.epi-state,
+.epi-card-meta,
+.epi-card-editor .form-control,.epi-card-editor .form-select,.epi-card-editor .btn,
+.epi-stock-alert span,
+.epi-bulk-bar span,
+.epi-bulk-bar label,
+.epi-bulk-bar .btn,
+.epi-stock-head>span,
+.epi-stock-table th,
+.epi-stock-identity strong,
+.epi-stock-identity span,
+.epi-stock-number span,
+.epi-move-form button,
+.epi-qr-button,
+.epi-control-actions select,
+.epi-size-grid strong,
+.epi-size-grid .btn,
+.epi-individual-strip span,
+.warehouse-chip,
+.dash-task small,
+.dash-money small,
+.dash-dist-value small { font-size: .82rem; }
