@@ -68,3 +68,6 @@ desktop.ini
 
 # Afinidad de CPU específica de cada máquina (ver cpu_affinity.py)
 config/cpu_excluir.txt
+
+# Copia fuera del PC (2.7.56): configuracion local, no se publica
+config/backup_externo.json
