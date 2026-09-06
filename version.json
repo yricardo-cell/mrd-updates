@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.42",
-    "nombre":  "MRD TOOL CONTROL -- EPI y ropa solo por Mostrador Unico: panel EPI del trabajador y kit calculado con entregas reales",
+    "version_actual":  "2.7.43",
+    "nombre":  "MRD TOOL CONTROL -- Iconos y contraste: letra base 15/16 px, minimo 12 px, grises 4,5:1, iconos mayores, badges rellenos, 44 px en movil",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "EPI y ropa solo por Mostrador Unico: panel EPI del trabajador y kit calculado con entregas reales"
+                    "Iconos y contraste: letra base 15/16 px, minimo 12 px, grises 4,5:1, iconos mayores, badges rellenos, 44 px en movil"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.42.zip",
-    "sha256":  "48239b78142f85f22fe0327b3c5b557e5bd0cce5095943c7915b0cfcf986f53f"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.43.zip",
+    "sha256":  "073519957715a4331650640ac76d4cdc135b0acd845d1ec1c64422ad4c2c152c"
 }
