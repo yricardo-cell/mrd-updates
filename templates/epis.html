@@ -20,12 +20,12 @@
   </div>
   <div class="epi-header-actions">
     {% if user.rol in ['admin','almacen','encargado_patio'] %}
-    <button class="btn btn-primary mrd-btn" data-bs-toggle="modal" data-bs-target="#modalEntregarKit">
-      <i class="bi bi-shield-fill-check me-1"></i>Entregar Kit EPI
-    </button>
-    <button class="btn btn-warning mrd-btn" data-bs-toggle="modal" data-bs-target="#modalEntregarRopa">
-      <i class="bi bi-bag-fill me-1"></i>Registrar Ropa
-    </button>
+    <a href="/mostrador?modo=salida&epi=1" class="btn btn-primary mrd-btn">
+      <i class="bi bi-lightning-fill me-1"></i>Entregar en Mostrador Único
+    </a>
+    <a href="/mostrador?modo=entrada" class="btn btn-warning mrd-btn">
+      <i class="bi bi-box-arrow-in-down me-1"></i>Entrada de EPI (Mostrador)
+    </a>
     {% endif %}
     <a href="/epis/individuales" class="btn btn-outline-secondary mrd-btn">
       <i class="bi bi-life-preserver me-1"></i>Arneses
@@ -153,12 +153,13 @@
           <td>
             <div class="epi-person-name">{{ r.trabajador.nombre_completo }}</div>
             {% if r.trabajador.cargo %}<div class="epi-person-role">{{ r.trabajador.cargo }}</div>{% endif %}
+            <div class="epi-person-role">{% if r.tallas %}{{ r.tallas }}{% else %}<span class="text-warning">Sin tallas</span>{% endif %}</div>
           </td>
           <td class="text-center">
             {% if r.tiene_epi %}
-            <span class="badge badge-success"><i class="bi bi-check-lg me-1"></i>Entregado</span>
+            <span class="badge badge-success"><i class="bi bi-check-lg me-1"></i>Completo{% if r.ultimo_kit %} · {{ r.ultimo_kit.strftime('%d/%m/%y') }}{% endif %}</span>
             {% else %}
-            <span class="badge badge-danger"><i class="bi bi-exclamation-lg me-1"></i>Pendiente</span>
+            <span class="badge badge-danger" title="{{ r.faltan | join(', ') }}"><i class="bi bi-exclamation-lg me-1"></i>Faltan: {{ r.faltan[:3] | join(', ') }}{% if r.faltan | length > 3 %} +{{ r.faltan | length - 3 }}{% endif %}</span>
             {% endif %}
           </td>
           {% if puede_gestionar_epis %}
@@ -173,19 +174,9 @@
           <td class="text-end">
             <div class="epi-row-actions">
               {% if user.rol in ['admin','almacen','encargado_patio'] %}
-              {% if not r.tiene_epi %}
-              <button class="btn btn-sm btn-primary mrd-btn"
-                      onclick="abrirEntregaRapida({{ r.trabajador.id }}, 'epi')"
-                      title="Registrar entrega completa con artículos">
-                <i class="bi bi-shield-fill-check me-1"></i>Entregar
-              </button>
-              <form method="post" action="/trabajadores/{{ r.trabajador.id }}/epis/marcar-kit"
-                    class="epi-inline-form" onsubmit="return confirm('¿Confirmar que {{ r.trabajador.nombre_completo }} ya tiene su kit EPI?')">
-                <button class="btn btn-sm btn-outline-success mrd-btn" type="submit" title="Ya tiene el kit físicamente">
-                  <i class="bi bi-check2-circle me-1"></i>Ya lo tiene
-                </button>
-              </form>
-              {% endif %}
+              <a href="/mostrador?trabajador={{ r.trabajador.id }}&epi=1" class="btn btn-sm btn-primary mrd-btn" title="Entregar EPI o ropa en el Mostrador Único">
+                <i class="bi bi-lightning-fill me-1"></i>Entregar en Mostrador
+              </a>
               {% endif %}
               <a href="/trabajadores/{{ r.trabajador.id }}/epis"
                  class="btn btn-sm btn-outline-secondary mrd-btn">
@@ -212,254 +203,10 @@
   </div>
 </section>
 
-{% if user.rol in ['admin','almacen','encargado_patio'] %}
-
-<!-- Modal: Entregar Kit EPI -->
-<div class="modal fade" id="modalEntregarKit" tabindex="-1">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
-    <div class="modal-content mrd-modal-dark">
-      <div class="modal-header epi-modal-header is-primary">
-        <h5 class="modal-title"><i class="bi bi-shield-fill-check me-2"></i>Entregar Kit EPI</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <form method="post" id="form-kit" action="/trabajadores/0/epis/entregar">
-        <input type="hidden" name="tipo" value="epi">
-        <input type="hidden" name="n_items" value="{{ kit_epi|length }}">
-        <input type="hidden" name="redirect_to" value="/epis">
-        {% for item in kit_epi %}
-        <input type="hidden" name="item_{{ loop.index0 }}_nombre" value="{{ item.nombre }}">
-        <input type="hidden" name="item_{{ loop.index0 }}_talla" value="">
-        {% endfor %}
-        <div class="modal-body">
-
-          <div class="mb-4">
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <span class="badge rounded-pill bg-primary px-3 py-2">1</span>
-              <span class="fw-bold fs-6">Trabajador</span>
-            </div>
-            <select class="form-select mrd-input" id="sel-kit-worker" required
-                    onchange="onKitWorkerChange(this)">
-              <option value="">-- Selecciona trabajador --</option>
-              {% for r in resumen %}
-              <option value="{{ r.trabajador.id }}"
-                      data-tiene="{{ 'true' if r.tiene_epi else 'false' }}">
-                {{ r.trabajador.nombre_completo }}{% if not r.tiene_epi %} (sin kit EPI){% endif %}
-              </option>
-              {% endfor %}
-            </select>
-            <div id="aviso-tiene-kit" class="alert alert-info small py-2 mt-2 epi-inline-alert">
-              <i class="bi bi-info-circle me-1"></i>
-              Este trabajador ya recibio el kit EPI. Puedes entregar articulos adicionales igualmente.
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <span class="badge rounded-pill bg-primary px-3 py-2">2</span>
-              <span class="fw-bold fs-6">Articulos del kit</span>
-              <span class="text-muted small">(desmarca los que no apliquen)</span>
-            </div>
-            {% if kit_epi %}
-            {% for item in kit_epi %}
-            <div class="epi-kit-row">
-              <input type="checkbox" id="chk_kit_{{ loop.index0 }}"
-                     name="item_{{ loop.index0 }}_checked" checked
-                     class="form-check-input flex-shrink-0 epi-kit-check">
-              <label for="chk_kit_{{ loop.index0 }}" class="flex-grow-1 fw-semibold mb-0 epi-kit-label">{{ item.nombre }}</label>
-              <input type="number" name="item_{{ loop.index0 }}_cantidad"
-                     value="{{ item.cantidad }}" min="1" max="99"
-                     class="form-control form-control-sm mrd-input text-center epi-qty-input">
-              <span class="text-muted small">ud.</span>
-            </div>
-            {% endfor %}
-            {% else %}
-            <p class="text-muted small">No hay articulos en el catalogo. <a href="/epis/catalogo">Editar catalogo</a></p>
-            {% endif %}
-          </div>
-
-          <!-- Articulos adicionales libres -->
-          <div class="pt-3 border-top">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div>
-                <span class="fw-semibold small">Articulos adicionales</span>
-                <span class="text-muted small ms-1">- herramientas, guantes sueltos, o cualquier otro articulo</span>
-              </div>
-              <button type="button" class="btn btn-sm btn-outline-secondary mrd-btn"
-                      onclick="anadirExtra('kit')">
-                <i class="bi bi-plus-lg me-1"></i>Anadir articulo
-              </button>
-            </div>
-            <div id="extras-kit"></div>
-            <input type="hidden" id="n-extra-kit" name="n_extra" value="0">
-          </div>
-
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary mrd-btn" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" id="btn-submit-kit" class="btn btn-primary mrd-btn" disabled>
-            <i class="bi bi-check-lg me-1"></i>Confirmar entrega
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<!-- Modal: Registrar Ropa -->
-<div class="modal fade" id="modalEntregarRopa" tabindex="-1">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
-    <div class="modal-content mrd-modal-dark">
-      <div class="modal-header epi-modal-header is-orange">
-        <h5 class="modal-title"><i class="bi bi-bag-fill me-2"></i>Registrar Ropa de trabajo</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <form method="post" id="form-ropa" action="/trabajadores/0/epis/entregar">
-        <input type="hidden" name="tipo" value="ropa">
-        <input type="hidden" name="n_items" value="{{ kit_ropa|length }}">
-        <input type="hidden" name="redirect_to" value="/epis">
-        {% for item in kit_ropa %}
-        <input type="hidden" name="item_{{ loop.index0 }}_nombre" value="{{ item.nombre }}">
-        {% endfor %}
-        <div class="modal-body">
-
-          <div class="mb-4">
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <span class="badge rounded-pill px-3 py-2 epi-step-orange">1</span>
-              <span class="fw-bold fs-6">Trabajador</span>
-            </div>
-            <select class="form-select mrd-input" id="sel-ropa-worker" required
-                    onchange="onRopaWorkerChange(this)">
-              <option value="">-- Selecciona trabajador --</option>
-              {% for r in resumen %}
-              <option value="{{ r.trabajador.id }}"
-                      data-vencida="{{ 'true' if r.ropa_vencida else 'false' }}">
-                {{ r.trabajador.nombre_completo }}{% if r.ropa_vencida %} (renovar ropa){% endif %}
-              </option>
-              {% endfor %}
-            </select>
-            <div id="aviso-ropa-vencida" class="alert alert-warning small py-2 mt-2 epi-inline-alert">
-              <i class="bi bi-exclamation-triangle me-1"></i>
-              La ropa de este trabajador esta pendiente de renovacion.
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <span class="badge rounded-pill px-3 py-2 epi-step-orange">2</span>
-              <span class="fw-bold fs-6">Prendas</span>
-              <span class="text-muted small">(selecciona solo las que se entregan, indica la talla)</span>
-            </div>
-            {% if kit_ropa %}
-            {% for item in kit_ropa %}
-            <div class="epi-kit-row epi-clothing-row">
-              <input type="checkbox" id="chk_ropa_{{ loop.index0 }}"
-                     name="item_{{ loop.index0 }}_checked" checked
-                     class="form-check-input flex-shrink-0 epi-kit-check">
-              <label for="chk_ropa_{{ loop.index0 }}" class="flex-grow-1 fw-semibold mb-0 epi-kit-label">{{ item.nombre }}</label>
-              <input type="text" name="item_{{ loop.index0 }}_talla" placeholder="Talla"
-                     class="form-control form-control-sm mrd-input text-center epi-size-input">
-              <input type="number" name="item_{{ loop.index0 }}_cantidad"
-                     value="{{ item.cantidad }}" min="1" max="99"
-                     class="form-control form-control-sm mrd-input text-center epi-qty-input">
-              <span class="text-muted small">ud.</span>
-            </div>
-            {% endfor %}
-            {% else %}
-            <p class="text-muted small">No hay prendas en el catalogo. <a href="/epis/catalogo">Editar catalogo</a></p>
-            {% endif %}
-          </div>
-
-          <!-- Articulos adicionales libres -->
-          <div class="pt-3 border-top">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div>
-                <span class="fw-semibold small">Articulos adicionales</span>
-                <span class="text-muted small ms-1">- martillo, cuchillo, cualquier utensilio suelto</span>
-              </div>
-              <button type="button" class="btn btn-sm btn-outline-secondary mrd-btn"
-                      onclick="anadirExtra('ropa')">
-                <i class="bi bi-plus-lg me-1"></i>Anadir articulo
-              </button>
-            </div>
-            <div id="extras-ropa"></div>
-            <input type="hidden" id="n-extra-ropa" name="n_extra" value="0">
-          </div>
-
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary mrd-btn" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" id="btn-submit-ropa" class="btn mrd-btn epi-submit-orange" disabled>
-            <i class="bi bi-check-lg me-1"></i>Confirmar entrega
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-{% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// Artículos adicionales libres
-const _extraCount = { kit: 0, ropa: 0 };
-
-function anadirExtra(prefix) {
-  const n = _extraCount[prefix]++;
-  document.getElementById('n-extra-' + prefix).value = _extraCount[prefix];
-  const container = document.getElementById('extras-' + prefix);
-  const row = document.createElement('div');
-  row.className = 'epi-extra-row';
-  row.id = 'extra-row-' + prefix + '-' + n;
-  row.innerHTML =
-    '<input type="text" name="extra_' + n + '_nombre" placeholder="Articulo (ej: Martillo, Pantalon suelto...)" ' +
-      'class="form-control form-control-sm mrd-input flex-grow-1">' +
-    '<input type="text" name="extra_' + n + '_talla" placeholder="Talla" ' +
-      'class="form-control form-control-sm mrd-input text-center epi-extra-size">' +
-    '<input type="number" name="extra_' + n + '_cantidad" value="1" min="1" max="9999" ' +
-      'class="form-control form-control-sm mrd-input text-center epi-extra-qty">' +
-    '<span class="text-muted small">ud.</span>' +
-    '<button type="button" class="btn btn-sm btn-outline-danger mrd-btn" ' +
-      'onclick="document.getElementById(\'extra-row-' + prefix + '-' + n + '\').remove()" ' +
-      'title="Quitar"><i class="bi bi-x-lg"></i></button>';
-  container.appendChild(row);
-  row.querySelector('input[type="text"]').focus();
-}
-
-// Worker changes
-function onKitWorkerChange(sel) {
-  const tid = sel.value;
-  document.getElementById('form-kit').action =
-    tid ? '/trabajadores/' + tid + '/epis/entregar' : '/trabajadores/0/epis/entregar';
-  document.getElementById('btn-submit-kit').disabled = !tid;
-  const opt = sel.options[sel.selectedIndex];
-  document.getElementById('aviso-tiene-kit').style.display =
-    (opt && opt.dataset.tiene === 'true') ? 'block' : 'none';
-}
-
-function onRopaWorkerChange(sel) {
-  const tid = sel.value;
-  document.getElementById('form-ropa').action =
-    tid ? '/trabajadores/' + tid + '/epis/entregar' : '/trabajadores/0/epis/entregar';
-  document.getElementById('btn-submit-ropa').disabled = !tid;
-  const opt = sel.options[sel.selectedIndex];
-  document.getElementById('aviso-ropa-vencida').style.display =
-    (opt && opt.dataset.vencida === 'true') ? 'block' : 'none';
-}
-
-function abrirEntregaRapida(tid, tipo) {
-  if (tipo === 'epi') {
-    const sel = document.getElementById('sel-kit-worker');
-    if (sel) { sel.value = tid; onKitWorkerChange(sel); }
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEntregarKit')).show();
-  } else {
-    const sel = document.getElementById('sel-ropa-worker');
-    if (sel) { sel.value = tid; onRopaWorkerChange(sel); }
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEntregarRopa')).show();
-  }
-}
-
 let _tabActual = 'pendientes';
 
 function setTabEpi(tab) {

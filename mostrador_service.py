@@ -82,6 +82,19 @@ def _tool_extra(db: Session, tool) -> dict:
     return extra
 
 
+def stock_epi_counter_item(db: Session, stock) -> dict:
+    """Línea de carrito de una referencia de EPI o ropa de stock (la usan el
+    escaneo y el panel 'EPI del trabajador' del Mostrador, 2.7.42)."""
+    return _item(
+        "stock_epi", stock.id, stock.codigo, stock.nombre_display,
+        f"Stock {stock.cantidad}", True, int(stock.cantidad),
+        categoria=stock.categoria, talla=stock.talla or "",
+        stock_minimo=stock.stock_minimo, bajo_minimo=stock.bajo_minimo,
+        tipo_seguimiento=getattr(stock, "tipo_seguimiento", "generico"),
+        unidades_por_paquete=int(getattr(stock, "unidades_por_paquete", 1) or 1),
+    )
+
+
 def resolve_counter_item(db: Session, raw_code: str, warehouse_id: int | None = None) -> dict:
     """Resuelve todo articulo operable sin modificar ningun dato."""
     legacy_code = _legacy_url_code(db, raw_code)
@@ -181,13 +194,7 @@ def resolve_counter_item(db: Session, raw_code: str, warehouse_id: int | None = 
     )).scalar_one_or_none()
     stock_catalog = db.query(CatalogoEPI).filter(CatalogoEPI.nombre == stock.nombre).first() if stock else None
     if stock and (not stock_catalog or stock_catalog.activo):
-        return _item(
-            "stock_epi", stock.id, stock.codigo, stock.nombre_display,
-            f"Stock {stock.cantidad}", True, int(stock.cantidad),
-            categoria=stock.categoria, talla=stock.talla or "",
-            stock_minimo=stock.stock_minimo, bajo_minimo=stock.bajo_minimo,
-            tipo_seguimiento=getattr(stock, "tipo_seguimiento", "generico"),
-        )
+        return stock_epi_counter_item(db, stock)
 
     material = db.execute(select(Material).where(
         Material.activo == True, Material.codigo.in_(codes),

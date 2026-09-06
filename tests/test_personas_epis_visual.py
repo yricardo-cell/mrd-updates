@@ -65,7 +65,8 @@ def test_epis_renderiza_resumen_tabla_y_modales():
     worker = _worker()
     context = _base_context("/epis")
     context.update(
-        resumen=[SimpleNamespace(trabajador=worker, tiene_epi=False, ropa_vencida=True)],
+        resumen=[SimpleNamespace(trabajador=worker, tiene_epi=False, ropa_vencida=True,
+                                 faltan=["Casco"], ultimo_kit=None, tallas="Ropa L · Calzado 42")],
         pendientes_epi=1,
         kit_epi=[SimpleNamespace(nombre="Casco", cantidad=1)],
         kit_ropa=[SimpleNamespace(nombre="Pantalón", cantidad=1)],
@@ -76,10 +77,10 @@ def test_epis_renderiza_resumen_tabla_y_modales():
     assert "Ropa por renovar" in html
     assert 'id="tabla-trabajadores-epis"' in html
     assert "Ana Prueba" in html
-    assert 'id="modalEntregarKit"' in html
-    assert 'id="modalEntregarRopa"' in html
-    assert 'name="item_0_checked"' in html
-    assert 'name="item_0_cantidad"' in html
+    # 2.7.42: sin modales de entrega; todo por el Mostrador Único
+    assert 'id="modalEntregarKit"' not in html
+    assert "Entregar en Mostrador" in html and "/mostrador?trabajador=" in html
+    assert "Faltan: Casco" in html and "Ropa L · Calzado 42" in html
 
 
 def test_conserva_rutas_campos_permisos_y_javascript_clave():
@@ -95,23 +96,22 @@ def test_conserva_rutas_campos_permisos_y_javascript_clave():
         "/epis/stock",
         "/epis/catalogo",
         "/informes/epis/excel",
-        "/trabajadores/0/epis/entregar",
     }
     routes = set(re.findall(r'(?:href|action)="(/[^"]*)"', combined))
     assert required_routes <= routes
+    assert "/mostrador?trabajador=" in epis and "/trabajadores/0/epis/entregar" not in epis  # 2.7.42
 
     for field in (
         "nombre", "apellidos", "dni", "telefono", "email", "cargo", "empresa",
-        "departamento", "observaciones", "tipo", "n_items", "redirect_to", "n_extra",
+        "departamento", "observaciones",
     ):
         assert f'name="{field}"' in combined
 
     assert workers.count("user.rol in ['admin','almacen','encargado_patio']") == 2
-    assert epis.count("user.rol in ['admin','almacen','encargado_patio']") >= 3
-    for function in (
-        "editarTrabajador", "anadirExtra", "onKitWorkerChange",
-        "onRopaWorkerChange", "abrirEntregaRapida", "filtrarTablaEpis",
-    ):
+    assert epis.count("user.rol in ['admin','almacen','encargado_patio']") >= 2
+    # 2.7.42: las funciones de los modales de entrega (anadirExtra, onKitWorkerChange,
+    # onRopaWorkerChange, abrirEntregaRapida) desaparecen con los modales.
+    for function in ("editarTrabajador", "filtrarTablaEpis", "setTabEpi"):
         assert f"function {function}" in combined
 
 

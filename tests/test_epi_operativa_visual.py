@@ -69,23 +69,9 @@ def _user(db, rol="encargado_patio"):
     return user
 
 
-def test_entrada_nueva_crea_codigo_qr_y_movimiento_atomico(tmp_path):
-    engine, Session = _session(tmp_path)
-    with Session() as db:
-        user = _user(db)
-        response = epis_stock_entrada(
-            _request(), user, db, nombre="GUANTE QR", cantidad=12,
-            talla="", tipo_seguimiento="generico",
-        )
-        stock = db.query(StockEPI).filter_by(nombre="GUANTE QR").one()
-        assert response.status_code == 303
-        assert stock.codigo == f"SEPI-{stock.id:04d}"
-        assert stock.cantidad == 12
-        assert db.query(MovimientoStock).filter_by(stock_epi_id=stock.id).count() == 1
-    engine.dispose()
-
-
-def test_salida_insuficiente_no_descuenta_ni_crea_movimiento(tmp_path):
+def test_entrada_y_salida_manual_de_stock_llevan_al_mostrador(tmp_path):
+    """2.7.42: entradas y salidas de EPI solo por el Mostrador Único; las rutas
+    antiguas redirigen sin crear referencias ni tocar existencias."""
     engine, Session = _session(tmp_path)
     with Session() as db:
         user = _user(db)
@@ -95,13 +81,13 @@ def test_salida_insuficiente_no_descuenta_ni_crea_movimiento(tmp_path):
         )
         db.add(stock)
         db.commit()
-        with pytest.raises(HTTPException) as exc:
-            epis_stock_salida(
-                _request(), user, db, nombre=stock.nombre, cantidad=3, talla="42",
-            )
-        assert exc.value.status_code == 409
+        entrada = epis_stock_entrada(_request(), user)
+        salida = epis_stock_salida(_request(), user)
+        assert entrada.status_code == 303 and entrada.headers["location"].startswith("/mostrador?modo=entrada")
+        assert salida.status_code == 303 and salida.headers["location"].startswith("/mostrador?modo=salida")
         db.expire_all()
         assert db.get(StockEPI, stock.id).cantidad == 2
+        assert db.query(StockEPI).filter_by(nombre="GUANTE QR").count() == 0
         assert db.query(MovimientoStock).count() == 0
     engine.dispose()
 
@@ -207,7 +193,8 @@ def test_pantallas_incluyen_alta_qr_operaciones_y_etiquetas_masivas():
     stock = (root / "templates" / "epis_stock.html").read_text(encoding="utf-8")
     config = (root / "templates" / "configuracion.html").read_text(encoding="utf-8")
     assert "Código y QR automáticos" in catalog
-    assert "/epis/stock/entrada" in stock and "/epis/stock/salida" in stock
+    # 2.7.42: entradas y salidas solo por el Mostrador Único
+    assert "/mostrador?modo=entrada" in stock and "/epis/stock/entrada" not in stock
     assert "/epis/stock/etiquetas" in stock and "Zebra" in stock
     assert "Añadir tallas o medidas" in stock and "Ej. XS, 3XL, 40 o 52" in stock
     assert "/admin/recuperar-sistema" in config

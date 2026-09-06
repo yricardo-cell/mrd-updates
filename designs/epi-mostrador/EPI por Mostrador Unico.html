@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MRD · Maqueta: EPI solo por Mostrador Único</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  :root{--bg:#0b1220;--surface:#111a2e;--surface2:#16213a;--border:#22304d;--text:#e2e8f0;--muted:#94a3b8;--cyan:#22d3ee;--green:#34d399;--amber:#f59e0b;--red:#f87171;--violet:#a78bfa}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 28px 8px}header h1{margin:0 0 4px;font-size:20px}header p{margin:0;color:var(--muted);max-width:1080px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:18px;padding:8px 28px 28px}
+  .screen{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px}
+  .screen h2{margin:0 0 2px;font-size:16px}.screen .sub{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .pill{background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:12px;white-space:nowrap}
+  .pill.ok{border-color:var(--green);color:var(--green)}.pill.warn{border-color:var(--amber);color:var(--amber)}.pill.bad{border-color:var(--red);color:var(--red)}
+  .btn{border:0;border-radius:9px;padding:9px 13px;font:inherit;font-weight:700;cursor:pointer;white-space:nowrap}
+  .btn.primary{background:var(--cyan);color:#0b1220}.btn.ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .btn.sm{padding:6px 10px;font-size:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}th{color:var(--muted);font-weight:600;text-align:left;padding:8px 6px;border-bottom:1px solid var(--border);font-size:12px}td{padding:9px 6px;border-bottom:1px solid var(--border);vertical-align:middle}
+  .cart{background:#0b1220;border:1px solid var(--border);border-radius:12px;padding:10px;margin-top:10px}
+  .line{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+  .line small{display:block;color:var(--muted)}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .chip{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12.5px;cursor:pointer;display:flex;gap:8px;align-items:center}
+  .chip b{color:var(--cyan)}.chip.off{opacity:.55;border-style:dashed}
+  .note{background:#1c2740;border-left:3px solid var(--cyan);padding:8px 12px;border-radius:8px;font-size:13px;margin-top:10px}
+  .del{text-decoration:line-through;color:var(--red)}
+  .notes{padding:0 28px 40px;max-width:1080px}.notes h3{font-size:15px;margin:18px 0 6px}.notes ul{padding-left:18px}.notes li{margin:4px 0}
+  .field{display:grid;gap:4px}.field label{color:var(--muted);font-size:12px}.field input,.field select{background:#0b1220;border:1px solid var(--border);color:#fff;border-radius:8px;padding:7px 9px;font:inherit;min-width:110px}
+</style>
+</head>
+<body>
+<header>
+  <h1>EPI y ropa: una sola puerta, el Mostrador Único</h1>
+  <p>Hoy hay tres formas paralelas de dar EPI (modales en "EPIs y ropa", botones +/- en "Inventario EPI", modales en la ficha del trabajador) además del Mostrador. La propuesta deja <b>una sola vía de salida y de entrada</b>: el Mostrador Único, con un panel "EPI del trabajador" que ya sabe sus tallas y el kit básico. Las otras pantallas pasan a consulta, tallas, mínimos y etiquetas.</p>
+</header>
+<div class="grid">
+
+  <section class="screen">
+    <h2><i class="bi bi-shield-check"></i> 1 · EPIs y ropa (menú EPI)</h2>
+    <p class="sub">Vista por trabajador: qué tiene, qué le falta y un único botón de entrega. Desaparecen "Entregar Kit EPI" y "Registrar ropa" como formularios aparte.</p>
+    <div class="row" style="justify-content:space-between;margin-bottom:8px">
+      <div class="row"><span class="pill">14 trabajadores</span><span class="pill warn">3 con kit incompleto</span><span class="pill">Ropa con más de 12 meses: 5</span></div>
+      <div class="row"><button class="btn ghost sm"><i class="bi bi-box-arrow-in-down"></i> Entrada de EPI (Mostrador)</button><button class="btn ghost sm"><i class="bi bi-gear"></i> Kit básico</button></div>
+    </div>
+    <table>
+      <tr><th>Trabajador</th><th>Tallas</th><th>Kit básico</th><th>Última ropa</th><th></th></tr>
+      <tr><td>Ana Pérez</td><td>Ropa L · Calzado 42</td><td><span class="pill ok">Completo · 12/08</span></td><td>02/2026</td><td><button class="btn primary sm"><i class="bi bi-lightning-fill"></i> Entregar en Mostrador</button></td></tr>
+      <tr><td>Erick Gómez</td><td>Ropa XL · Calzado 44</td><td><span class="pill warn">Faltan: gafas, guantes</span></td><td>11/2025</td><td><button class="btn primary sm"><i class="bi bi-lightning-fill"></i> Entregar en Mostrador</button></td></tr>
+      <tr><td>Luis Mora</td><td><span class="pill bad">Sin tallas</span></td><td><span class="pill bad">Sin kit</span></td><td>—</td><td><button class="btn primary sm"><i class="bi bi-lightning-fill"></i> Entregar en Mostrador</button></td></tr>
+    </table>
+    <div class="note">"Completo / Faltan" se calcula con lo entregado de verdad (albaranes del Mostrador y entregas antiguas), no con la marca manual "marcar kit", que desaparece.</div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-upc-scan"></i> 2 · Mostrador Único: panel "EPI del trabajador"</h2>
+    <p class="sub">Al elegir el trabajador (o llegar desde el botón anterior) aparece este panel bajo el carrito. Las tallas se toman de su ficha y se pueden corregir aquí mismo.</p>
+    <div class="row"><div class="field"><label>Trabajador</label><select><option>Erick Gómez</option></select></div><div class="field"><label>Talla ropa</label><select><option>XL</option></select></div><div class="field"><label>Calzado</label><select><option>44</option></select></div><button class="btn primary"><i class="bi bi-stars"></i> Añadir kit básico (lo que falta)</button></div>
+    <div class="chips">
+      <span class="chip"><i class="bi bi-plus-circle"></i> Casco <b>1</b> <small>stock 12</small></span>
+      <span class="chip"><i class="bi bi-plus-circle"></i> Gafas <b>1</b> <small>stock 30</small></span>
+      <span class="chip"><i class="bi bi-plus-circle"></i> Guantes nitrilo 9 <b>1 paq (6)</b> <small>stock 86</small></span>
+      <span class="chip"><i class="bi bi-plus-circle"></i> Botas 44 <b>1</b> <small>stock 3</small></span>
+      <span class="chip"><i class="bi bi-plus-circle"></i> Pantalón XL <b>2</b> <small>stock 9</small></span>
+      <span class="chip off"><i class="bi bi-x-circle"></i> Chaleco XL <b>1</b> <small>sin stock</small></span>
+      <span class="chip"><i class="bi bi-fingerprint"></i> Arnés (individual, con QR) <small>escanear</small></span>
+    </div>
+    <div class="cart">
+      <div class="line"><div>Gafas de protección<small>EPI · talla única</small></div><span class="pill">1 ud</span><button class="btn ghost sm">Quitar</button></div>
+      <div class="line"><div>Guantes nitrilo talla 9<small>EPI · 6 pares por paquete</small></div><span class="pill">6 ud (1 paq)</span><button class="btn ghost sm">Quitar</button></div>
+      <div class="line"><div>Pantalón de trabajo XL<small>Ropa</small></div><span class="pill">2 ud</span><button class="btn ghost sm">Quitar</button></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn primary">Confirmar salida a Erick Gómez (3 líneas)</button><span class="pill">Albarán + registro de entrega EPI + aviso al portal, como hoy</span></div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-box-seam"></i> 3 · Inventario EPI y ropa (stock)</h2>
+    <p class="sub">Las entradas de material nuevo se hacen en el Mostrador en modo <b>Entrada</b> (origen: proveedor o albarán), escaneando el QR de cada referencia y talla o usando "+1 paquete". La pantalla de stock deja de mover existencias a mano.</p>
+    <table>
+      <tr><th>Referencia</th><th>Talla</th><th>Stock</th><th>Mínimo</th><th>Paquete</th><th></th></tr>
+      <tr><td>Guantes nitrilo</td><td>9</td><td>86 <small>(14 paq + 2)</small></td><td>24</td><td>6</td><td><span class="del">+ / −</span> &nbsp; <button class="btn ghost sm">QR</button> <button class="btn ghost sm">Mínimo</button></td></tr>
+      <tr><td>Botas seguridad</td><td>44</td><td><span class="pill bad">3</span></td><td>4</td><td>1</td><td><span class="del">+ / −</span> &nbsp; <button class="btn ghost sm">QR</button> <button class="btn ghost sm">Mínimo</button></td></tr>
+    </table>
+    <div class="row" style="margin-top:10px"><button class="btn primary sm"><i class="bi bi-box-arrow-in-down"></i> Entrada en Mostrador Único</button><button class="btn ghost sm"><i class="bi bi-plus-lg"></i> Nueva referencia o talla</button><button class="btn ghost sm"><i class="bi bi-clipboard-check"></i> Ajustar por inventario guiado</button></div>
+    <div class="note">Se conserva: alta de referencias y tallas (con unidades por paquete), stock mínimo, etiquetas QR y el historial de movimientos (solo lectura). Los ajustes de diferencias van por el inventario guiado, no por botones sueltos.</div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-person-badge"></i> 4 · Ficha del trabajador: EPIs y ropa</h2>
+    <p class="sub">Historial real y tallas. Un solo botón de entrega; los arneses y EPI con QR propio siguen asignándose por escaneo.</p>
+    <div class="row" style="justify-content:space-between"><div class="row"><span class="pill">Ropa XL</span><span class="pill">Calzado 44</span><span class="pill warn">Kit: faltan gafas, guantes</span></div><button class="btn primary sm"><i class="bi bi-lightning-fill"></i> Entregar en Mostrador Único</button></div>
+    <table style="margin-top:10px">
+      <tr><th>Fecha</th><th>Qué</th><th>Vía</th><th>Albarán</th></tr>
+      <tr><td>06/09/2026</td><td>Pantalón XL ×2, Guantes 9 ×6</td><td>Mostrador Único</td><td><a href="#" style="color:var(--cyan)">ALB-2026-0412</a></td></tr>
+      <tr><td>12/05/2026</td><td>Casco, Botas 44</td><td>Entrega antigua (formulario)</td><td>—</td></tr>
+      <tr><td>03/02/2026</td><td>Arnés HAR-0021 (individual)</td><td>Asignación por QR</td><td>—</td></tr>
+    </table>
+    <div class="note">El portal del trabajador ya muestra estas entregas y le pide conformidad del albarán; no cambia.</div>
+  </section>
+</div>
+<div class="notes">
+  <h3>Qué cambia por dentro</h3>
+  <ul>
+    <li>Se retiran los formularios de entrega manual (<code>/trabajadores/{id}/epis/entregar</code>, "marcar kit") y los botones +/- de <code>/epis/stock</code>; sus rutas quedan respondiendo con un aviso que lleva al Mostrador, para no romper enlaces guardados.</li>
+    <li>El Mostrador gana el panel "EPI del trabajador": lee <code>talla_ropa</code> y <code>talla_calzado</code> del trabajador, el kit básico del catálogo (<code>cantidad_kit</code>) y el stock por talla; "Añadir kit básico" mete solo lo que falta según lo ya entregado. Nada cambia en el registro final: albarán, entrega EPI y aviso al portal se generan igual que hoy.</li>
+    <li>"Kit completo / faltan" se calcula con las entregas reales de los últimos 12 meses (o el plazo que se defina por artículo).</li>
+    <li>No se borra ningún dato: las entregas antiguas siguen en el historial con la etiqueta "entrega antigua (formulario)".</li>
+    <li>Todo se implementa y prueba primero en el entorno de pruebas (puerto 8001) y se publica como una sola versión.</li>
+  </ul>
+</div>
+</body>
+</html>

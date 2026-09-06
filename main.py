@@ -147,6 +147,7 @@ from recepcion_service import find_variant, receive_supply
 from mostrador_service import (
     CounterError, allowed_counter_types, operate_counter,
     resolve_counter_item, search_counter_items,
+    stock_epi_counter_item,
 )
 from scanner_service import normalize_scanned_code, scan_code_candidates
 from warehouse_service import (
@@ -2884,6 +2885,53 @@ async def trabajador_editar(
 
 # ─── EPIs y Ropa de trabajo ───────────────────────────────────────────────────
 
+KIT_EPI_MESES_VIGENCIA = 12
+
+
+def _entregas_epi_items(db, trabajador_id: int, meses: int = KIT_EPI_MESES_VIGENCIA):
+    """Cantidades entregadas por artículo (nombre en minúsculas) en los últimos
+    `meses`, si existe una marca manual antigua de kit y la fecha de la última
+    entrega. Cuenta todas las vías: Mostrador Único y formularios antiguos."""
+    desde = datetime.utcnow() - timedelta(days=30 * meses)
+    cantidades: dict = {}
+    marca_manual = False
+    ultima = None
+    for e in db.query(EntregaEPI).filter(EntregaEPI.trabajador_id == trabajador_id).all():
+        if ultima is None or (e.fecha and e.fecha > ultima):
+            ultima = e.fecha
+        try:
+            items = json.loads(e.items_json or "[]")
+        except (TypeError, ValueError):
+            items = []
+        if e.tipo == "epi" and not items:
+            marca_manual = True   # 'Ya lo tiene' de versiones anteriores
+            continue
+        if e.fecha and e.fecha < desde:
+            continue
+        for it in items:
+            nombre = str((it or {}).get("nombre", "")).strip().lower()
+            if nombre:
+                try:
+                    cantidad = int((it or {}).get("cantidad") or 1)
+                except (TypeError, ValueError):
+                    cantidad = 1
+                cantidades[nombre] = cantidades.get(nombre, 0) + cantidad
+    return cantidades, marca_manual, ultima
+
+
+def _kit_epi_estado(db, trabajador_id: int, kit_epi: list) -> dict:
+    """Qué falta del kit básico según las entregas reales (2.7.42). Sustituye
+    a la marca manual 'ya lo tiene'; las marcas antiguas siguen contando."""
+    cantidades, marca_manual, ultima = _entregas_epi_items(db, trabajador_id)
+    faltan = []
+    if not marca_manual:
+        for item in kit_epi:
+            nombre = str(item.get("nombre", "")).strip()
+            if nombre and cantidades.get(nombre.lower(), 0) < int(item.get("cantidad") or 1):
+                faltan.append(nombre)
+    return {"faltan": faltan, "completo": not faltan, "ultima": ultima, "entregado": cantidades}
+
+
 @app.get("/epis", response_class=HTMLResponse)
 def epis_panel(request: Request, user: Usuario = Depends(requiere_login),
                db: Session = Depends(get_db)):
@@ -2905,10 +2953,15 @@ def epis_panel(request: Request, user: Usuario = Depends(requiere_login),
         for e in todas_entregas:
             entregas_por_trabajador.setdefault(e.trabajador_id, []).append(e)
 
+    cat_epi_kit = db.query(CatalogoEPI).filter(
+        CatalogoEPI.categoria == "epi", CatalogoEPI.activo == True,
+    ).order_by(CatalogoEPI.orden, CatalogoEPI.nombre).all()
+    kit_epi_lista = [{"nombre": c.nombre, "cantidad": c.cantidad_kit} for c in cat_epi_kit] or KIT_EPI_INICIAL
     resumen = []
     for t in trabajadores:
         entregas = entregas_por_trabajador.get(t.id, [])
-        tiene_epi = any(e.tipo == "epi" for e in entregas)
+        kit = _kit_epi_estado(db, t.id, kit_epi_lista)
+        tiene_epi = kit["completo"]
         ultima_ropa = next(
             (e for e in sorted([e for e in entregas if e.tipo == "ropa"],
                                key=lambda x: x.fecha, reverse=True)),
@@ -2919,6 +2972,12 @@ def epis_panel(request: Request, user: Usuario = Depends(requiere_login),
         resumen.append({
             "trabajador": t,
             "tiene_epi": tiene_epi,
+            "faltan": kit["faltan"],
+            "ultimo_kit": kit["ultima"],
+            "tallas": " · ".join(filter(None, [
+                f"Ropa {t.talla_ropa}" if t.talla_ropa else "",
+                f"Calzado {t.talla_calzado}" if t.talla_calzado else "",
+            ])),
             "ultima_ropa": ultima_ropa,
             "ropa_vencida": ropa_vencida,
             "dias_ropa": dias_ropa,
@@ -2996,9 +3055,11 @@ def trabajador_epis(tid: int, request: Request,
         AlbaranSalida.responsable_id == tid,
     ).order_by(AlbaranSalida.fecha_salida.desc()).limit(30).all()
 
+    kit_estado = _kit_epi_estado(db, tid, kit_epi_t)
     return templates.TemplateResponse(request, "trabajador_epis.html", ctx_base(
         request, user, db,
         trabajador=t,
+        kit_estado=kit_estado,
         entregas=entregas,
         kit_epi=kit_epi_t,
         kit_ropa=kit_ropa_t,
@@ -3010,141 +3071,18 @@ def trabajador_epis(tid: int, request: Request,
 
 
 @app.post("/trabajadores/{tid}/epis/entregar")
-async def trabajador_epi_entregar(
-    tid: int,
-    request: Request,
-    user: Usuario = Depends(requiere_login),
-    db: Session = Depends(get_db),
-):
-    form = await request.form()
-    tipo = form.get("tipo", "epi")
-    firmado_por = form.get("firmado_por", "")
-    observaciones = form.get("observaciones", "")
-    firma_base64 = form.get("firma_base64", "") or None
-    if not (tiene_permiso(user, "crear") or tiene_permiso(user, "stock_operar")):
-        raise HTTPException(403, "Sin permiso")
-    t = db.query(Trabajador).get(tid)
-    if t:
-        _require_warehouse_access(user, t.almacen_id)
-    if not t:
-        raise HTTPException(404, "Trabajador no encontrado")
-
-    # ── Procesado flexible: el usuario elige qué artículos incluye ──────────────
-    items = []
-
-    # Artículos del catálogo: cada uno tiene item_N_nombre (hidden) +
-    # item_N_checked (checkbox) + item_N_cantidad + item_N_talla (ropa)
-    n_items = int(form.get("n_items", 0) or 0)
-    for i in range(n_items):
-        if not form.get(f"item_{i}_checked"):
-            continue  # no marcado → no se entrega
-        nombre   = (form.get(f"item_{i}_nombre",   "") or "").strip()
-        cantidad = max(1, int(form.get(f"item_{i}_cantidad", 1) or 1))
-        talla    = (form.get(f"item_{i}_talla",    "") or "").strip() or None
-        if nombre:
-            items.append({"nombre": nombre, "cantidad": cantidad, "talla": talla})
-
-    # Artículos extra libres (nombre escrito a mano)
-    n_extra = int(form.get("n_extra", 0) or 0)
-    for i in range(n_extra):
-        nombre_e = (form.get(f"extra_{i}_nombre",   "") or "").strip().upper()
-        if not nombre_e:
-            continue
-        cantidad_e = max(1, int(form.get(f"extra_{i}_cantidad", 1) or 1))
-        talla_e    = (form.get(f"extra_{i}_talla",  "") or "").strip() or None
-        items.append({"nombre": nombre_e, "cantidad": cantidad_e, "talla": talla_e})
-
-    if not items:
-        return RedirectResponse(f"/trabajadores/{tid}/epis?err=sin_items", status_code=303)
-
-    start_stock_transaction(db)
-    try:
-        # Cada descuento y la entrega se confirman en la misma transacción.
-        for index, item in enumerate(items):
-            talla_v = item.get("talla")
-            stock = db.query(StockEPI).filter(
-                StockEPI.nombre == item["nombre"], StockEPI.talla == talla_v
-            ).first()
-            if not stock and talla_v is None:
-                stock = db.query(StockEPI).filter(StockEPI.nombre == item["nombre"]).first()
-            if not stock:
-                raise StockError(
-                    409,
-                    f"No hay stock registrado para {item['nombre']}"
-                    + (f" (talla {talla_v})" if talla_v else ""),
-                )
-            move_stock_epi(
-                db, user, stock.id, -item["cantidad"], tipo="entrega",
-                event_id=f"epi-{uuid.uuid4()}-{index}",
-                motivo=f"Entrega física a trabajador #{tid}", trabajador_id=tid,
-            )
-
-        entrega = EntregaEPI(
-            trabajador_id=tid,
-            tipo=tipo,
-            items_json=json.dumps(items, ensure_ascii=False),
-            fecha=datetime.utcnow(),
-            entregado_por=user.nombre,
-            firmado_por=firmado_por or None,
-            observaciones=observaciones or None,
-            usuario_id=user.id,
-            firma_base64=firma_base64,
-        )
-        db.add(entrega)
-        db.commit()
-    except StockError as exc:
-        db.rollback()
-        raise HTTPException(exc.status_code, exc.detail)
-    except Exception:
-        db.rollback()
-        raise
-    mrd_logging.log_security(
-        f"Entrega EPI tipo={tipo} trabajador={t.nombre_completo} por {user.username}",
-        level="info"
-    )
-    redirect_to = (form.get("redirect_to", "") or "").strip()
-    redirect_url = redirect_to if redirect_to and redirect_to.startswith("/") else f"/trabajadores/{tid}/epis"
-    return RedirectResponse(redirect_url, status_code=303)
+async def trabajador_epi_entregar(tid: int, request: Request, user: Usuario = Depends(requiere_login)):
+    """Retirado en 2.7.42: las entregas de EPI y ropa se hacen solo en el
+    Mostrador Único (stock, albarán y aviso al portal en una sola operación).
+    La ruta se conserva para que los enlaces antiguos lleven al Mostrador."""
+    return RedirectResponse(f"/mostrador?trabajador={tid}&epi=1&aviso=solo_mostrador", status_code=303)
 
 
 @app.post("/trabajadores/{tid}/epis/marcar-kit")
-def trabajador_marcar_kit(
-    tid: int,
-    request: Request,
-    user: Usuario = Depends(requiere_login),
-    db: Session = Depends(get_db),
-):
-    """Marca el kit EPI como ya entregado sin consumir stock (para regularizaciones manuales)."""
-    if not (tiene_permiso(user, "crear") or tiene_permiso(user, "stock_operar")):
-        raise HTTPException(403, "Sin permiso")
-    t = db.query(Trabajador).get(tid)
-    if not t:
-        raise HTTPException(404, "Trabajador no encontrado")
-    ya_tiene = db.query(EntregaEPI).filter(
-        EntregaEPI.trabajador_id == tid,
-        EntregaEPI.tipo == "epi",
-    ).first()
-    if ya_tiene:
-        return RedirectResponse("/epis?ok=1", status_code=303)
-    entrega = EntregaEPI(
-        trabajador_id=tid,
-        tipo="epi",
-        items_json="[]",
-        fecha=datetime.utcnow(),
-        entregado_por=user.nombre,
-        observaciones="Kit previamente entregado — marcado manualmente sin consumo de stock",
-        usuario_id=user.id,
-    )
-    db.add(entrega)
-    db.commit()
-    mrd_logging.log_security(
-        f"Kit EPI marcado manualmente para trabajador={t.nombre_completo} por {user.username}",
-        level="info"
-    )
-    return RedirectResponse("/epis?ok=1", status_code=303)
+def trabajador_marcar_kit(tid: int, request: Request, user: Usuario = Depends(requiere_login)):
+    """Retirado en 2.7.42: el estado del kit se calcula con las entregas reales."""
+    return RedirectResponse(f"/mostrador?trabajador={tid}&epi=1&aviso=solo_mostrador", status_code=303)
 
-
-# ─── Stock de EPIs ────────────────────────────────────────────────────────────
 
 def _asignar_codigos_stock_epi(db):
     """Completa códigos ausentes; el esquema se migra solo desde database.py."""
@@ -3379,100 +3317,17 @@ def epis_stock_panel(request: Request, user: Usuario = Depends(requiere_login),
 
 
 @app.post("/epis/stock/entrada")
-def epis_stock_entrada(
-    request: Request,
-    user: Usuario = Depends(requiere_login),
-    db: Session = Depends(get_db),
-    nombre: str = Form(...),
-    cantidad: int = Form(...),
-    talla: str = Form(""),
-    tipo_seguimiento: str = Form("generico"),
-):
-    try:
-        require_stock_permission(user)
-    except StockError as exc:
-        raise HTTPException(exc.status_code, exc.detail)
-    if cantidad <= 0:
-        raise HTTPException(400, "La entrada debe ser positiva")
-    start_stock_transaction(db)
-    try:
-        talla_val = talla.strip() or None
-        _ts_epi = tipo_seguimiento if tipo_seguimiento in ("individual", "generico") else "generico"
-        warehouse = _active_warehouse(db, user, request)
-        warehouse_id = warehouse.id if warehouse else -1
-        stock = db.query(StockEPI).filter(
-            StockEPI.nombre == nombre, StockEPI.talla == talla_val,
-            StockEPI.almacen_id == warehouse_id,
-        ).first()
-        if not stock:
-            cat = "ropa" if talla_val else "epi"
-            stock = StockEPI(nombre=nombre, categoria=cat, talla=talla_val, cantidad=0, stock_minimo=3,
-                             tipo_seguimiento=_ts_epi,
-                             almacen_id=warehouse_id)
-            db.add(stock)
-            db.flush()
-            stock.codigo = f"SEPI-{stock.id:04d}"
-        else:
-            if _ts_epi in ("individual", "generico"):
-                stock.tipo_seguimiento = _ts_epi
-            db.flush()
-        move_stock_epi(
-            db, user, stock.id, cantidad, tipo="entrada",
-            event_id=f"epi-entry-{uuid.uuid4()}", motivo="Entrada manual de stock EPI",
-        )
-        db.commit()
-    except StockError as exc:
-        db.rollback()
-        raise HTTPException(exc.status_code, exc.detail)
-    except Exception:
-        db.rollback()
-        raise
-    return RedirectResponse("/epis/stock", status_code=303)
+def epis_stock_entrada(request: Request, user: Usuario = Depends(requiere_login)):
+    """Retirado en 2.7.42: las entradas de EPI y ropa se registran en el
+    Mostrador Único en modo Entrada (proveedor o procedencia, con justificante)."""
+    return RedirectResponse("/mostrador?modo=entrada&aviso=solo_mostrador", status_code=303)
 
 
 @app.post("/epis/stock/salida")
-def epis_stock_salida(
-    request: Request,
-    user: Usuario = Depends(requiere_login),
-    db: Session = Depends(get_db),
-    nombre: str = Form(...),
-    cantidad: int = Form(...),
-    talla: str = Form(""),
-):
-    try:
-        require_stock_permission(user)
-    except StockError as exc:
-        raise HTTPException(exc.status_code, exc.detail)
-    if cantidad <= 0:
-        raise HTTPException(400, "La cantidad debe ser positiva")
-    talla_val = talla.strip() or None
-    warehouse = _active_warehouse(db, user, request)
-    warehouse_filter = (
-        StockEPI.almacen_id == warehouse.id
-        if warehouse else StockEPI.almacen_id.is_(None)
-    )
-    start_stock_transaction(db)
-    try:
-        stock = db.query(StockEPI).filter(
-            StockEPI.nombre == nombre, StockEPI.talla == talla_val,
-            warehouse_filter,
-        ).first()
-        if not stock:
-            raise StockError(404, "Artículo no encontrado en stock")
-        if stock.cantidad < cantidad:
-            raise StockError(409, f"Stock insuficiente: {stock.cantidad} unidades disponibles")
-        move_stock_epi(
-            db, user, stock.id, -cantidad, tipo="salida",
-            event_id=f"epi-exit-{uuid.uuid4()}", motivo="Salida manual de stock EPI",
-        )
-        db.commit()
-    except StockError as exc:
-        db.rollback()
-        raise HTTPException(exc.status_code, exc.detail)
-    except Exception:
-        db.rollback()
-        raise
-    return RedirectResponse("/epis/stock", status_code=303)
+def epis_stock_salida(request: Request, user: Usuario = Depends(requiere_login)):
+    """Retirado en 2.7.42: las salidas de EPI y ropa se registran en el
+    Mostrador Único en modo Salida (con trabajador y albarán)."""
+    return RedirectResponse("/mostrador?modo=salida&aviso=solo_mostrador", status_code=303)
 
 
 @app.post("/epis/stock/{sepi_id}/seguimiento")
@@ -7503,6 +7358,78 @@ def _entregar_solicitud_por_mostrador(db, user, solicitud_id: int, trabajador_id
     except WorkerPortalError as exc:
         raise CounterError(exc.status_code, exc.detail)
     return {"id": solicitud.id, "numero": solicitud.numero, "estado": solicitud.estado}
+
+
+@app.get("/api/mostrador/epi-trabajador")
+def mostrador_epi_trabajador(
+    trabajador_id: int,
+    request: Request,
+    user: Usuario = Depends(requiere_login),
+    db: Session = Depends(get_db),
+):
+    """Panel 'EPI del trabajador' del Mostrador Único (2.7.42): tallas, kit
+    básico y stock por talla, marcando lo que falta según las entregas reales."""
+    if not (tiene_permiso(user, "entregar") or tiene_permiso(user, "devolver")):
+        raise HTTPException(403, "Sin permiso para operar el mostrador")
+    t = db.get(Trabajador, trabajador_id)
+    if not t or not t.activo:
+        raise HTTPException(404, "Trabajador no encontrado")
+    warehouse = _active_warehouse(db, user, request)
+    warehouse_id = warehouse.id if warehouse else None
+    catalogo = db.query(CatalogoEPI).filter(CatalogoEPI.activo == True).order_by(
+        CatalogoEPI.categoria, CatalogoEPI.orden, CatalogoEPI.nombre,
+    ).all()
+    kit_epi = [{"nombre": c.nombre, "cantidad": c.cantidad_kit} for c in catalogo if c.categoria == "epi"] or KIT_EPI_INICIAL
+    estado = _kit_epi_estado(db, t.id, kit_epi)
+    faltan = {n.lower() for n in estado["faltan"]}
+    tallas = [str(x).strip().lower() for x in (t.talla_ropa, t.talla_calzado) if x]
+    items = []
+    for c in catalogo:
+        query = db.query(StockEPI).filter(func.lower(StockEPI.nombre) == c.nombre.lower())
+        if warehouse_id:
+            query = query.filter(or_(StockEPI.almacen_id == warehouse_id, StockEPI.almacen_id.is_(None)))
+        stocks = query.order_by(StockEPI.talla).all()
+        elegido = (
+            next((x for x in stocks if x.talla and x.talla.strip().lower() in tallas), None)
+            or next((x for x in stocks if not x.talla), None)
+        )
+        items.append({
+            "nombre": c.nombre, "categoria": c.categoria, "cantidad_kit": int(c.cantidad_kit or 1),
+            "falta": c.categoria == "epi" and c.nombre.lower() in faltan,
+            "tallas_disponibles": sorted({x.talla for x in stocks if x.talla}),
+            "item": stock_epi_counter_item(db, elegido) if elegido else None,
+            "stock": int(elegido.cantidad or 0) if elegido else 0,
+            "talla": (elegido.talla or "") if elegido else "",
+        })
+    return JSONResponse({
+        "trabajador": {"id": t.id, "nombre": t.nombre_completo,
+                       "talla_ropa": t.talla_ropa or "", "talla_calzado": t.talla_calzado or ""},
+        "faltan": estado["faltan"], "kit_completo": estado["completo"], "items": items,
+    })
+
+
+class TallasTrabajadorRequest(BaseModel):
+    trabajador_id: int = Field(gt=0)
+    talla_ropa: str = Field(default="", max_length=20)
+    talla_calzado: str = Field(default="", max_length=20)
+
+
+@app.post("/api/mostrador/epi-trabajador/tallas")
+def mostrador_epi_trabajador_tallas(
+    payload: TallasTrabajadorRequest,
+    user: Usuario = Depends(requiere_login),
+    db: Session = Depends(get_db),
+):
+    """Guarda las tallas del trabajador desde el panel del Mostrador (2.7.42)."""
+    if not (tiene_permiso(user, "entregar") or tiene_permiso(user, "editar")):
+        raise HTTPException(403, "Sin permiso")
+    t = db.get(Trabajador, payload.trabajador_id)
+    if not t:
+        raise HTTPException(404, "Trabajador no encontrado")
+    t.talla_ropa = payload.talla_ropa.strip() or None
+    t.talla_calzado = payload.talla_calzado.strip() or None
+    db.commit()
+    return JSONResponse({"ok": True, "talla_ropa": t.talla_ropa or "", "talla_calzado": t.talla_calzado or ""})
 
 
 @app.post("/api/mostrador/operar")

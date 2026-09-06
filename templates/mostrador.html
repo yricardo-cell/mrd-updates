@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Mostrador Único — {{ app_name }}{% endblock %}
 {% block content %}
-{% set modo_inicial = 'salida' if puede_salida else 'entrada' %}
+{% set modo_inicial = 'entrada' if (request.query_params.get('modo') == 'entrada' and puede_entrada) else ('salida' if puede_salida else 'entrada') %}
 <style>
 .counter-hero{background:linear-gradient(135deg,#071a31,#123d68 60%,#0d6efd);color:#fff;border-radius:22px;padding:24px;display:flex;justify-content:space-between;gap:20px;align-items:center;box-shadow:0 18px 45px rgba(7,26,49,.22)}
 .counter-hero h1{margin:3px 0 5px;font-size:clamp(1.55rem,3vw,2.35rem);font-weight:850}.counter-hero p{margin:0;color:#d7e8ff}.counter-kicker{text-transform:uppercase;font-size:.72rem;letter-spacing:.13em;color:#79b7ff;font-weight:800}
@@ -41,6 +41,16 @@
     <div class="counter-card-head"><span><i class="bi bi-person-check"></i> Destino y confirmación</span></div>
     <div class="counter-card-body">
       <label class="form-label">Trabajador</label><select id="worker" class="form-select"><option value="">Sin trabajador</option>{% for item in trabajadores %}<option value="{{ item.id }}">{{ item.nombre_completo }}</option>{% endfor %}</select>
+      <div id="epi-panel" class="mt-3" hidden>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2"><strong><i class="bi bi-shield-check"></i> EPI del trabajador</strong><span id="epi-panel-kit" class="badge text-bg-secondary"></span></div>
+        <div class="d-flex gap-2 mt-2 flex-wrap align-items-end">
+          <div><label class="form-label small mb-0" for="epi-talla-ropa">Talla ropa</label><input id="epi-talla-ropa" class="form-control form-control-sm" maxlength="20" placeholder="XL"></div>
+          <div><label class="form-label small mb-0" for="epi-talla-calzado">Calzado</label><input id="epi-talla-calzado" class="form-control form-control-sm" maxlength="20" placeholder="44"></div>
+          <button type="button" id="epi-kit-btn" class="btn btn-sm btn-primary"><i class="bi bi-stars"></i> Añadir kit básico (lo que falta)</button>
+        </div>
+        <div id="epi-chips" class="d-flex flex-wrap gap-2 mt-2"></div>
+        <small class="text-muted d-block mt-1">Pulsa un artículo para añadirlo con la talla del trabajador. Las tallas se guardan en su ficha al cambiarlas.</small>
+      </div>
       <label class="form-label mt-3">Obra</label><select id="work" class="form-select"><option value="">Sin obra</option>{% for item in obras %}<option value="{{ item.id }}">{{ item.nombre }}</option>{% endfor %}</select>
       <div id="warehouse-wrap" {% if modo_inicial != 'entrada' %}hidden{% endif %}><label class="form-label mt-3">Almacén de entrada</label><select id="warehouse" class="form-select"><option value="">Almacén principal</option>{% for item in almacenes %}<option value="{{ item.id }}">{{ item.nombre }}</option>{% endfor %}</select></div>
       <div id="origin-wrap" {% if modo_inicial != 'entrada' %}hidden{% endif %}><label class="form-label mt-3">Proveedor o procedencia</label><input id="origin" class="form-control" maxlength="160" placeholder="Ej.: Suministros García · devolución de obra"></div>
@@ -132,6 +142,18 @@
  // Entrega de una solicitud del trabajador: llega desde /solicitudes-trabajadores con ?solicitud=&trabajador=
  const solicitudPedida=Number(new URLSearchParams(location.search).get('solicitud'))||null;
  (function(){const params=new URLSearchParams(location.search),t=params.get('trabajador'),sel=document.getElementById('worker');if(t&&sel){sel.value=t;}if(solicitudPedida&&sel){const note=document.createElement('div');note.className='alert alert-info py-2 mt-2';note.innerHTML='<i class="bi bi-bag-check me-1"></i> Entregando la solicitud del trabajador: al confirmar la salida quedará marcada como <strong>entregada</strong> y saldrá de pendientes.';sel.insertAdjacentElement('afterend',note);}})();
+ // EPI del trabajador (2.7.42): tallas, kit básico y stock por talla; todo se entrega por este Mostrador.
+ const epiPanel=document.getElementById('epi-panel'),epiChips=document.getElementById('epi-chips'),epiKitBtn=document.getElementById('epi-kit-btn'),epiTallaRopa=document.getElementById('epi-talla-ropa'),epiTallaCalzado=document.getElementById('epi-talla-calzado'),epiKitBadge=document.getElementById('epi-panel-kit');
+ let epiData=null;
+ function epiAddItem(entry,qty){if(!entry.item)return false;const it=Object.assign({},entry.item);addResolved(it);const c=cart.get(key(it));if(c&&qty>1){c.cantidad=Math.min(9999,Math.max(c.cantidad||1,qty));render()}return !!c}
+ function renderEpiPanel(){if(!epiPanel)return;if(!epiData){epiPanel.hidden=true;return}epiPanel.hidden=false;epiTallaRopa.value=epiData.trabajador.talla_ropa||'';epiTallaCalzado.value=epiData.trabajador.talla_calzado||'';epiKitBadge.textContent=epiData.kit_completo?'Kit básico completo':'Faltan: '+epiData.faltan.join(', ');epiKitBadge.className='badge '+(epiData.kit_completo?'text-bg-success':'text-bg-warning');epiChips.innerHTML=epiData.items.map((e,n)=>{const ok=e.item&&e.stock>0;const tallaPedida=e.categoria==='ropa'?(epiData.trabajador.talla_ropa||'?'):(epiData.trabajador.talla_calzado||'?');return `<button type="button" class="btn btn-sm ${ok?(e.falta?'btn-warning':'btn-outline-light'):'btn-outline-secondary'}" data-index="${n}" ${ok?'':'disabled'}><i class="bi bi-${e.categoria==='ropa'?'person-standing':'shield-check'}"></i> ${esc(e.nombre)}${e.talla?' '+esc(e.talla):''} <small>×${e.cantidad_kit}${e.item?' · stock '+e.stock:' · sin stock en talla '+esc(tallaPedida)}</small></button>`}).join('');epiChips.querySelectorAll('button[data-index]').forEach(b=>b.onclick=()=>{const e=epiData.items[Number(b.dataset.index)];if(epiAddItem(e,1))scanState.textContent='Añadido: '+e.nombre})}
+ async function loadEpiPanel(){const w=document.getElementById('worker').value;if(!w||!epiPanel){epiData=null;renderEpiPanel();return}try{const r=await fetchAuthSafe('/api/mostrador/epi-trabajador?trabajador_id='+encodeURIComponent(w),{headers:{Accept:'application/json'}});if(!r.ok)throw new Error('HTTP '+r.status);epiData=await r.json()}catch(err){epiData=null}renderEpiPanel()}
+ if(epiPanel){document.getElementById('worker').addEventListener('change',loadEpiPanel);
+  epiKitBtn.onclick=()=>{if(!epiData)return;let n=0;const sin=[];epiData.items.forEach(e=>{if(!e.falta)return;if(e.item&&e.stock>0){if(epiAddItem(e,e.cantidad_kit))n++}else sin.push(e.nombre)});scanState.className='scan-state '+(n?'ok':'err');scanState.textContent=n?('Kit básico: '+n+' artículo'+(n===1?'':'s')+' añadido'+(n===1?'':'s')+(sin.length?' · sin stock en su talla: '+sin.join(', '):'')):(epiData.kit_completo?'El kit básico ya está completo.':'Sin stock en su talla para: '+sin.join(', '))};
+  async function saveTallas(){if(!epiData)return;try{const r=await fetchAuthSafe('/api/mostrador/epi-trabajador/tallas',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({trabajador_id:epiData.trabajador.id,talla_ropa:epiTallaRopa.value.trim(),talla_calzado:epiTallaCalzado.value.trim()})});if(r.ok){await loadEpiPanel();scanState.className='scan-state ok';scanState.textContent='Tallas guardadas en la ficha del trabajador.'}}catch(err){}}
+  epiTallaRopa.addEventListener('change',saveTallas);epiTallaCalzado.addEventListener('change',saveTallas);
+  if(new URLSearchParams(location.search).get('aviso')==='solo_mostrador'){const sel=document.getElementById('worker');const note=document.createElement('div');note.className='alert alert-info py-2 mt-2';note.innerHTML='<i class="bi bi-shield-check me-1"></i> Las entregas y entradas de EPI y ropa se hacen aquí, en el Mostrador Único.';sel.insertAdjacentElement('afterend',note)}
+  loadEpiPanel();}
  render();setTimeout(()=>refocusCounter(false),100);
 })();
 </script>
