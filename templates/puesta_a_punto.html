@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Puesta a punto de datos{% endblock %}
+{% block breadcrumb %}
+<a href="/">Inicio</a>
+<span class="sep">/</span>
+<span class="current">Puesta a punto</span>
+{% endblock %}
+{% block content %}
+<div class="page-header-row mb-3">
+  <div>
+    <h1 class="page-title"><i class="bi bi-clipboard2-check"></i> Puesta a punto de datos</h1>
+    <p class="page-subtitle">Lo que le falta a cada ficha para que el programa enseñe información real. Cada fila abre el sitio donde se completa.</p>
+  </div>
+  <div class="kpi-card"><div class="kpi-icon {{ 'green' if pendientes == 0 else 'orange' }}"><i class="bi bi-list-check"></i></div><div class="kpi-value">{{ pendientes }}</div><div class="kpi-label">datos pendientes en total</div></div>
+</div>
+
+{% if pendientes == 0 %}
+<div class="alert alert-success"><i class="bi bi-check-circle me-1"></i> Todo completo. No falta ningún dato.</div>
+{% endif %}
+
+{% for b in bloques %}
+<div class="card mb-3" id="bloque-{{ b.clave }}">
+  <div class="card-header"><div class="card-title"><i class="bi {{ b.icono }}"></i> {{ b.titulo }}</div><span class="table-meta">{{ b.pendientes }} pendientes{% if b.total %} · {{ b.total }} en total{% endif %}</span></div>
+  <div class="card-body p-0">
+    {% for p in b.puntos %}
+    <details class="p-3 border-bottom" {% if p.cuenta and loop.first %}open{% endif %}>
+      <summary class="d-flex align-items-center gap-2">
+        <span class="badge {{ 'badge-success' if p.cuenta == 0 else 'badge-warning' }}">{{ p.cuenta }}</span>
+        <strong>{{ p.nombre }}</strong>
+        <small class="text-muted">{{ p.por_que }}</small>
+      </summary>
+      {% if p.filas %}
+      <div class="table-responsive mt-2"><table class="mrd-table mb-0"><tbody>
+        {% for nombre, codigo, enlace in p.filas %}
+        <tr><td><a href="{{ enlace }}">{{ nombre }}</a>{% if codigo %} <small class="text-muted">{{ codigo }}</small>{% endif %}</td><td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ enlace }}"><i class="bi bi-pencil"></i> Completar</a></td></tr>
+        {% endfor %}
+      </tbody></table></div>
+      {% if p.cuenta > limite %}<p class="text-muted small mt-2 mb-0">Se muestran los primeros {{ limite }} de {{ p.cuenta }}. Al completarlos irán apareciendo los siguientes.</p>{% endif %}
+      {% else %}<p class="text-muted small mt-2 mb-0">Nada pendiente.</p>{% endif %}
+    </details>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

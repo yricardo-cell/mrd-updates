@@ -8856,6 +8856,103 @@ def informe_consumo_obras_excel(request: Request, user: Usuario = Depends(requie
                     headers={"Content-Disposition": f"attachment; filename={nombre}"})
 
 
+@app.get("/puesta-a-punto", response_class=HTMLResponse)
+def puesta_a_punto(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Puesta a punto de datos (2.7.49): qué le falta a cada herramienta,
+    trabajador, material y referencia de EPI para que el programa muestre
+    información real (fotos, precios, ubicaciones, tallas, PIN, mínimos, QR,
+    costes de reparación). Cada fila enlaza al sitio donde se completa."""
+    if not (tiene_permiso(user, "editar") or tiene_permiso(user, "stock_operar")):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _active_warehouse(db, user, request)
+    wid = warehouse.id if warehouse else None
+    LIM = 80
+
+    def _tools(*condiciones):
+        q = db.query(Herramienta).filter(Herramienta.activa == True, *condiciones)
+        if wid:
+            q = q.filter(Herramienta.almacen_id == wid)
+        return q.order_by(Herramienta.nombre).all()
+
+    def _workers(*condiciones):
+        q = db.query(Trabajador).filter(Trabajador.activo == True, *condiciones)
+        if wid:
+            q = q.filter(Trabajador.almacen_id == wid)
+        return q.order_by(Trabajador.nombre, Trabajador.apellidos).all()
+
+    def _materials(*condiciones):
+        q = db.query(Material).filter(Material.activo == True, *condiciones)
+        if wid:
+            q = q.filter(or_(Material.almacen_id == wid, Material.almacen_id.is_(None)))
+        return q.order_by(Material.nombre).all()
+
+    total_tools = len(_tools())
+    total_workers = len(_workers())
+    total_materials = len(_materials())
+    stock_epi_q = db.query(StockEPI)
+    if wid:
+        stock_epi_q = stock_epi_q.filter(or_(StockEPI.almacen_id == wid, StockEPI.almacen_id.is_(None)))
+    stock_epi_sin_codigo = stock_epi_q.filter(or_(StockEPI.codigo.is_(None), StockEPI.codigo == "")).order_by(StockEPI.nombre).all()
+    reparaciones_sin_coste = db.query(Reparacion).filter(
+        Reparacion.estado == "finalizada", Reparacion.coste_final.is_(None),
+    ).order_by(Reparacion.fecha_entrada.desc()).all()
+
+    bloques = [
+        {
+            "clave": "herramientas", "titulo": "Herramientas", "icono": "bi-tools", "total": total_tools,
+            "puntos": [
+                {"nombre": "Sin foto", "por_que": "La foto evita confusiones al entregar y al inventariar.",
+                 "filas": [(h.nombre, h.codigo, f"/herramientas/{h.id}") for h in _tools(Herramienta.foto_path.is_(None))]},
+                {"nombre": "Sin precio de compra", "por_que": "Sin precio no hay pasaporte de costes ni valor de lo que está fuera.",
+                 "filas": [(h.nombre, h.codigo, f"/herramientas/{h.id}/editar") for h in _tools(or_(Herramienta.precio_compra.is_(None), Herramienta.precio_compra == 0))]},
+                {"nombre": "Sin ubicación en el almacén", "por_que": "Sin ubicación, el localizador y el inventario guiado no saben dónde buscar.",
+                 "filas": [(h.nombre, h.codigo, f"/herramientas/{h.id}/editar") for h in _tools(Herramienta.ubicacion_id.is_(None))]},
+                {"nombre": "Sin marca ni modelo", "por_que": "Ayuda a distinguir herramientas iguales y a pedir repuestos.",
+                 "filas": [(h.nombre, h.codigo, f"/herramientas/{h.id}/editar") for h in _tools(or_(Herramienta.marca.is_(None), Herramienta.marca == ""))]},
+            ],
+        },
+        {
+            "clave": "trabajadores", "titulo": "Trabajadores", "icono": "bi-people", "total": total_workers,
+            "puntos": [
+                {"nombre": "Sin tallas de ropa o calzado", "por_que": "El Mostrador y el portal usan las tallas para dar el EPI correcto.",
+                 "filas": [(t.nombre_completo, t.codigo or "", f"/mostrador?trabajador={t.id}&epi=1") for t in _workers(or_(Trabajador.talla_ropa.is_(None), Trabajador.talla_ropa == "", Trabajador.talla_calzado.is_(None), Trabajador.talla_calzado == ""))]},
+                {"nombre": "Sin PIN de portal", "por_que": "Sin PIN no pueden entrar en su portal ni recibir avisos.",
+                 "filas": [(t.nombre_completo, t.codigo or "", f"/trabajadores/{t.id}/portal-qr") for t in _workers(Trabajador.portal_pin_hash.is_(None))]},
+                {"nombre": "Sin teléfono", "por_que": "Necesario para localizarles y para el acceso al portal.",
+                 "filas": [(t.nombre_completo, t.codigo or "", "/trabajadores") for t in _workers(or_(Trabajador.telefono.is_(None), Trabajador.telefono == ""))]},
+            ],
+        },
+        {
+            "clave": "materiales", "titulo": "Materiales y EPI de stock", "icono": "bi-boxes", "total": total_materials,
+            "puntos": [
+                {"nombre": "Materiales sin stock mínimo", "por_que": "Sin mínimo no hay aviso de reposición ni pedido a proveedor.",
+                 "filas": [(m.nombre, m.codigo or "", f"/materiales/{m.id}") for m in _materials(or_(Material.stock_minimo.is_(None), Material.stock_minimo == 0))]},
+                {"nombre": "Materiales con unidad mal escrita (número en vez de unidad)", "por_que": "El tamaño de paquete va en 'unidades por paquete', no en la unidad.",
+                 "filas": [(m.nombre, m.codigo or "", f"/materiales/{m.id}") for m in _materials() if (m.unidad or "").strip().isdigit()]},
+                {"nombre": "EPI de stock sin código QR", "por_que": "Sin código no se pueden escanear en el Mostrador.",
+                 "filas": [(x.nombre_display, "", "/epis/stock") for x in stock_epi_sin_codigo]},
+            ],
+        },
+        {
+            "clave": "costes", "titulo": "Costes", "icono": "bi-cash-coin", "total": len(reparaciones_sin_coste),
+            "puntos": [
+                {"nombre": "Reparaciones finalizadas sin coste", "por_que": "Sin coste, el pasaporte y el informe de gasto salen a cero.",
+                 "filas": [(r.herramienta.nombre if r.herramienta else "—", r.numero, f"/reparaciones/{r.id}") for r in reparaciones_sin_coste]},
+            ],
+        },
+    ]
+    pendientes = 0
+    for b in bloques:
+        for p in b["puntos"]:
+            p["cuenta"] = len(p["filas"])
+            p["filas"] = p["filas"][:LIM]
+            pendientes += p["cuenta"]
+        b["pendientes"] = sum(p["cuenta"] for p in b["puntos"])
+    return templates.TemplateResponse(request, "puesta_a_punto.html", ctx_base(
+        request, user, db, bloques=bloques, pendientes=pendientes, limite=LIM,
+    ))
+
+
 @app.get("/informes", response_class=HTMLResponse)
 def informes(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     warehouse = _active_warehouse(db, user, request)

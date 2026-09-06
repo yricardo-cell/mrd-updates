@@ -490,6 +490,14 @@
 
       <div class="sidebar-section">Sistema</div>
       <ul class="sidebar-list">
+        {% if nav_user and nav_user.rol in ['admin', 'almacen'] %}
+        <li class="nav-item">
+          <a href="/puesta-a-punto" class="{% if '/puesta-a-punto' in request.url.path %}active{% endif %}">
+            <i class="bi bi-clipboard2-check"></i>
+            <span class="nav-label">Puesta a punto</span>
+          </a>
+        </li>
+        {% endif %}
 <li class="nav-item">
           <a href="/mantenimiento" class="{% if '/mantenimiento' in request.url.path %}active{% endif %}">
             <i class="bi bi-tools"></i>
