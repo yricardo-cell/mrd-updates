@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.39",
-    "nombre":  "MRD TOOL CONTROL -- Kits: maletín con contenido y escaneo en bloque",
+    "version_actual":  "2.7.40",
+    "nombre":  "MRD TOOL CONTROL -- Reinicio seguro del servidor: afinidad de CPU desde el lanzador y relanzamiento supervisado",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Kits: maletín con contenido y escaneo en bloque"
+                    "Reinicio seguro del servidor: afinidad de CPU desde el lanzador y relanzamiento supervisado"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.39.zip",
-    "sha256":  "6d428ea72d49badaef75a95a3c7c98fbb3a466908feb60cb1f3641edc3fae985"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.40.zip",
+    "sha256":  "ed4e216b88017c6114789399882e4f3717ba3f14d81c5df4e5df888351d3bfd5"
 }
