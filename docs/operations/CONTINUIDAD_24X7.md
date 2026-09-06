@@ -30,6 +30,38 @@ La instalación nunca se realiza automáticamente al desplegar código.
 
 El instalador no reinicia MRDToolControl ni CloudflaredMRD.
 
+## Failover de túnel (A/B) como tarea programada
+
+El vigilante `scripts/operations/failover.py` cambia el CNAME de `app.iasmrd.com`
+del túnel A al túnel B cuando el público falla tres veces seguidas con la app
+local sana, y revierte a A cuando se recupera. En esta máquina el servicio
+pywin32 `MRDFailoverWatchdog` no arranca (el SCM agota el tiempo de espera en
+cada arranque de Windows, igual que le pasaba a `MRDSentinel`), así que el
+vigilante se instala como tarea programada nativa, igual que Sentinel:
+
+```powershell
+# Vista previa (no cambia nada; verifica el token en solo lectura)
+powershell -ExecutionPolicy Bypass -File scripts\operations\install_failover_task.ps1
+
+# Como SYSTEM al arrancar Windows (PowerShell de administrador). Detiene y
+# desactiva el servicio pywin32 heredado para que no compita por el lock.
+powershell -ExecutionPolicy Bypass -File scripts\operations\install_failover_task.ps1 -Apply
+
+# Sin administrador: con la cuenta actual, al iniciar sesión
+powershell -ExecutionPolicy Bypass -File scripts\operations\install_failover_task.ps1 -Apply -CurrentUser
+```
+
+La tarea se llama `MRD Failover Watchdog 24x7`; estado, historial y logs en
+`C:\ProgramData\MRDToolControl\failover`. El token de Cloudflare
+(`config/cloudflare_dns.token`, Zone:DNS:Edit solo sobre iasmrd.com) se lee al
+arrancar y se vuelve a leer del archivo si Cloudflare lo rechaza (HTTP 401/403):
+para rotarlo basta con sustituir el archivo, sin reiniciar nada. Comprobación
+manual del token, sin tocar el DNS:
+
+```powershell
+venv\Scripts\python.exe scripts\operations\failover.py --verify-token --state-root $env:TEMP\mrd-failover-verify
+```
+
 ## Mantenimiento y despliegues
 
 Antes de un reinicio controlado se crea el archivo `.maintenance_mode`. Al finalizar las comprobaciones se elimina. No debe dejarse activo permanentemente.

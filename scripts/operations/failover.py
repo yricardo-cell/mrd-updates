@@ -14,6 +14,11 @@ Requiere un API Token de Cloudflare con permiso Zone:DNS:Edit solo sobre la
 zona iasmrd.com, guardado como una línea de texto en
 config/cloudflare_dns.token (ya cubierto por .gitignore, igual que
 config/github.token). Nunca se imprime ni se registra en los logs.
+
+El token se lee al arrancar y se vuelve a leer del archivo si Cloudflare lo
+rechaza (HTTP 401/403): así una rotación del token (p. ej. tras una
+revocación) entra en vigor sin reiniciar el vigilante. Si el archivo no ha
+cambiado, se registra el error y se sigue vigilando sin hacer failover.
 """
 
 from __future__ import annotations
@@ -63,6 +68,11 @@ DEFAULT_STATE = {
 
 class TokenError(RuntimeError):
     pass
+
+
+class CloudflareAuthError(RuntimeError):
+    """Cloudflare rechazó el token (HTTP 401/403). El bucle principal la trata
+    aparte: recarga el token del archivo por si se ha rotado."""
 
 
 class RedactFilter(logging.Filter):
@@ -155,6 +165,19 @@ def check_tunnel_ready(url: str | None, timeout: float) -> bool | None:
         return None
 
 
+def reload_token_if_rotated(path: Path, current: str) -> str | None:
+    """Vuelve a leer el archivo del token. Devuelve el token nuevo si es
+    distinto del que está en memoria; None si no cambió o no se puede leer."""
+    try:
+        fresh = load_token(path)
+    except TokenError as exc:
+        logging.error("No se pudo recargar el token: %s", exc)
+        return None
+    if fresh == current:
+        return None
+    return fresh
+
+
 def cf_request(method: str, path: str, token: str, body: dict | None = None) -> dict:
     url = f"{CF_API}{path}"
     data = json.dumps(body).encode("utf-8") if body is not None else None
@@ -169,7 +192,10 @@ def cf_request(method: str, path: str, token: str, body: dict | None = None) -> 
             payload = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Cloudflare API HTTP {exc.code} en {method} {path}: {detail[:300]}") from None
+        message = f"Cloudflare API HTTP {exc.code} en {method} {path}: {detail[:300]}"
+        if exc.code in (401, 403):
+            raise CloudflareAuthError(message) from None
+        raise RuntimeError(message) from None
     except ValueError:
         # Nunca reencadenar esta excepción (from None): su traceback original
         # incluye el header Authorization crudo y no debe poder llegar a un log.
@@ -508,6 +534,23 @@ def main(argv: list[str] | None = None, stop_event: threading.Event | None = Non
         while True:
             try:
                 state = tick(args, token, state, history_path)
+            except CloudflareAuthError as exc:
+                logging.error("Cloudflare rechazó el token: %s", exc)
+                fresh = reload_token_if_rotated(args.token_file, token)
+                if fresh:
+                    token = fresh
+                    for handler in logging.getLogger().handlers:
+                        handler.addFilter(RedactFilter(token))
+                    logging.warning(
+                        "Token de Cloudflare recargado desde %s (había cambiado en disco); "
+                        "se reintenta en el siguiente ciclo.", args.token_file,
+                    )
+                else:
+                    logging.error(
+                        "El token de %s no ha cambiado y Cloudflare lo rechaza: genera un API Token "
+                        "nuevo (Zone:DNS:Edit, zona iasmrd.com) y guárdalo ahí; el vigilante lo "
+                        "recogerá solo, sin reiniciar.", args.token_file,
+                    )
             except Exception:
                 logging.exception("Error inesperado en el ciclo de comprobación.")
             save_state(state, state_path)
