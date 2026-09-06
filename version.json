@@ -1,11 +1,12 @@
 {
-    "version_actual":  "2.7.56",
+    "version_actual":  "2.7.57",
     "nombre":  "MRD TOOL CONTROL",
     "edicion":  "Centro operativo avanzado de almacenes",
-    "version_anterior":  "2.7.55",
-    "fecha":  "2026-09-06",
+    "version_anterior":  "2.7.56",
+    "fecha":  "2026-09-07",
     "estado":  "estable",
     "cambios":  [
+                    "Guardián (MRD Sentinel 1.5.0), bloqueo de emergencia: cuando el responsable ordena el bloqueo desde el móvil (Telegram) o desde el panel de Sentinel, MRD responde \u0027bloqueado temporalmente\u0027 (503) a todo el mundo, incluida la red local, hasta que se levante con el PIN. Solo siguen abiertos /health (para los vigilantes) y el acceso desde el propio servidor sin pasar por el túnel. Nuevo lockdown_guard.py: lee C:\\ProgramData\\MRDSentinel\\lockdown.json con caché de 2 segundos, sin tocar la base de datos ni la sesión; middleware registrado el último (el más externo) para ver el cliente real de la conexión. Prueba: tests/test_lockdown.py.",
                     "Copia fuera del PC (mejora 3): en Backups, carpeta externa (USB, disco externo o carpeta de OneDrive/Google Drive) con Probar, Guardar y \u0027Copiar ahora lo que falta\u0027. Cada backup nuevo se copia allí automáticamente (base de datos y fotos), se ven cuántas copias hay fuera y cuántas faltan, y si la copia falla o la carpeta no está conectada sale un aviso interno (uno al día).",
                     "Foto desde el móvil (mejora 1): botón \u0027Hacer foto\u0027 que abre la cámara directamente al dar de alta una herramienta y en su ficha (además de \u0027Elegir imagen\u0027); la foto se reduce sola a 1600 px antes de enviarla. Desde Puesta a punto, \u0027Sin foto\u0027 abre la ficha con la cámara resaltada.",
                     "Zonas en 3D: botón \u0027Mover\u0027 para arrastrar las zonas en la vista de la nave completa y los elementos (estanterías, cajoneras, máquinas) dentro de cada zona; el sitio se guarda solo (pared y distancias) y no se sale de la zona.",

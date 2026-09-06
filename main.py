@@ -623,6 +623,21 @@ async def csrf_middleware(request: Request, call_next):
     return response
 
 
+# ─── Guardián (MRD Sentinel): bloqueo de emergencia ──────────────────────────
+# Registrado el ÚLTIMO a propósito: en Starlette el último middleware añadido
+# es el más externo, así que corre antes que CSRF, sesión y proxy headers y
+# ve el cliente REAL de la conexión. Solo lee lockdown.json; nunca toca la BD.
+import lockdown_guard as _lockdown_guard  # noqa: E402
+
+
+@app.middleware("http")
+async def guardian_lockdown_middleware(request: Request, call_next):
+    if _lockdown_guard.debe_bloquear(request):
+        return HTMLResponse(_lockdown_guard.BLOQUEADO_HTML, status_code=503,
+                            headers={"Cache-Control": "no-store", "Retry-After": "60"})
+    return await call_next(request)
+
+
 # ─── Manejador global de errores ─────────────────────────────────────────────
 _ERROR_MESSAGES = {
     400: ("Solicitud incorrecta", "Los datos enviados no son válidos."),
