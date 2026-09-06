@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.55",
-    "nombre":  "MRD TOOL CONTROL -- Calendario de revisiones y caducidades: EPI individual, mantenimiento de herramientas y maquinas, formaciones, reconocimientos, documentos, lotes y vehiculos en un solo sitio; Hecho programa la siguiente; exportacion .ics; aviso semanal; alerta de no retorno solo con plazo fijado",
+    "version_actual":  "2.7.56",
+    "nombre":  "MRD TOOL CONTROL -- Copia fuera del PC (USB, disco o nube, con aviso si falla), foto desde el movil con camara directa y reduccion automatica, y modo Mover en las zonas 3D para arrastrar zonas y elementos",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Calendario de revisiones y caducidades: EPI individual, mantenimiento de herramientas y maquinas, formaciones, reconocimientos, documentos, lotes y vehiculos en un solo sitio; Hecho programa la siguiente; exportacion .ics; aviso semanal; alerta de no retorno solo con plazo fijado"
+                    "Copia fuera del PC (USB, disco o nube, con aviso si falla), foto desde el movil con camara directa y reduccion automatica, y modo Mover en las zonas 3D para arrastrar zonas y elementos"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.55.zip",
-    "sha256":  "8579480acaaafdfcd21fb75ffb3c3f4030c654a2a113528f37a3a1956e1f9bc3"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.56.zip",
+    "sha256":  "86be6fff108188d5feaa366b84e2e7dd65cefdf781ad64abfcff9ef9d13517fc"
 }
