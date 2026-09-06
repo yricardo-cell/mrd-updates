@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import gzip
 import json
 import os
 import shutil
@@ -362,20 +363,61 @@ def _is_mrd_database(path: Path) -> bool:
     return all(table in tables for table in _MRD_SCHEMA_SIGNATURE)
 
 
+_CANDIDATE_SUFFIXES = (".db", ".db.bak", ".sqlite", ".db.gz")
+
+
 def _backup_candidates(root: Path, live_db: Path) -> list[Path]:
-    candidates = []
+    """Copias SQLite candidatas, más recientes primero. Incluye los .db.gz que
+    produce backup_manager.create_backup() (su formato por defecto), que antes
+    se ignoraban por completo. Los .enc (cifrados) no se consideran: DR4 no
+    dispone de la clave."""
     backup_root = root / "backups"
     if not backup_root.is_dir():
-        return candidates
-    for pattern in ("**/mrd_tool.db.bak", "**/mrd_tool.db", "**/*.sqlite", "**/*.db"):
-        for path in backup_root.glob(pattern):
-            try:
-                resolved = path.resolve()
-                if resolved != live_db.resolve() and resolved.is_file() and resolved not in candidates:
-                    candidates.append(resolved)
-            except OSError:
-                continue
+        return []
+    try:
+        live_resolved = live_db.resolve()
+    except OSError:
+        live_resolved = live_db
+    candidates: set[Path] = set()
+    for path in backup_root.rglob("*"):
+        name = path.name.lower()
+        if not name.endswith(_CANDIDATE_SUFFIXES):
+            continue
+        try:
+            resolved = path.resolve()
+            if resolved != live_resolved and resolved.is_file():
+                candidates.add(resolved)
+        except OSError:
+            continue
     return sorted(candidates, key=lambda value: value.stat().st_mtime, reverse=True)
+
+
+def _materialize_candidate(candidate: Path, state_root: Path) -> Path | None:
+    """Devuelve una ruta SQLite legible para validar el candidato: el propio
+    fichero, o una copia descomprimida temporal si es .db.gz."""
+    if not candidate.name.lower().endswith(".gz"):
+        return candidate
+    tmp_dir = _inside(state_root, state_root / "tmp")
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    target = tmp_dir / (candidate.name[:-3] + ".dr4check")
+    try:
+        with gzip.open(candidate, "rb") as src, open(target, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        return target
+    except (OSError, EOFError, gzip.BadGzipFile):
+        target.unlink(missing_ok=True)
+        return None
+
+
+def _candidate_is_valid(candidate: Path, state_root: Path) -> bool:
+    readable = _materialize_candidate(candidate, state_root)
+    if readable is None:
+        return False
+    try:
+        return _sqlite_integrity(readable)[0] == "ok" and _is_mrd_database(readable)
+    finally:
+        if readable != candidate:
+            readable.unlink(missing_ok=True)
 
 
 def _restore_database_dr4(root: Path, state_root: Path, live_db: Path) -> dict:
@@ -385,7 +427,7 @@ def _restore_database_dr4(root: Path, state_root: Path, live_db: Path) -> dict:
     perder datos en reparaciones/rollback")."""
     backup = None
     for candidate in _backup_candidates(root, live_db):
-        if _sqlite_integrity(candidate)[0] == "ok" and _is_mrd_database(candidate):
+        if _candidate_is_valid(candidate, state_root):
             backup = candidate
             break
     if backup is None:
@@ -566,6 +608,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    # Evita los núcleos marcados como inestables en esta máquina
+    # (config/cpu_excluir.txt): el vigilante lanza este script cada minuto y
+    # un núcleo defectuoso convertía parte de esas ejecuciones en error_interno.
+    try:
+        root_str = str(Path(args.root).resolve())
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
+        from cpu_affinity import aplicar_afinidad_configurada
+        aplicar_afinidad_configurada()
+    except Exception:
+        pass
     try:
         if args.mode == "seal":
             result = seal_baseline(args.root, args.state_root)

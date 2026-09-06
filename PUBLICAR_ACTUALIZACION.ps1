@@ -128,7 +128,7 @@ $robocopyArgs = @(
     "/XF", "*.log", "*.bak", "*.bak_edit", "desktop.ini", "*.pyc",
            "*.exe", "*.db", "*.db-wal", "*.db-shm",
            "local.env", "*.token", "vapid_keys.json", ".service_restart",
-           ".recovery_history.json", "secret.key", "users.json", "*.pem",
+           ".recovery_history.json", "secret.key", "users.json", "*.pem", "cpu_excluir.txt",
     "/NFL", "/NDL", "/NJH", "/NJS"
 )
 & robocopy @robocopyArgs | Out-Null

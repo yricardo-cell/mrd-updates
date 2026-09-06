@@ -822,6 +822,9 @@ def _alertas_stock_bajo():
 @app.on_event("startup")
 def startup_event():
     mrd_logging.log_app(f"Arrancando MRD TOOL CONTROL v{VERSION}")
+    # Evita los núcleos marcados como inestables en esta máquina (config/cpu_excluir.txt).
+    from cpu_affinity import aplicar_afinidad_configurada as _afinidad
+    _afinidad(mrd_logging.log_app)
     testing = os.getenv("MRD_TESTING", "0") == "1"
 
     # Inicializar módulo de acceso remoto y pre-calentar caché en background

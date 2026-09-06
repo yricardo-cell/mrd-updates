@@ -65,3 +65,6 @@ desktop.ini
 .idea/
 *.suo
 *.user
+
+# Afinidad de CPU específica de cada máquina (ver cpu_affinity.py)
+config/cpu_excluir.txt

@@ -32,6 +32,14 @@ if PROJECT_ROOT not in sys.path:
 
 import pytest
 from fastapi.testclient import TestClient
+
+# En máquinas con núcleos inestables (config/cpu_excluir.txt) la suite entera
+# corre fuera de ellos; sin ese fichero no cambia nada.
+try:
+    from cpu_affinity import aplicar_afinidad_configurada as _afinidad
+    _afinidad()
+except Exception:
+    pass
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool

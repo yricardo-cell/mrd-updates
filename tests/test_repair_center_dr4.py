@@ -204,3 +204,33 @@ def test_no_revierte_una_edicion_manual_si_la_app_esta_sana(repair_root):
 
     assert applied["repaired_files"] == []
     assert edited.read_text(encoding="utf-8") == "<!-- ajuste manual sin resellar -->\n"
+
+
+def test_dr4_reconoce_backups_db_gz_del_gestor_de_backups(repair_root):
+    """backup_manager.create_backup() escribe por defecto <nombre>.db.gz; DR4
+    solo miraba .db/.sqlite/.bak y por tanto ignoraba todas las copias
+    diarias/semanales/mensuales reales, dependiendo de copias legacy sueltas."""
+    import gzip as _gzip
+    root, state = repair_root
+    rc.seal_baseline(root, state)
+    plain = root / "backups" / "tmp_origen.db"
+    _sqlite(plain, "copia-gz", mrd_schema=True)
+    gz = root / "backups" / "daily" / "20260906_000000_daily_automatico.db.gz"
+    gz.parent.mkdir(parents=True, exist_ok=True)
+    gz.write_bytes(_gzip.compress(plain.read_bytes()))
+    plain.unlink()
+    # Un .gz roto y más reciente no debe ser elegido ni romper el diagnóstico.
+    corrupt_gz = root / "backups" / "daily" / "20260907_000000_daily_automatico.db.gz"
+    corrupt_gz.write_bytes(b"no es gzip")
+    (root / "data" / "mrd_tool.db").write_bytes(b"base rota, no sqlite")
+
+    rc.run_once(root, state, apply=True, allow_dr4=True, database_failure_threshold=2)
+    result = rc.run_once(
+        root, state, apply=True, allow_dr4=True,
+        service_confirmed_stopped=True, database_failure_threshold=2,
+    )
+
+    assert result["dr4"]["manual_intervention_required"] is True
+    assert result["dr4"]["backup"] == str(gz)
+    assert not list((state / "tmp").glob("*.dr4check"))
+

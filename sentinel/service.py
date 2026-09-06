@@ -107,6 +107,11 @@ class SentinelRunner:
     def run(self) -> None:
         _log_service.info("=" * 60)
         _log_service.info("MRD SENTINEL — Iniciando servicio")
+        try:
+            from cpu_affinity import aplicar_afinidad_configurada
+            aplicar_afinidad_configurada(_log_service.info)
+        except Exception as exc:  # nunca debe impedir el arranque de Sentinel
+            _log_service.warning("Afinidad de CPU no aplicada: %s", exc)
         _log_service.info("Directorio: %s", REPO_ROOT)
         _log_service.info("=" * 60)
 
