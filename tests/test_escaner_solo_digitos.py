@@ -54,3 +54,14 @@ def test_herramienta_inactiva_no_cuenta(db):
     db.commit()
     with pytest.raises(CounterError):
         resolve_counter_item(db, "9876544", almacen.id)
+
+
+def test_codigo_solo_digitos_de_otro_almacen_no_entra_en_bucle(db):
+    almacen = _nave(db)
+    otro = Almacen(nombre="Otra nave", codigo="MRD-OTRA", activo=True)
+    db.add(otro)
+    db.flush()
+    db.add(Material(codigo="2024000999", nombre="Disco ajeno", stock_actual=5, activo=True, almacen_id=otro.id))
+    db.commit()
+    with pytest.raises(CounterError):
+        resolve_counter_item(db, "2024000999", almacen.id)

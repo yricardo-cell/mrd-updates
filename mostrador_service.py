@@ -300,6 +300,10 @@ def _resolve_por_digitos(db: Session, code: str, warehouse_id: int | None = None
     if len(matches) != 1:
         return None
     real_code = matches.pop()
+    if real_code.upper() == code:
+        # El código real es también solo dígitos: ya falló por la vía normal
+        # (por ejemplo, pertenece a otro almacén); no volver a intentarlo.
+        return None
     try:
         item = resolve_counter_item(db, real_code, warehouse_id)
     except CounterError:
