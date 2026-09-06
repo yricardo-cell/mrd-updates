@@ -95,17 +95,22 @@
   function render(h){titulo.innerHTML=`<i class="bi bi-geo-alt-fill"></i> ${esc(h.nombre)} · ${h.items.length} ${h.items.length===1?'cosa':'cosas'}`;ruta.textContent=h.ruta||'';
     lista.innerHTML=h.items.length?h.items.map(i=>`<a class="list-group-item list-group-item-action" href="${esc(i.url)}"><span><strong>${esc(i.nombre)}</strong><br><small class="text-muted">${esc(TIPOS[i.tipo]||i.tipo)}${i.codigo?' · '+esc(i.codigo):''}</small></span>${badge(i)}</a>`).join(''):'<div class="text-muted small py-2">Vacío. Pulsa "Colocar aquí" y escanea lo que metas.</div>';
     document.getElementById('hueco-colocar').href='/nave/colocar?ubicacion='+h.id;document.getElementById('hueco-qr').href=`/almacenes/${ALMACEN_ID}/ubicaciones/${h.id}/qr`;acciones.hidden=false}
-  function select(id){document.querySelectorAll('.hueco.sel').forEach(e=>e.classList.remove('sel'));const el=document.querySelector(`.hueco[data-id="${id}"]`);const h=byId[id];if(!h)return;if(el){el.classList.add('sel');el.scrollIntoView({block:'center',behavior:'smooth'})}render(h)}
-  document.querySelectorAll('.hueco').forEach(el=>el.addEventListener('click',()=>select(+el.dataset.id)));
+  // Al tocar una caja la página no se mueve (el panel es fijo en pantalla grande);
+  // en móvil el panel queda debajo, así que se baja hasta él. Solo el buscador
+  // desplaza hasta la caja encontrada.
+  const panel=document.getElementById('hueco-panel');
+  function select(id,desdeBusqueda){document.querySelectorAll('.hueco.sel').forEach(e=>e.classList.remove('sel'));const el=document.querySelector(`.hueco[data-id="${id}"]`);const h=byId[id];if(!h)return;if(el)el.classList.add('sel');render(h);
+    if(desdeBusqueda&&el){el.scrollIntoView({block:'center',behavior:'smooth'})}else if(window.innerWidth<992){panel.scrollIntoView({block:'start',behavior:'smooth'})}}
+  document.querySelectorAll('.hueco').forEach(el=>el.addEventListener('click',e=>{e.preventDefault();select(+el.dataset.id,false)}));
   function renderResultados(res){titulo.innerHTML='<i class="bi bi-search"></i> Resultados';ruta.textContent='';acciones.hidden=true;
     lista.innerHTML=res.map(r=>{const donde=r.ubicacion_id?`<button type="button" class="btn btn-sm btn-primary" data-sel="${r.ubicacion_id}"><i class="bi bi-geo-alt-fill"></i> ${esc(r.ubicacion)}</button>`:(r.colocable?`<a class="btn btn-sm btn-outline-warning" href="/nave/colocar?codigo=${encodeURIComponent(r.codigo||r.nombre)}">Sin hueco · Colocar</a>`:'<span class="badge badge-secondary">sin hueco</span>');return `<div class="list-group-item"><span><strong>${esc(r.nombre)}</strong><br><small class="text-muted">${esc(TIPOS[r.tipo]||r.tipo)}${r.codigo?' · '+esc(r.codigo):''}${r.estado?' · '+esc(r.estado):''}</small></span>${donde}</div>`}).join('');
-    lista.querySelectorAll('[data-sel]').forEach(b=>b.onclick=()=>select(+b.dataset.sel))}
+    lista.querySelectorAll('[data-sel]').forEach(b=>b.onclick=()=>select(+b.dataset.sel,true))}
   async function buscar(){const q=input.value.trim();if(!q)return;estado.textContent='Buscando…';try{const r=await fetch('/api/nave/donde?q='+encodeURIComponent(q),{headers:{Accept:'application/json'}});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo buscar');const res=d.resultados||[];if(!res.length){estado.textContent='No se ha encontrado nada con "'+q+'".';return}
-    if(res.length===1&&res[0].ubicacion_id){select(res[0].ubicacion_id);estado.textContent=`${res[0].nombre}: ${res[0].ubicacion}${res[0].ruta?' ('+res[0].ruta+')':''}`;return}
+    if(res.length===1&&res[0].ubicacion_id){select(res[0].ubicacion_id,true);estado.textContent=`${res[0].nombre}: ${res[0].ubicacion}${res[0].ruta?' ('+res[0].ruta+')':''}`;return}
     estado.textContent=res.length+' resultado(s).';renderResultados(res)}catch(e){estado.textContent=e.message}}
   input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar()}});document.getElementById('nave-buscar-btn').onclick=buscar;
   document.addEventListener('mrd:scanner-code',e=>{e.preventDefault();input.value=e.detail.code;buscar()});
-  const pre=new URLSearchParams(location.search);if(pre.get('ubicacion')&&byId[+pre.get('ubicacion')])select(+pre.get('ubicacion'));if(pre.get('buscar')){input.value=pre.get('buscar');buscar()}
+  const pre=new URLSearchParams(location.search);if(pre.get('ubicacion')&&byId[+pre.get('ubicacion')])select(+pre.get('ubicacion'),true);if(pre.get('buscar')){input.value=pre.get('buscar');buscar()}
 })();
 </script>
 {% endblock %}

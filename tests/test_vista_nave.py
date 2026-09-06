@@ -45,6 +45,8 @@ def test_vista_nave_muestra_huecos_y_contenido(client, db):
     assert f'class="hueco vacio" data-id="{b1.id}"' in html
     assert "Taladro nave" in html and "Discos nave" in html
     assert 'href="/nave/colocar"' in html and "Colocar por escáner" in html
+    # Tocar una caja no desplaza la página (solo el buscador lo hace).
+    assert "select(+el.dataset.id,false)" in html and "panel.scrollIntoView" in html
     assert 'href="/nave"' in client.get("/").text
 
 
