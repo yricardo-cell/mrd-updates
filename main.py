@@ -16063,6 +16063,7 @@ async def materiales_crear(request: Request, db: Session = Depends(get_db),
         descripcion=form.get("descripcion"),
         categoria=form.get("categoria") or None,
         unidad=form.get("unidad", "ud"),
+        unidades_por_paquete=max(1, int(float(form.get("unidades_por_paquete") or 1))),
         stock_actual=float(form.get("stock_actual") or 0),
         stock_minimo=float(form.get("stock_minimo") or 0),
         stock_maximo=float(form.get("stock_maximo")) if form.get("stock_maximo") else None,
@@ -16279,6 +16280,8 @@ async def material_editar(mid: int, request: Request, db: Session = Depends(get_
     mat.descripcion = form.get("descripcion")
     mat.categoria = form.get("categoria") or None
     mat.unidad = form.get("unidad") or mat.unidad
+    if form.get("unidades_por_paquete") not in (None, ""):
+        mat.unidades_por_paquete = max(1, int(float(form.get("unidades_por_paquete") or 1)))
     mat.stock_minimo = float(form.get("stock_minimo") or 0)
     mat.stock_maximo = float(form.get("stock_maximo")) if form.get("stock_maximo") else None
     mat.precio_unidad = float(form.get("precio_unidad")) if form.get("precio_unidad") not in (None, "") else None
@@ -18011,6 +18014,14 @@ def _inventory_line_view(db: Session, line: LineaInventario, reveal_expected: bo
     }
     if reveal_expected:
         data.update(cantidad_esperada=line.cantidad_esperada, diferencia=line.diferencia)
+    if line.material_id:
+        material = db.get(Material, line.material_id)
+        data["unidades_por_paquete"] = int(getattr(material, "unidades_por_paquete", 1) or 1) if material else 1
+    elif line.stock_epi_id:
+        stock = db.get(StockEPI, line.stock_epi_id)
+        data["unidades_por_paquete"] = int(getattr(stock, "unidades_por_paquete", 1) or 1) if stock else 1
+    else:
+        data["unidades_por_paquete"] = 1
     return data
 
 

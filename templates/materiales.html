@@ -171,6 +171,8 @@
             <select name="unidad" class="form-select">
               {% for u in unidades %}<option value="{{ u }}" {% if u == 'ud' %}selected{% endif %}>{{ u }}</option>{% endfor %}
             </select>
+            <label class="form-label mt-2">Unidades por paquete <small class="text-muted">(guantes = 6; 1 si va suelto)</small></label>
+            <input type="number" name="unidades_por_paquete" class="form-control" value="1" min="1" step="1">
           </div>
           <div class="col-md-3">
             <label class="form-label">Ubicación (nave)</label>

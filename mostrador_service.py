@@ -173,6 +173,7 @@ def resolve_counter_item(db: Session, raw_code: str, warehouse_id: int | None = 
             f"Stock {material.stock_actual:g} {material.unidad or 'ud'}",
             True, float(material.stock_actual or 0), material.unidad or "ud",
             bajo_minimo=material.bajo_minimo,
+            unidades_por_paquete=int(getattr(material, "unidades_por_paquete", 1) or 1),
             tipo_seguimiento=getattr(material, "tipo_seguimiento", "generico"),
         )
 
@@ -355,6 +356,7 @@ def _resolve_legacy_counter_item(
             f"Stock {material.stock_actual:g} {material.unidad or 'ud'}",
             True, float(material.stock_actual or 0), material.unidad or "ud",
             bajo_minimo=material.bajo_minimo,
+            unidades_por_paquete=int(getattr(material, "unidades_por_paquete", 1) or 1),
             tipo_seguimiento=getattr(material, "tipo_seguimiento", "generico"),
         )
 

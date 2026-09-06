@@ -818,6 +818,9 @@ class Material(Base):
     categoria = Column(String(100), nullable=True, index=True)
     subcategoria = Column(String(100), nullable=True)
     unidad = Column(String(20), nullable=True, default="ud")  # ud, kg, m, m2, m3, l
+    # Kits (2.7.38): cuántas unidades trae un paquete (guantes = 6). El stock
+    # sigue en unidades; Mostrador, solicitudes e inventario cuentan por paquetes.
+    unidades_por_paquete = Column(Integer, nullable=False, default=1, server_default="1")
     stock_actual = Column(Float, default=0.0)
     stock_minimo = Column(Float, default=0.0)
     stock_maximo = Column(Float, nullable=True)
@@ -1561,6 +1564,7 @@ class StockEPI(Base):
     talla        = Column(String(20), nullable=True)   # None para EPIs; talla para ropa ('M', '42', ...)
     cantidad     = Column(Integer, nullable=False, default=0)
     stock_minimo = Column(Integer, nullable=False, default=3)
+    unidades_por_paquete = Column(Integer, nullable=False, default=1, server_default="1")  # kits 2.7.38
     codigo       = Column(String(50), nullable=True, unique=True)     # código escaneable por tipo+talla
     almacen_id   = Column(Integer, ForeignKey("almacenes.id"), nullable=True, index=True)
     ubicacion_id = Column(Integer, ForeignKey("ubicaciones.id"), nullable=True, index=True)

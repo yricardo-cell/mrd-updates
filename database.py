@@ -683,6 +683,9 @@ def apply_migrations(target_engine=None):
         ("materiales",   "tipo_seguimiento", "VARCHAR(20) NOT NULL DEFAULT 'generico'"),
         ("stock_epi",    "tipo_seguimiento", "VARCHAR(20) NOT NULL DEFAULT 'generico'"),
         ("stock_epi",    "codigo",           "VARCHAR(50)"),
+        # Kits (2.7.38): unidades por paquete
+        ("materiales",   "unidades_por_paquete", "INTEGER NOT NULL DEFAULT 1"),
+        ("stock_epi",    "unidades_por_paquete", "INTEGER NOT NULL DEFAULT 1"),
         # catalogo_epi — campos marca y notas
         ("catalogo_epi", "marca",            "VARCHAR(100)"),
         ("catalogo_epi", "notas",            "TEXT"),

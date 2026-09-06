@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MRD · Maqueta de kits y maletín</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  :root{--bg:#0b1220;--surface:#111a2e;--surface2:#16213a;--border:#22304d;--text:#e2e8f0;--muted:#94a3b8;--cyan:#22d3ee;--green:#34d399;--amber:#f59e0b;--red:#f87171}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 28px 8px}header h1{margin:0 0 4px;font-size:20px}header p{margin:0;color:var(--muted);max-width:1040px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:18px;padding:8px 28px 28px}
+  .screen{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px}
+  .screen h2{margin:0 0 2px;font-size:16px}.screen .sub{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+  .field{display:grid;gap:4px;margin-bottom:10px}.field label{color:var(--muted);font-size:12px}
+  .field input,.field select{background:#0b1220;border:1px solid var(--border);color:#fff;border-radius:8px;padding:8px 10px;font:inherit}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .pill{background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:12px}
+  .pill.ok{border-color:var(--green);color:var(--green)}.pill.warn{border-color:var(--amber);color:var(--amber)}
+  .btn{border:0;border-radius:9px;padding:9px 13px;font:inherit;font-weight:700;cursor:pointer}
+  .btn.primary{background:var(--cyan);color:#0b1220}.btn.ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .cart{background:#0b1220;border:1px solid var(--border);border-radius:12px;padding:10px;margin-top:10px}
+  .line{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+  .line small{display:block;color:var(--muted)}
+  .qty{display:flex;gap:6px;align-items:center}.qty input{width:56px;text-align:center;background:var(--surface2);border:1px solid var(--border);color:#fff;border-radius:7px;padding:5px}
+  .qty .btn{padding:5px 9px;font-size:12px}
+  .content ul{list-style:none;margin:0;padding:0}.content li{padding:7px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:8px}
+  .note{background:#1c2740;border-left:3px solid var(--cyan);padding:8px 12px;border-radius:8px;font-size:13px;margin-top:10px}
+  .notes{padding:0 28px 40px;max-width:1040px}.notes h3{font-size:15px;margin:18px 0 6px}.notes ul{padding-left:18px}.notes li{margin:4px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Kits: unidades por paquete y maletín con contenido</h1>
+  <p>Cuatro pantallas tocadas. Materiales y EPI de stock ganan "unidades por paquete" (guantes = 6) y se pueden contar por paquetes en Mostrador, solicitudes e inventario. Una herramienta puede ser un maletín: las herramientas dicen "va en este maletín", y al escanear el maletín en Mostrador entran o salen todas juntas.</p>
+</header>
+<div class="grid">
+  <section class="screen">
+    <h2><i class="bi bi-boxes"></i> 1 · Ficha de material</h2>
+    <p class="sub">Nuevo campo junto a la unidad. Hoy el campo "unidad" de Guantes talla 9 tiene escrito "100": ese dato pasa aquí.</p>
+    <div class="field"><label>Nombre</label><input value="Guantes nitrilo talla 9" readonly></div>
+    <div class="row"><div class="field"><label>Unidad</label><select><option>par</option><option>ud</option><option>m</option></select></div><div class="field"><label>Unidades por paquete</label><input type="number" value="6"></div><div class="field"><label>Stock actual</label><input value="86" readonly></div></div>
+    <div class="row"><span class="pill ok">86 pares = 14 paquetes y 2 sueltos</span><span class="pill">Se muestra igual en Estado visual e informes</span></div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-lightning"></i> 2 · Mostrador Único: contar por paquetes</h2>
+    <p class="sub">Al escanear un material con paquete, la línea ofrece "+1 paquete" además de "+1 unidad". La cantidad guardada siempre es en unidades.</p>
+    <div class="cart">
+      <div class="line"><div>Guantes nitrilo talla 9<small>6 pares por paquete · quedan 86</small></div><div class="qty"><button class="btn ghost">−1</button><input value="12"><button class="btn ghost">+1</button><button class="btn primary">+1 paquete (6)</button></div><span class="pill">2 paquetes</span></div>
+      <div class="line"><div>Disco corte 230<small>sin paquete</small></div><div class="qty"><button class="btn ghost">−1</button><input value="3"><button class="btn ghost">+1</button></div><span class="pill">3 ud.</span></div>
+    </div>
+    <div class="note">En las solicitudes del trabajador y en el inventario guiado, "Cajas completas" usa este mismo dato para no tener que teclear las unidades por caja cada vez.</div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-briefcase"></i> 3 · Ficha de herramienta: maletín</h2>
+    <p class="sub">Un maletín es una herramienta más (tiene su QR). En cada taladro o caladora se elige "va en este maletín".</p>
+    <div class="row"><div class="field"><label>Herramienta</label><input value="Taladro Hilti TE-6" readonly></div><div class="field"><label>Va en el maletín</label><select><option>MAL-0012 · Maletín Hilti rojo</option><option>Ninguno</option></select></div></div>
+    <div class="content"><strong>Contenido del maletín MAL-0012</strong>
+      <ul>
+        <li><span>Taladro Hilti TE-6 · HER-0451</span><span class="pill ok">en nave</span></li>
+        <li><span>Batería 36V nº 1 · HER-0452</span><span class="pill ok">en nave</span></li>
+        <li><span>Batería 36V nº 2 · HER-0453</span><span class="pill ok">en nave</span></li>
+        <li><span>Cargador C4/36 · HER-0454</span><span class="pill ok">en nave</span></li>
+      </ul>
+    </div>
+    <div class="note">Cada pieza conserva su propio código y estado: si una batería se queda en una obra, el maletín aparece "incompleto" en la ficha y en ¿Qué está fuera?.</div>
+  </section>
+
+  <section class="screen">
+    <h2><i class="bi bi-upc-scan"></i> 4 · Mostrador Único: escanear el maletín</h2>
+    <p class="sub">Escaneas MAL-0012 y entran las cuatro piezas; puedes quitar una si no va (por ejemplo, la segunda batería se queda en la nave).</p>
+    <div class="cart">
+      <div class="line"><div><strong>Maletín Hilti rojo · MAL-0012</strong><small>4 piezas dentro · se entregan juntas</small></div><span class="pill warn">maletín</span><button class="btn ghost">Ver piezas</button></div>
+      <div class="line"><div>· Taladro Hilti TE-6<small>HER-0451</small></div><span class="pill ok">incluido</span><button class="btn ghost">Quitar</button></div>
+      <div class="line"><div>· Batería 36V nº 1<small>HER-0452</small></div><span class="pill ok">incluido</span><button class="btn ghost">Quitar</button></div>
+      <div class="line"><div>· Batería 36V nº 2<small>HER-0453</small></div><span class="pill">se queda</span><button class="btn ghost">Añadir</button></div>
+      <div class="line"><div>· Cargador C4/36<small>HER-0454</small></div><span class="pill ok">incluido</span><button class="btn ghost">Quitar</button></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn primary">Confirmar salida a Cuadrilla A (4 líneas)</button></div>
+  </section>
+</div>
+<div class="notes">
+  <h3>Qué cambia por dentro</h3>
+  <ul>
+    <li>Materiales y EPI de stock: campo <b>unidades_por_paquete</b> (por defecto 1). Mostrador, solicitudes e inventario lo usan para el botón "+1 paquete" y para "cajas completas"; el stock sigue en unidades.</li>
+    <li>Herramientas: casilla <b>es maletín</b> y campo <b>va en el maletín</b>. La ficha del maletín lista el contenido y su estado; al escanear un maletín, el Mostrador añade sus piezas y permite quitar alguna. Al devolver, igual.</li>
+    <li>Sin datos que perder: las herramientas existentes no cambian; solo se les asigna maletín cuando lo indiques desde su ficha.</li>
+  </ul>
+</div>
+</body>
+</html>

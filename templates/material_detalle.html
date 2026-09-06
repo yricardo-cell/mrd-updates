@@ -33,7 +33,7 @@
         <div class="display-5 fw-bold {% if mat.bajo_minimo %}text-warning{% else %}text-success{% endif %}">
           {{ "%.2f"|format(mat.stock_actual) }}
         </div>
-        <div class="text-muted small">Stock actual ({{ mat.unidad }})</div>
+        <div class="text-muted small">Stock actual ({{ mat.unidad }}){% if (mat.unidades_por_paquete or 1) > 1 %} · {{ mat.unidades_por_paquete }} por paquete = {{ ((mat.stock_actual or 0) // mat.unidades_por_paquete)|int }} paquetes{% if ((mat.stock_actual or 0) % mat.unidades_por_paquete) > 0 %} y {{ ((mat.stock_actual or 0) % mat.unidades_por_paquete)|int }} sueltos{% endif %}{% endif %}</div>
         {% if mat.bajo_minimo %}
         <span class="badge bg-warning text-dark mt-1"><i class="bi bi-exclamation-triangle me-1"></i>Bajo minimo</span>
         {% endif %}
