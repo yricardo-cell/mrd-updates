@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.45",
-    "nombre":  "MRD TOOL CONTROL -- Ficha de obra: que hay en la obra, consumos, albaranes, incidencias y acciones al Mostrador",
+    "version_actual":  "2.7.46",
+    "nombre":  "MRD TOOL CONTROL -- Portal del trabajador: seccion Tu EPI con tallas, kit basico y lo que falta",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Ficha de obra: que hay en la obra, consumos, albaranes, incidencias y acciones al Mostrador"
+                    "Portal del trabajador: seccion Tu EPI con tallas, kit basico y lo que falta"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.45.zip",
-    "sha256":  "d811cf43eee1d5198e7c800a7e5ca2198710414dcf1349e4521299e8742c9ef7"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.46.zip",
+    "sha256":  "67d014905c8caed1708ef2a79ef030012fbdf8a0d49ca6a57f813eed5d6607e2"
 }
