@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.59",
-    "nombre":  "MRD TOOL CONTROL -- Recuento por hueco: escanear el hueco y lo que hay, lo no escaneado queda como que falta con aviso y fecha en la Vista de la nave; enlaces para imprimir las etiquetas QR de los huecos",
+    "version_actual":  "2.7.60",
+    "nombre":  "MRD TOOL CONTROL -- Etiqueta QR del hueco rehecha para imprimir: nombre grande, QR de 44 mm y codigo que no desborda; enlaces de etiquetas en Zonas 3D",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Recuento por hueco: escanear el hueco y lo que hay, lo no escaneado queda como que falta con aviso y fecha en la Vista de la nave; enlaces para imprimir las etiquetas QR de los huecos"
+                    "Etiqueta QR del hueco rehecha para imprimir: nombre grande, QR de 44 mm y codigo que no desborda; enlaces de etiquetas en Zonas 3D"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.59.zip",
-    "sha256":  "f8a05c934da5f66fd04830493904bc254b6d7cd4003d07b22c110d45bed70bbf"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.60.zip",
+    "sha256":  "5de7157e1d3702fa045af00cc10f172171b0db86d77439e6ba8668747b197763"
 }
