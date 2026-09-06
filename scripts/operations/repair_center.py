@@ -535,8 +535,15 @@ def run_once(
         _record(state, "repair", result, ", ".join(remaining_errors) or "sin incidencias")
         _write_json_atomic(state_root / "state.json", state)
     # El informe (status.json) sí se publica en ambos modos: es lo que lee
-    # /servicio, y en una máquina sana el vigilante solo ejecuta check.
-    _write_json_atomic(state_root / "status.json", report)
+    # /servicio, y en una máquina sana el vigilante solo ejecuta check. En
+    # modo check es best-effort: un fichero bloqueado por otro lector o con
+    # permisos de otra cuenta no debe convertir un diagnóstico sano en
+    # error_interno (el modo repair sí propaga el fallo, como siempre).
+    try:
+        _write_json_atomic(state_root / "status.json", report)
+    except OSError:
+        if apply:
+            raise
     return report
 
 
