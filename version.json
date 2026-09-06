@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.54",
-    "nombre":  "MRD TOOL CONTROL -- Zonas en 3D: contenedores, nave, furgonetas y patio con medidas reales; estanterias, cajoneras y maquinas colocadas por pared y distancias; cada balda o cajon genera huecos con QR; borrado seguro que nunca pierde herramientas; Vista de la nave sin saltos al tocar",
+    "version_actual":  "2.7.55",
+    "nombre":  "MRD TOOL CONTROL -- Calendario de revisiones y caducidades: EPI individual, mantenimiento de herramientas y maquinas, formaciones, reconocimientos, documentos, lotes y vehiculos en un solo sitio; Hecho programa la siguiente; exportacion .ics; aviso semanal; alerta de no retorno solo con plazo fijado",
     "fecha":  "2026-09-06",
     "cambios":  [
-                    "Zonas en 3D: contenedores, nave, furgonetas y patio con medidas reales; estanterias, cajoneras y maquinas colocadas por pared y distancias; cada balda o cajon genera huecos con QR; borrado seguro que nunca pierde herramientas; Vista de la nave sin saltos al tocar"
+                    "Calendario de revisiones y caducidades: EPI individual, mantenimiento de herramientas y maquinas, formaciones, reconocimientos, documentos, lotes y vehiculos en un solo sitio; Hecho programa la siguiente; exportacion .ics; aviso semanal; alerta de no retorno solo con plazo fijado"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.54.zip",
-    "sha256":  "065a775fd9953abf0474e4fab4f0b93c22adbc876d0b1520dd74efa9bc03b7ab"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.55.zip",
+    "sha256":  "8579480acaaafdfcd21fb75ffb3c3f4030c654a2a113528f37a3a1956e1f9bc3"
 }
