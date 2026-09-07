@@ -10228,7 +10228,35 @@ def configuracion_salud(request: Request, dias: int = 7, user: Usuario = Depends
     ))
 
 
-_PENDIENTES_SEGURIDAD: list[dict] = []
+_PENDIENTES_SEGURIDAD: list[dict] = [
+    {"clave": "purga_claves", "titulo": "Purgar las claves antiguas del repositorio de actualizaciones",
+     "como": "En GitHub (yricardo-cell/mrd-updates): borrar la rama sentinel-fase2-24x7 y reescribir main, o borrar y recrear el repositorio. Después, regenerar el token de publicación."},
+    {"clave": "cert_tunel", "titulo": "Rotar el certificado de origen y el túnel de Cloudflare",
+     "como": "Panel de Cloudflare: revocar el cert.pem de origen y recrear el túnel MRD-TOOL-CONTROL; actualizar la configuración de cloudflared en este PC."},
+    {"clave": "token_dns", "titulo": "Renovar el token DNS del failover y arrancar el watchdog",
+     "como": "Cloudflare: crear un token con permiso DNS:Edit y guardarlo en config/cloudflare_dns.token; arrancar el servicio MRDFailoverWatchdog."},
+    {"clave": "bitlocker", "titulo": "Cifrado del disco del PC de MRD (BitLocker)",
+     "como": "Activar BitLocker en C: y guardar la clave de recuperación fuera del PC (el Guardián avisa mientras esté apagado)."},
+    {"clave": "via_externa", "titulo": "Vía externa alternativa a Cloudflare",
+     "como": "Crear la cuenta de ngrok o Tailscale y pasarme la clave para dejar una segunda salida a internet."},
+]
+
+
+@app.post("/configuracion/salud/pendiente/{clave}", response_class=RedirectResponse)
+async def configuracion_salud_pendiente(clave: str, request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    if clave not in {p["clave"] for p in _PENDIENTES_SEGURIDAD}:
+        raise HTTPException(404, "Pendiente desconocido")
+    estado = _ajuste_get(db, "seguridad_pendientes", {}) or {}
+    if estado.get(clave):
+        estado.pop(clave, None)
+    else:
+        estado[clave] = date.today().strftime("%d/%m/%Y")
+    _ajuste_set(db, "seguridad_pendientes", estado)
+    db.commit()
+    return RedirectResponse("/configuracion/salud#card-seguridad", status_code=303)
+
 
 
 def _alertas_consumo_obras_bg():
