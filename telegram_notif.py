@@ -85,6 +85,29 @@ def enviar_mensaje(
         return str(e)
 
 
+def enviar_mensaje_con_botones(texto: str, botones: list, bot_token: str = "", chat_id: str = "") -> tuple:
+    """Mensaje con teclado inline (mejora 41). `botones` = [[(texto, callback_data), ...], ...].
+    Devuelve (error, message_id): error vacío si OK."""
+    token = bot_token or _token_global()
+    chat = chat_id or _chat_global()
+    if not token or not chat:
+        return ("Telegram no configurado", None)
+    url = TELEGRAM_API.format(token=token)
+    data = json.dumps({
+        "chat_id": chat, "text": texto,
+        "reply_markup": {"inline_keyboard": [[{"text": t, "callback_data": c} for (t, c) in fila] for fila in botones]},
+    }).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json", "User-Agent": "MRD-Tool/1.5"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            cuerpo = json.loads(resp.read().decode("utf-8") or "{}")
+            if resp.status >= 400 or not cuerpo.get("ok"):
+                return (f"HTTP {resp.status}", None)
+            return ("", (cuerpo.get("result") or {}).get("message_id"))
+    except Exception as e:
+        return (str(e), None)
+
+
 def enviar_aviso(
     titulo: str,
     mensaje: str,

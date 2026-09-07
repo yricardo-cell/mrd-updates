@@ -2818,3 +2818,24 @@ class PrecioCompra(Base):
     fecha = Column(DateTime, nullable=False, server_default=func.now())
     origen = Column(String(40), nullable=True)     # pedido | foto | manual
     pedido_id = Column(Integer, ForeignKey("pedidos_proveedor.id"), nullable=True)
+
+
+class ErrorCodigo(Base):
+    """Errores de programación detectados en producción, para arreglarlos desde Telegram (mejoras 41-44)."""
+    __tablename__ = "errores_codigo"
+    id = Column(Integer, primary_key=True)
+    clave = Column(String(64), unique=True, nullable=False, index=True)
+    ruta = Column(String(200), nullable=False)
+    tipo = Column(String(120), nullable=False)
+    mensaje = Column(String(500), nullable=True)
+    traza = Column(Text, nullable=True)
+    primera_vez = Column(DateTime, nullable=False, server_default=func.now())
+    ultima_vez = Column(DateTime, nullable=True)
+    veces = Column(Integer, nullable=False, default=1)
+    estado = Column(String(20), nullable=False, default="nuevo", index=True)   # nuevo | avisado | ignorado | arreglando | arreglado | fallido | publicado
+    version = Column(String(20), nullable=True)
+    telegram_msg_id = Column(Integer, nullable=True)
+    arreglo_resumen = Column(Text, nullable=True)
+    commit = Column(String(60), nullable=True)
+    version_publicada = Column(String(20), nullable=True)
+    actualizado_en = Column(DateTime, nullable=True)

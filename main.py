@@ -859,6 +859,10 @@ async def global_error_handler(request: Request, exc: Exception):
     tb = traceback.format_exc()
     mrd_logging.log_error(f"Error no controlado en {request.url.path}", exc)
     mrd_logging.errors.error(tb)
+    try:
+        await run_in_threadpool(_registrar_error_codigo, request.url.path, exc, tb)   # mejora 41
+    except Exception as _e_reg:
+        mrd_logging.log_error(f"Registro de error: {_e_reg}")
     print(f"[MRD-500] {request.url.path} — {type(exc).__name__}: {exc}", flush=True)
     print(tb, flush=True)
     return _render_error(request, 500)
@@ -12154,6 +12158,139 @@ def _salud_linea_resumen(db: Session) -> str:
     if problemas:
         return "Sistema: ATENCIÓN · " + "; ".join(problemas)
     return "Sistema: todo correcto (copia, comprobación, disco" + (", túnel" if IS_PRODUCTION else "") + ")"
+
+
+# ─── 41-44: errores de programación arreglables desde Telegram ────────────────
+_ERROR_ESTADOS_ABIERTOS = ("nuevo", "avisado", "arreglando", "fallido")
+
+
+def _error_clave(tipo: str, ruta: str, mensaje: str) -> str:
+    base = f"{tipo}|{_salud_ruta(ruta)}|{(mensaje or '')[:80]}"
+    return hashlib.sha1(base.encode("utf-8", "replace")).hexdigest()[:40]
+
+
+def _error_texto_telegram(e) -> str:
+    return (f"Error de programa #{e.id} en {e.ruta}" + chr(10) + f"{e.tipo}: {(e.mensaje or '')[:160]}" + chr(10) +
+            f"Visto {e.veces} vez/veces (versión {e.version or '?'})." + chr(10) +
+            "Pulsa Arreglar para que Claude lo corrija en pruebas y te mande el resumen; luego decides si se publica.")
+
+
+def _registrar_error_codigo(ruta: str, exc: BaseException, traza: str, avisar=None, db_externa=None):
+    """Guarda (o cuenta) el error y, si es nuevo, avisa por Telegram con los botones Arreglar / Ignorar."""
+    from models import ErrorCodigo as _EC
+    tipo = type(exc).__name__
+    mensaje = str(exc)[:500]
+    clave = _error_clave(tipo, ruta, mensaje)
+    gen = None
+    if db_externa is not None:
+        db = db_externa
+    else:
+        gen = app.dependency_overrides.get(get_db, get_db)()   # respeta la base de datos de tests
+        db = next(gen)
+    try:
+        e = db.query(_EC).filter(_EC.clave == clave).first()
+        ahora = datetime.now()
+        if e is None:
+            e = _EC(clave=clave, ruta=_salud_ruta(ruta), tipo=tipo, mensaje=mensaje, traza=(traza or "")[-12000:], primera_vez=ahora, ultima_vez=ahora,
+                    veces=1, estado="nuevo", version=leer_version_actual().get("version_actual", VERSION), actualizado_en=ahora)
+            db.add(e)
+            db.flush()
+        else:
+            e.veces = (e.veces or 0) + 1
+            e.ultima_vez = ahora
+            e.traza = (traza or e.traza or "")[-12000:]
+            if e.estado in ("arreglado", "publicado"):
+                e.estado = "nuevo"   # ha vuelto a pasar tras el arreglo
+                e.version = leer_version_actual().get("version_actual", VERSION)
+        if e.estado == "nuevo":
+            cfg = _telegram_config()
+            if avisar is None and cfg.get("bot_token") and cfg.get("chat_id"):
+                import telegram_notif as _tgb
+                avisar = lambda texto, botones: _tgb.enviar_mensaje_con_botones(texto, botones, cfg["bot_token"], cfg["chat_id"])
+            if avisar is not None:
+                try:
+                    err, msg_id = avisar(_error_texto_telegram(e), [[("Arreglar", f"arreglar:{e.id}"), ("Ignorar", f"ignorar:{e.id}")]])
+                    if not err:
+                        e.estado = "avisado"
+                        e.telegram_msg_id = msg_id
+                except Exception as exc2:
+                    mrd_logging.log_error(f"Aviso de error a Telegram: {exc2}")
+        e.actualizado_en = ahora
+        db.commit()
+        return e.id
+    except Exception as exc3:
+        db.rollback()
+        mrd_logging.log_error(f"Registro de error de código: {exc3}")
+        return None
+    finally:
+        if db_externa is None:
+            db.close()
+
+
+def _error_a_dict(e, con_traza: bool = False) -> dict:
+    d = {"id": e.id, "clave": e.clave, "ruta": e.ruta, "tipo": e.tipo, "mensaje": e.mensaje, "veces": e.veces, "estado": e.estado, "version": e.version,
+         "primera_vez": e.primera_vez.isoformat(timespec="seconds") if e.primera_vez else None, "ultima_vez": e.ultima_vez.isoformat(timespec="seconds") if e.ultima_vez else None,
+         "arreglo_resumen": e.arreglo_resumen, "commit": e.commit, "version_publicada": e.version_publicada}
+    if con_traza:
+        d["traza"] = e.traza
+    return d
+
+
+@app.get("/api/bot/errores")
+def api_bot_errores(request: Request, db: Session = Depends(get_db)):
+    _bot_requiere(request)
+    from models import ErrorCodigo as _EC
+    rows = db.query(_EC).filter(_EC.estado.in_(_ERROR_ESTADOS_ABIERTOS)).order_by(_EC.ultima_vez.desc()).limit(30).all()
+    return {"errores": [_error_a_dict(e) for e in rows]}
+
+
+@app.get("/api/bot/errores/{eid}")
+def api_bot_error(eid: int, request: Request, db: Session = Depends(get_db)):
+    _bot_requiere(request)
+    from models import ErrorCodigo as _EC
+    e = db.get(_EC, eid)
+    if e is None:
+        raise HTTPException(404, "Error no encontrado")
+    return _error_a_dict(e, con_traza=True)
+
+
+@app.post("/api/bot/errores/{eid}/estado")
+async def api_bot_error_estado(eid: int, request: Request, db: Session = Depends(get_db)):
+    _bot_requiere(request)
+    from models import ErrorCodigo as _EC
+    e = db.get(_EC, eid)
+    if e is None:
+        raise HTTPException(404, "Error no encontrado")
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    estado = str(body.get("estado") or "")
+    if estado not in ("arreglando", "arreglado", "fallido", "publicado", "ignorado", "nuevo"):
+        raise HTTPException(400, "Estado no válido")
+    e.estado = estado
+    if body.get("resumen") is not None:
+        e.arreglo_resumen = str(body.get("resumen"))[:4000]
+    if body.get("commit"):
+        e.commit = str(body.get("commit"))[:60]
+    if body.get("version"):
+        e.version_publicada = str(body.get("version"))[:20]
+    e.actualizado_en = datetime.now()
+    db.commit()
+    return {"ok": True, "estado": e.estado}
+
+
+@app.post("/api/bot/errores/{eid}/ignorar")
+def api_bot_error_ignorar(eid: int, request: Request, db: Session = Depends(get_db)):
+    _bot_requiere(request)
+    from models import ErrorCodigo as _EC
+    e = db.get(_EC, eid)
+    if e is None:
+        raise HTTPException(404, "Error no encontrado")
+    e.estado = "ignorado"
+    e.actualizado_en = datetime.now()
+    db.commit()
+    return {"ok": True}
 
 
 def _alertas_consumo_obras_bg():
