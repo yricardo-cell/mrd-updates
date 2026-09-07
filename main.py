@@ -9841,6 +9841,10 @@ def _resumen_diario_texto(db: Session, hoy: date | None = None) -> str:
         l.append(f"Incidencias nuevas desde ayer: {inc_nuevas}")
     if esperan:
         l.append(f"Pedidos esperando a que quede algo libre: {esperan}")
+    try:
+        l.append(_salud_linea_resumen(db))   # mejora 39
+    except Exception as exc:
+        mrd_logging.log_error(f"Salud en resumen: {exc}")
     return "\n".join(l)
 
 
@@ -12107,6 +12111,49 @@ def api_bot_actualizar(request: Request):
         return {"ok": False, "detalle": "No hay enlace de descarga", "info": info}
     res = _updater.start_update(url, sha, ver)
     return {"ok": bool(res.get("ok")), "detalle": res.get("message") or res.get("error", ""), "version": ver}
+
+
+# ─── 39: línea de salud del sistema en el resumen diario ─────────────────────
+def _salud_linea_resumen(db: Session) -> str:
+    problemas = []
+    try:
+        libre = shutil.disk_usage(str(BASE_DIR)).free / 1024 ** 3
+        if libre < 5:
+            problemas.append(f"disco {libre:.1f} GB")
+    except OSError:
+        pass
+    try:
+        graves = sum(e["veces"] for e in _salud_errores(1) if e["grave"])
+        if graves:
+            problemas.append(f"{graves} errores de programa ayer")
+    except Exception:
+        pass
+    try:
+        humo = json.loads(_HUMO_ESTADO.read_text(encoding="utf-8")) if _HUMO_ESTADO.is_file() else {}
+        if humo and not humo.get("ok"):
+            problemas.append("última comprobación con fallos")
+    except ValueError:
+        pass
+    try:
+        import backup_manager as _bm
+        p = _bm._ultimo_backup_path()
+        if p is None:
+            problemas.append("sin copia de seguridad")
+        else:
+            horas = (datetime.now().timestamp() - p.stat().st_mtime) / 3600
+            if horas > 36:
+                problemas.append(f"última copia hace {horas / 24:.0f} días")
+    except Exception:
+        pass
+    if IS_PRODUCTION:
+        try:
+            if not _tunel_ok():
+                problemas.append("túnel caído")
+        except Exception:
+            pass
+    if problemas:
+        return "Sistema: ATENCIÓN · " + "; ".join(problemas)
+    return "Sistema: todo correcto (copia, comprobación, disco" + (", túnel" if IS_PRODUCTION else "") + ")"
 
 
 def _alertas_consumo_obras_bg():
