@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.72",
-    "nombre":  "MRD TOOL CONTROL -- Portal del trabajador: pedido en dos toques, varias fotos, avisos utiles, firma en el movil e idioma rumano",
+    "version_actual":  "2.7.73",
+    "nombre":  "MRD TOOL CONTROL -- Portal del trabajador: 18 mejoras (pedido completo y por foto, Hoy, huella, sin cobertura, encargado, avisos de empresa...)",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Portal del trabajador: pedido en dos toques, varias fotos, avisos utiles, firma en el movil e idioma rumano"
+                    "Portal del trabajador: 18 mejoras (pedido completo y por foto, Hoy, huella, sin cobertura, encargado, avisos de empresa...)"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.72.zip",
-    "sha256":  "972951b961a71f017c34597d632f59aba58eb02f1ed85d5c76b0882db1c4a937"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.73.zip",
+    "sha256":  "a9dc2e85996f6ed5f90e0f530ce7a5dad91f9271551b1f101f7b014d06402839"
 }
