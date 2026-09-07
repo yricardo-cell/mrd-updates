@@ -695,6 +695,8 @@ def apply_migrations(target_engine=None):
         ("push_suscripciones", "trabajador_id",  "INTEGER REFERENCES trabajadores(id)"),
         # Varias fotos en incidencias y devoluciones del portal (P3)
         ("incidencias_portal_trabajador", "fotos_json", "TEXT"),
+        ("incidencias_portal_trabajador", "audio_path", "VARCHAR(255)"),
+        ("comunicaciones_trabajador", "audio_path", "VARCHAR(255)"),
         ("devoluciones_trabajador", "fotos_json", "TEXT"),
         # Pedidos a proveedor en tres pasos (2.7.50)
         ("pedidos_proveedor", "proveedor_id",    "INTEGER REFERENCES proveedores(id)"),

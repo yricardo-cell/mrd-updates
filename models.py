@@ -314,6 +314,7 @@ class ComunicacionTrabajador(Base):
     mensaje = Column(Text, nullable=False)
     obra = Column(String(200), nullable=True)
     estado = Column(String(20), nullable=False, default="recibida", index=True)
+    audio_path = Column(String(255), nullable=True)   # mensaje de voz (mejora 10)
     respuesta = Column(Text, nullable=True)
     respondido_por_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
     creado_en = Column(DateTime, nullable=False, server_default=func.now(), index=True)
@@ -371,6 +372,7 @@ class IncidenciaPortalTrabajador(Base):
     descripcion = Column(Text, nullable=False)
     foto_path = Column(String(255), nullable=True)
     fotos_json = Column(Text, nullable=True)  # varias fotos del portal (P3)
+    audio_path = Column(String(255), nullable=True)  # mensaje de voz (mejora 10)
 
     @property
     def fotos_lista(self) -> list:

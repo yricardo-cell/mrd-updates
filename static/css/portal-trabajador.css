@@ -77,3 +77,6 @@ input,select,textarea{transition:border-color .16s ease,box-shadow .16s ease}
 
 /* Pantalla Hoy (mejora 1) */
 .hoy-list{display:flex;flex-direction:column;gap:8px}.hoy-item{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:#f4f7fb;color:#172033;text-decoration:none;font-weight:700}.hoy-item span{flex:1}.hoy-item>i:first-child{font-size:1.3rem}.hoy-item.ok{background:#e6f7ec;color:#166534}.hoy-item.warn{background:#fff4e5;color:#9a3412}.hoy-item.danger{background:#fde8e8;color:#991b1b}.hoy-item.info{background:#e0f2fe;color:#075985}.hoy-ok{margin:0;font-weight:700;color:#166534}
+
+/* Mensajes de voz (mejora 10) */
+.voz-box{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0}.voz-preview{max-width:100%;height:36px}
