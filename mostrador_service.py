@@ -270,6 +270,9 @@ def resolve_counter_item(db: Session, raw_code: str, warehouse_id: int | None = 
     repaired = _resolve_por_digitos(db, code, warehouse_id)
     if repaired:
         return repaired
+    parecido = _resolve_por_parecido(db, code, warehouse_id)
+    if parecido:
+        return parecido
     raise CounterError(404, "QR no reconocido o articulo inactivo")
 
 
@@ -311,6 +314,70 @@ def _resolve_por_digitos(db: Session, code: str, warehouse_id: int | None = None
         # El código real es también solo dígitos: ya falló por la vía normal
         # (por ejemplo, pertenece a otro almacén); no volver a intentarlo.
         return None
+    try:
+        item = resolve_counter_item(db, real_code, warehouse_id)
+    except CounterError:
+        return None
+    item["lectura_reparada"] = code
+    return item
+
+
+def _distancia_edicion(a: str, b: str, maximo: int = 2) -> int:
+    """Distancia de Levenshtein acotada: en cuanto una fila supera `maximo` deja de calcular."""
+    if abs(len(a) - len(b)) > maximo:
+        return maximo + 1
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        mejor = i
+        for j, cb in enumerate(b, 1):
+            v = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb))
+            cur.append(v)
+            if v < mejor:
+                mejor = v
+        if mejor > maximo:
+            return maximo + 1
+        prev = cur
+    return prev[-1]
+
+
+_PARECIDO_RE = re.compile(r"^[A-Z0-9][A-Z0-9-]{11,}$")
+
+
+def _resolve_por_parecido(db: Session, code: str, warehouse_id: int | None = None) -> dict | None:
+    """Lecturas con uno o dos caracteres cambiados o perdidos (2.7.76).
+
+    El 07/09/2026 un mismo QR MRD-HTA llegó 12 veces con un carácter distinto
+    (C245836779C39628... frente a C24583677C396284...) y el Mostrador lo
+    rechazaba. Si el código leído tiene 12 caracteres o más y está a distancia
+    de edición 1 o 2 de un único código activo con el mismo prefijo, se
+    resuelve ese artículo por la vía normal y se marca la lectura como
+    reparada. Ante cualquier ambigüedad, o si el código exacto existe (y
+    falló por otra causa), no se adivina."""
+    c = " ".join((code or "").split()).upper()
+    if len(c) < 12 or not _PARECIDO_RE.match(c):
+        return None
+    # Los códigos MRD-XXX-<32 hex> admiten hasta 3 errores (el caso real del 07/09 era una
+    # pérdida, una inserción y un cambio); los cortos, 2.
+    maximo = 3 if len(c) >= 30 else 2
+    matches: set[str] = set()
+    for model, columns, active_attr in _CODIGOS_POR_DIGITOS:
+        for name in columns:
+            column = getattr(model, name)
+            statement = select(column).where(column.is_not(None), column != "")
+            if active_attr:
+                statement = statement.where(getattr(model, active_attr) == True)
+            for (value,) in db.execute(statement):
+                v = str(value).strip().upper()
+                if len(v) < 12 or abs(len(v) - len(c)) > maximo or v[:4] != c[:4]:
+                    continue
+                if v == c:
+                    return None
+                if _distancia_edicion(c, v, maximo) <= maximo:
+                    matches.add(str(value).strip())
+    if len(matches) != 1:
+        return None
+    real_code = matches.pop()
     try:
         item = resolve_counter_item(db, real_code, warehouse_id)
     except CounterError:
