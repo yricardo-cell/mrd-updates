@@ -21909,6 +21909,30 @@ async def material_detalle(mid: int, request: Request, db: Session = Depends(get
 
 # ─── Recepción de compras por foto del albarán (mejora 24) ───────────────────
 
+def _pedido_aplicar_recepcion(db: Session, user: Usuario, pedido, recibidas: dict[int, float], event_id: str) -> int:
+    """Mejora 12: cierra las líneas del pedido a proveedor que corresponden a los materiales recibidos (sin pasar de lo pendiente)."""
+    aplicadas = 0
+    for line in pedido.lineas:
+        if line.tipo != "material" or line.objeto_id not in recibidas:
+            continue
+        pendiente = max(0.0, float(line.cantidad_pedida) - float(line.cantidad_recibida or 0))
+        cant = min(pendiente, float(recibidas[line.objeto_id]))
+        if cant <= 0:
+            continue
+        line.cantidad_recibida = float(line.cantidad_recibida or 0) + cant
+        recibidas[line.objeto_id] -= cant
+        aplicadas += 1
+    if aplicadas:
+        completo = all(float(l.cantidad_recibida or 0) >= float(l.cantidad_pedida) - .00001 for l in pedido.lineas)
+        pedido.estado = "recibido" if completo else "parcial"
+        pedido.cerrado_en = datetime.now() if completo else None
+        db.add(RecepcionPedidoProveedor(pedido_id=pedido.id, event_id=event_id,
+                                        lineas_json=json.dumps([{"material_id": k, "cantidad": v} for k, v in recibidas.items()], ensure_ascii=False), usuario_id=user.id))
+        db.add(AuditoriaLog(tabla="pedidos_proveedor", registro_id=pedido.id, accion="recibir",
+                            resumen=f"{pedido.numero}: recepción por foto {'completa' if completo else 'parcial'} ({aplicadas} líneas)", usuario_id=user.id))
+    return aplicadas
+
+
 @app.get("/compras/recepcion-foto", response_class=HTMLResponse)
 def compras_recepcion_foto(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     try:
@@ -21917,8 +21941,10 @@ def compras_recepcion_foto(request: Request, user: Usuario = Depends(requiere_lo
         raise HTTPException(exc.status_code, exc.detail)
     import ocr_windows as _ocr
     mats = db.query(Material).filter(Material.activo == True).order_by(Material.nombre).all()
+    pedidos_abiertos = db.query(PedidoProveedor).filter(PedidoProveedor.estado.in_(("enviado", "parcial"))).order_by(PedidoProveedor.fecha_pedido.desc()).limit(50).all()
+    pedidos_lineas = {p.id: [{"material_id": l.objeto_id, "pendiente": round(float(l.cantidad_pedida) - float(l.cantidad_recibida or 0), 2), "referencia": l.referencia or l.descripcion or ""} for l in p.lineas if l.tipo == "material"] for p in pedidos_abiertos}
     return templates.TemplateResponse(request, "compras_recepcion_foto.html", ctx_base(
-        request, user, db, materiales=mats, ocr_ok=_ocr.ocr_disponible(), obras=db.query(Obra).filter(Obra.activa == True).order_by(Obra.nombre).all(),
+        request, user, db, materiales=mats, ocr_ok=_ocr.ocr_disponible(), pedidos_abiertos=pedidos_abiertos, pedidos_lineas=pedidos_lineas, obras=db.query(Obra).filter(Obra.activa == True).order_by(Obra.nombre).all(),
     ))
 
 
@@ -21970,6 +21996,11 @@ async def compras_recepcion_confirmar(request: Request, user: Usuario = Depends(
     referencia = " ".join(str(form.get("referencia") or "").split())[:120] or None
     obra_txt = str(form.get("obra_id") or "").strip()
     obra_id = int(obra_txt) if obra_txt.isdigit() else None
+    pedido_id_txt = str(form.get("pedido_id") or "").strip()
+    pedido = db.get(PedidoProveedor, int(pedido_id_txt)) if pedido_id_txt.isdigit() else None  # mejora 12
+    if pedido is not None and pedido.estado not in ("enviado", "parcial"):
+        raise HTTPException(409, "Ese pedido a proveedor no está pendiente de recepción")
+    recibidas: dict[int, float] = {}
     n = 0
     start_stock_transaction(db)
     try:
@@ -21990,10 +22021,13 @@ async def compras_recepcion_confirmar(request: Request, user: Usuario = Depends(
             move_material(db, user, mid, cant, tipo="entrada", event_id=f"material-{uuid.uuid4()}",
                           motivo=f"Recepción por foto de albarán{(' ' + referencia) if referencia else ''}", obra_id=obra_id)
             db.add(MovimientoMaterial(material_id=mid, tipo="entrada", cantidad=cant, obra_id=obra_id, referencia=referencia,
-                                      notas="Recepción por foto del albarán del proveedor", usuario_id=user.id))
+                                      notas="Recepción por foto del albarán del proveedor" + (f" (pedido {pedido.numero})" if pedido else ""), usuario_id=user.id))
+            recibidas[mid] = recibidas.get(mid, 0.0) + cant
             n += 1
         if not n:
             raise StockError(400, "No hay ninguna línea con material y cantidad")
+        if pedido is not None:
+            _pedido_aplicar_recepcion(db, user, pedido, recibidas, f"foto-{uuid.uuid4()}")
         db.add(AuditoriaLog(tabla="materiales", registro_id=0, accion="recepcion_foto", resumen=f"Recepción por foto: {n} líneas{(' · ' + referencia) if referencia else ''}", usuario_id=user.id))
         db.commit()
     except StockError as exc:
