@@ -1105,7 +1105,9 @@ def startup_event():
             def _run_humo():   # mejora 33: comprobación tras arrancar con una versión nueva
                 _tm.sleep(45)
                 try:
-                    _humo_tras_actualizar_tick()
+                    _res_humo = _humo_tras_actualizar_tick()
+                    if _res_humo and not _res_humo.get("ok"):
+                        _rollback_si_humo_falla(_res_humo)   # mejora 34
                 except Exception as _e:
                     mrd_logging.log_error(f"Prueba de humo: {_e}")
             _thr.Thread(target=_run_humo, daemon=True, name="prueba_humo_bg").start()
@@ -11831,6 +11833,51 @@ def _reparacion_bg():
         except Exception as exc:
             mrd_logging.log_error(f"Reparación automática: {exc}")
         _t.sleep(3600)
+
+
+# ─── 34: vuelta atrás automática tras una actualización con la prueba de humo fallida ────
+_ROLLBACK_ESTADO = BASE_DIR / "config" / "rollback_estado.json"
+
+
+def _rollback_aplicar(backup_dir: Path, base_dir: Path) -> int:
+    n = 0
+    for f in Path(backup_dir).rglob("*"):
+        if f.is_file():
+            rel = f.relative_to(backup_dir)
+            dest = Path(base_dir) / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, dest)
+            n += 1
+    return n
+
+
+def _rollback_decidir(res: dict | None, version: str, estado: dict, hay_copia: bool) -> bool:
+    """Solo una vez por versión, solo si la comprobación falló y existe la copia de la versión anterior."""
+    if not res or res.get("ok"):
+        return False
+    if not hay_copia:
+        return False
+    return str(estado.get("version")) != str(version)
+
+
+def _rollback_si_humo_falla(res: dict | None) -> bool:
+    version = leer_version_actual().get("version_actual", VERSION)
+    backup_dir = Path(_updater.UPDATE_DIR) / f"rollback_{version}"
+    estado = _estado_json_leer(_ROLLBACK_ESTADO)
+    if not _rollback_decidir(res, version, estado, backup_dir.is_dir()):
+        return False
+    fallos = [c[0] for c in (res or {}).get("comprobaciones", []) if not c[1]]
+    estado.update({"version": version, "fecha": datetime.now().isoformat(timespec="seconds"), "fallos": fallos[:10]})
+    _estado_json_escribir(_ROLLBACK_ESTADO, estado)
+    try:
+        n = _rollback_aplicar(backup_dir, BASE_DIR)
+    except Exception as exc:
+        _notificar_sistema("La vuelta atrás automática falló", f"La {version} no pasó la comprobación ({', '.join(fallos[:4])}) y no se pudieron reponer los ficheros anteriores: {exc}")
+        return False
+    _notificar_sistema(f"Vuelta atrás automática: la {version} no pasó la comprobación", f"Fallaron: {', '.join(fallos[:6]) or 'varias comprobaciones'}. Se han repuesto {n} ficheros de la versión anterior y se reinicia. Avísame para revisar la {version} antes de volver a instalarla.")
+    if _supervisado():
+        _reiniciar_proceso(f"rollback {version}")
+    return True
 
 
 def _alertas_consumo_obras_bg():
