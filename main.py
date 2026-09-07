@@ -20197,18 +20197,13 @@ async def albaran_retorno_item(aid: int, iid: int, db: Session = Depends(get_db)
     return RedirectResponse(f"/albaranes-salida/{aid}?ok=retorno", status_code=303)
 
 
-@app.get("/albaranes-salida/{aid}/pdf")
-async def albaran_pdf(aid: int, db: Session = Depends(get_db),
-                       usuario=Depends(requiere_login)):
+def _albaran_pdf_buffer(alb):
+    """PDF del albarán en memoria (lo usan la oficina y el portal del trabajador, mejora 16)."""
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
     from reportlab.lib.styles import getSampleStyleSheet
     import io
-    alb = db.query(AlbaranSalida).filter(AlbaranSalida.id == aid).first()
-    if not alb:
-        raise HTTPException(status_code=404)
-    _require_warehouse_access(usuario, alb.almacen_id)
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     styles = getSampleStyleSheet()
@@ -20290,9 +20285,35 @@ async def albaran_pdf(aid: int, db: Session = Depends(get_db),
         story.append(Paragraph("Firma del responsable: ___________________________", styles["Normal"]))
     doc.build(story)
     buf.seek(0)
+    return buf
+
+
+@app.get("/albaranes-salida/{aid}/pdf")
+async def albaran_pdf(aid: int, db: Session = Depends(get_db),
+                       usuario=Depends(requiere_login)):
+    alb = db.query(AlbaranSalida).filter(AlbaranSalida.id == aid).first()
+    if not alb:
+        raise HTTPException(status_code=404)
+    _require_warehouse_access(usuario, alb.almacen_id)
+    buf = _albaran_pdf_buffer(alb)
     from fastapi.responses import StreamingResponse
     return StreamingResponse(buf, media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=albaran_{alb.numero}.pdf"})
+
+
+@app.get("/portal/{token}/albaranes/{aid}/pdf")
+def portal_albaran_pdf(token: str, aid: int, request: Request, db: Session = Depends(get_db)):
+    """PDF del albarán del propio trabajador, para verlo o compartirlo desde el móvil (mejora 16)."""
+    worker = _portal_worker_required(token, request, db)
+    alb = db.query(AlbaranSalida).options(joinedload(AlbaranSalida.items)).filter(
+        AlbaranSalida.id == aid, AlbaranSalida.responsable_id == worker.id,
+    ).first()
+    if not alb:
+        raise HTTPException(404, "Albarán no encontrado")
+    buf = _albaran_pdf_buffer(alb)
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(buf, media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=albaran_{alb.numero}.pdf", "Cache-Control": "no-store, private"})
 
 
 # ─── QR de Material ──────────────────────────────────────────────────────────────────────────────────────────────────────
