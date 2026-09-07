@@ -951,6 +951,7 @@ def startup_event():
                     _aviso_semanal_calendario_bg()
                     _resumen_semanal_bg()
                     _ensayo_restauracion_bg()
+                    _avisos_trabajador_bg()
                     _tm.sleep(6*3600)  # cada 6 horas
             _thr.Thread(target=_run_alerts, daemon=True, name="alertas_bg").start()
         except Exception:
@@ -9295,6 +9296,91 @@ def _ensayo_restauracion_bg():
         _bke.ensayo_automatico()
     except Exception as exc:  # pragma: no cover
         mrd_logging.log_error(f"Ensayo de restauración: {exc}")
+
+
+# ─── Avisos útiles al trabajador (P4) ────────────────────────────────────────
+
+def _avisos_trabajador_util(db: Session, hoy: date | None = None) -> int:
+    """Avisos al móvil del trabajador que de verdad le sirven, una sola vez cada uno:
+    - el plazo de devolución de una herramienta vence mañana / hoy, o ya venció;
+    - una formación le caduca en 30 días o ya caducó;
+    - el reconocimiento médico le toca en 30 días."""
+    hoy = hoy or date.today()
+    creados = 0
+
+    def aviso(tid, titulo, mensaje, clave, enlace="#asignado", kind="aviso"):
+        nonlocal creados
+        antes = db.query(NotificacionTrabajador).filter(NotificacionTrabajador.evento_clave == clave).first()
+        if antes is not None:
+            return
+        create_worker_notification(db, tid, title=titulo, message=mensaje, kind=kind, link=enlace, event_key=clave)
+        creados += 1
+
+    # 1) Plazos de devolución: última entrega con plazo de cada herramienta que sigue fuera.
+    fuera = db.query(Herramienta).filter(Herramienta.activa == True, Herramienta.estado.in_(["entregada", "en_obra", "en_transporte"])).all()
+    ids = [h.id for h in fuera]
+    ultima: dict[int, Movimiento] = {}
+    if ids:
+        for mov in db.query(Movimiento).filter(Movimiento.herramienta_id.in_(ids), Movimiento.tipo.in_(["entrega", "traslado"])).order_by(Movimiento.id.desc()).all():
+            ultima.setdefault(mov.herramienta_id, mov)
+    for h in fuera:
+        mov = ultima.get(h.id)
+        if mov is None or not mov.fecha_devolucion_prevista:
+            continue
+        tid = mov.trabajador_id or h.responsable_id
+        if not tid:
+            continue
+        t = db.get(Trabajador, tid)
+        if t is None or not t.activo:
+            continue
+        prevista = mov.fecha_devolucion_prevista.date() if isinstance(mov.fecha_devolucion_prevista, datetime) else mov.fecha_devolucion_prevista
+        dias = (prevista - hoy).days
+        f = prevista.strftime("%d/%m/%Y")
+        if dias == 1:
+            aviso(tid, f"Mañana hay que devolver {h.nombre}", f"El plazo de devolución de {h.nombre} ({h.codigo or ''}) termina mañana, {f}. Si ya la devolviste o la vas a necesitar más días, díselo al almacén.", f"plazo:{h.id}:{prevista.isoformat()}:aviso")
+        elif dias == 0:
+            aviso(tid, f"Hoy vence el plazo de {h.nombre}", f"Hoy {f} termina el plazo de devolución de {h.nombre} ({h.codigo or ''}).", f"plazo:{h.id}:{prevista.isoformat()}:aviso")
+        elif dias < 0:
+            aviso(tid, f"Plazo vencido: {h.nombre}", f"El plazo de devolución de {h.nombre} ({h.codigo or ''}) venció el {f}. Devuélvela o pide al almacén más días.", f"plazo:{h.id}:{prevista.isoformat()}:vencido")
+
+    # 2) Formaciones que caducan en 30 días o ya caducadas (últimos 60 días).
+    limite = hoy + timedelta(days=30)
+    for fo in db.query(FormacionTrabajador).filter(FormacionTrabajador.fecha_caducidad.isnot(None), FormacionTrabajador.fecha_caducidad <= limite, FormacionTrabajador.fecha_caducidad >= hoy - timedelta(days=60)).all():
+        t = db.get(Trabajador, fo.trabajador_id)
+        if t is None or not t.activo:
+            continue
+        f = fo.fecha_caducidad.strftime("%d/%m/%Y")
+        if fo.fecha_caducidad >= hoy:
+            aviso(fo.trabajador_id, f"Tu formación «{fo.nombre_curso}» caduca el {f}", "Habla con la oficina para renovarla antes de que caduque.", f"formacion:{fo.id}:{fo.fecha_caducidad.isoformat()}", "#documentacion", "formacion")
+        else:
+            aviso(fo.trabajador_id, f"Tu formación «{fo.nombre_curso}» caducó el {f}", "Sin la formación en vigor no puedes hacer ese trabajo. Habla con la oficina para renovarla.", f"formacion:{fo.id}:caducada", "#documentacion", "formacion")
+
+    # 3) Reconocimiento médico que toca en 30 días.
+    for rm in db.query(ReconocimientoMedico).filter(ReconocimientoMedico.fecha_proxima.isnot(None), ReconocimientoMedico.fecha_proxima <= limite, ReconocimientoMedico.fecha_proxima >= hoy - timedelta(days=60)).all():
+        t = db.get(Trabajador, rm.trabajador_id)
+        if t is None or not t.activo:
+            continue
+        f = rm.fecha_proxima.strftime("%d/%m/%Y")
+        if rm.fecha_proxima >= hoy:
+            aviso(rm.trabajador_id, f"Te toca el reconocimiento médico el {f}", "La oficina te dirá el día y la hora. Si no puedes, avisa cuanto antes.", f"reconocimiento:{rm.id}:{rm.fecha_proxima.isoformat()}", "#documentacion", "salud")
+        else:
+            aviso(rm.trabajador_id, f"Tienes el reconocimiento médico pendiente desde el {f}", "Habla con la oficina para hacerlo cuanto antes.", f"reconocimiento:{rm.id}:pendiente", "#documentacion", "salud")
+    if creados:
+        db.commit()
+    return creados
+
+
+def _avisos_trabajador_bg():
+    """Avisos útiles al trabajador (P4), dentro del bucle de fondo (cada 6 h, sin repetir)."""
+    try:
+        from database import SessionLocal as _SLa
+        db = _SLa()
+        try:
+            _avisos_trabajador_util(db)
+        finally:
+            db.close()
+    except Exception as exc:  # pragma: no cover
+        mrd_logging.log_error(f"Avisos al trabajador: {exc}")
 
 
 # ─── Importar formaciones y reconocimientos desde Excel (2.7.61) ─────────────
