@@ -393,6 +393,16 @@ def create_backup(
     cfg = _get_config()
     if encrypt is None:
         encrypt = cfg["encrypt"]
+    # Guardián Fase 4: nunca cifrar con una clave que no esté guardada. Antes,
+    # sin MRD_BACKUP_KEY se generaba una clave al azar que no se conservaba y
+    # la copia quedaba irrecuperable.
+    if encrypt and not cfg.get("encrypt_key"):
+        logger.error("Copia cifrada pedida sin MRD_BACKUP_KEY: no se crea la copia.")
+        return {
+            "ok": False,
+            "error": "MRD_BACKUP_ENCRYPT=1 pero falta MRD_BACKUP_KEY en config/local.env: "
+                     "no se cifra con una clave que no se guarda.",
+        }
 
     t0 = time.perf_counter()
 
@@ -443,8 +453,7 @@ def create_backup(
 
             # Cifrar
             if encrypt:
-                key = cfg.get("encrypt_key") or os.urandom(32).hex()
-                raw_data = _encrypt_data(raw_data, key)
+                raw_data = _encrypt_data(raw_data, cfg["encrypt_key"])
 
             # Escribir
             backup_path.write_bytes(raw_data)
@@ -561,13 +570,17 @@ def verify_backup(backup_path: str) -> dict:
     meta    = _find_meta(path.name)
     sha_ok  = (meta.get("sha256") == sha256) if meta else None
 
-    # Intentar abrir (solo SQLite .gz)
+    # Intentar abrir (SQLite .gz y, con MRD_BACKUP_KEY, tambien .enc)
     db_ok   = None
     err_msg = None
     name    = path.name.lower()
-    if ".enc" not in name:
+    if ".enc" in name and not _get_config().get("encrypt_key"):
+        err_msg = "Copia cifrada: sin MRD_BACKUP_KEY no se puede comprobar el contenido"
+    else:
         try:
             raw = path.read_bytes()
+            if ".enc" in name:
+                raw = _decrypt_data(raw, _get_config()["encrypt_key"])
             if ".gz" in name:
                 raw = gzip.decompress(raw)
             if ".sql" not in name:
