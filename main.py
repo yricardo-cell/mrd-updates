@@ -14490,13 +14490,17 @@ async def subir_foto_herramienta(
 
     # Validate
     contenido = await foto.read()
+    ext = Path(foto.filename or "").suffix.lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".webp"):
+        # Las cámaras del móvil a veces mandan el fichero sin extensión o como 'image': se deduce por el contenido.
+        ext = ".png" if contenido[:8] == b"\x89PNG\r\n\x1a\n" else (".webp" if contenido[8:12] == b"WEBP" else ".jpg")
     try:
-        validar_contenido_archivo(contenido, ["image/jpeg", "image/png", "image/webp"])
-        validar_tamaño_bytes(contenido, MAX_UPLOAD_MB * 1024 * 1024)
+        # Fallo real del 07/09/2026 (6 intentos, error 500): se pasaba una lista de MIME en vez de la extensión.
+        validar_contenido_archivo(contenido[:16], ext.lstrip("."))
+        validar_tamaño_bytes(len(contenido), MAX_UPLOAD_MB)
     except ErrorArchivo as e:
         raise HTTPException(400, str(e))
 
-    ext = Path(foto.filename or "foto.jpg").suffix.lower() or ".jpg"
     foto_dir = BASE_DIR / "static" / "uploads" / "herramientas"
     foto_dir.mkdir(parents=True, exist_ok=True)
     nombre = f"h_{herramienta_id}{ext}"
