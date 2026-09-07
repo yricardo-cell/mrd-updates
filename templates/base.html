@@ -72,11 +72,16 @@
     if(!form||form.tagName!=='FORM')return;
     var meth=(form.method||'get').toLowerCase();
     if(meth!=='post'&&meth!=='put'&&meth!=='patch'&&meth!=='delete')return;
-    if(!form.querySelector('[name="_csrf_token"]')){
-      var inp=document.createElement('input');
-      inp.type='hidden';inp.name='_csrf_token';inp.value=_csrfTok();
-      form.appendChild(inp);
+    var existente=form.querySelector('[name="_csrf_token"]');
+    if(existente){
+      // Campo ya presente pero vacío (plantillas con <input hidden name="_csrf_token">):
+      // rellenarlo, si no el servidor responde 403 "Token de seguridad inválido".
+      if(!existente.value)existente.value=_csrfTok();
+      return;
     }
+    var inp=document.createElement('input');
+    inp.type='hidden';inp.name='_csrf_token';inp.value=_csrfTok();
+    form.appendChild(inp);
   }
   document.addEventListener('submit',function(e){ _injectCsrf(e.target); },true);
   // Patch HTMLFormElement.prototype.submit para capturar llamadas directas
