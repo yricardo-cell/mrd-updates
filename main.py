@@ -681,10 +681,34 @@ def _render_error(request: Request, code: int, detail: str = "") -> HTMLResponse
     <p style="color:var(--text-2);margin-bottom:32px">{msg}</p>
     <a href="/" class="btn btn-primary">Volver al inicio</a>
     {"<a href='/login' class='btn btn-outline' style='margin-left:8px'>Iniciar sesión</a>" if code == 401 else ""}
+    {"<a href='/portal-trabajador' class='btn btn-outline' style='margin-left:8px'>Portal del trabajador</a>" if code == 404 else ""}
+    {"<p style='color:var(--text-2);margin-top:24px;font-size:.9rem'>Si escribiste la dirección a mano, revísala: el portal es <strong>/portal-trabajador</strong> y la oficina entra por <strong>/login</strong>.</p>" if code == 404 else ""}
   </div>
 </body>
 </html>"""
     return HTMLResponse(content=html, status_code=code)
+
+
+_RUTAS_CONOCIDAS = (
+    "/portal-trabajador", "/login", "/mostrador", "/scan", "/nave", "/herramientas", "/materiales",
+    "/trabajadores", "/calendario", "/informes", "/configuracion", "/comunicados", "/kits-trabajo", "/localizador",
+)
+_ALIAS_RUTAS = {
+    "/portal": "/portal-trabajador", "/portaltrabajador": "/portal-trabajador", "/portal-trabajadores": "/portal-trabajador",
+    "/trabajador": "/portal-trabajador", "/portal-del-trabajador": "/portal-trabajador", "/entrar": "/login", "/acceso": "/login",
+}
+
+
+def _ruta_parecida(path: str) -> str | None:
+    """Dirección escrita a mano con una errata (fallo real del 07/09/2026: /portal-trajador 22 veces)."""
+    import difflib
+    primero = "/" + (path or "").strip("/").lower().split("/")[0].split("?")[0]
+    if len(primero) < 5 or primero in _RUTAS_CONOCIDAS:
+        return None
+    if primero in _ALIAS_RUTAS:
+        return _ALIAS_RUTAS[primero]
+    cerca = difflib.get_close_matches(primero, _RUTAS_CONOCIDAS, n=1, cutoff=0.8)
+    return cerca[0] if cerca else None
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -720,6 +744,10 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException):
     mrd_logging.log_error(f"HTTP {exc.status_code} en {request.url.path} — {detail}")
     if exc.status_code in (403, 404):
         security_events.emitir(f"http_{exc.status_code}", request)
+    if exc.status_code == 404 and not json_api and request.method == "GET":
+        destino = _ruta_parecida(request.url.path)
+        if destino:
+            return RedirectResponse(destino, status_code=302)
     if request.url.path == "/admin/reiniciar":
         return JSONResponse({"detail": detail}, status_code=exc.status_code)
     if json_api:
