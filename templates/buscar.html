@@ -153,7 +153,8 @@
         <div style="font-size:.9rem;font-weight:600;color:var(--text)">{{ a.numero }}</div>
         <div style="font-size:.78rem;color:var(--text-muted)">{{ a.origen_destino or '' }}</div>
       </div>
-      <span class="badge {% if a.estado == 'cerrado' %}badge-success{% elif a.estado == 'parcial' %}badge-orange{% else %}badge-primary{% endif %}">
+      <span class="badge {% if a.estado == 'cerrado' %}badge-success{% elif a.estado == 'parcial' %}badge-orange{% else %}badge-primary{% endif %}
+">
         {{ a.estado | title }}
       </span>
     </a>
@@ -161,6 +162,77 @@
   </div>
 </div>
 {% endif %}
+{% if pedidos %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="bi bi-bag"></i> Pedidos de trabajadores</div>
+    <span class="badge badge-secondary">{{ pedidos | length }}</span>
+  </div>
+  <div class="card-body-flush">
+    {% for p in pedidos %}<a href="/solicitudes-trabajadores?estado=todos&q={{ p.numero }}" style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);text-decoration:none" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background=''">
+      <div style="width:40px;height:40px;border-radius:8px;background:var(--gray-light);display:flex;align-items:center;justify-content:center;color:var(--text-2);font-size:1.1rem;flex-shrink:0"><i class="bi bi-bag"></i></div>
+      <div style="flex:1"><div style="font-size:.9rem;font-weight:600;color:var(--text)">{{ p.numero }} — {{ p.trabajador.nombre_completo if p.trabajador else '' }}</div><div style="font-size:.78rem;color:var(--text-muted)">{{ p.estado }}{% if p.lineas %} · {% for l in p.lineas[:3] %}{{ l.cantidad }}x {{ l.descripcion }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</div></div>
+    </a>{% endfor %}
+  </div>
+</div>
+{% endif %}
+{% if huecos %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="bi bi-grid-3x3-gap"></i> Huecos</div>
+    <span class="badge badge-secondary">{{ huecos | length }}</span>
+  </div>
+  <div class="card-body-flush">
+    {% for u in huecos %}<a href="/nave?ubicacion={{ u.id }}" style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);text-decoration:none" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background=''">
+      <div style="width:40px;height:40px;border-radius:8px;background:var(--gray-light);display:flex;align-items:center;justify-content:center;color:var(--text-2);font-size:1.1rem;flex-shrink:0"><i class="bi bi-grid-3x3-gap"></i></div>
+      <div style="flex:1"><div style="font-size:.9rem;font-weight:600;color:var(--text)">{{ u.nombre }}</div><div style="font-size:.78rem;color:var(--text-muted)">{{ u.zona or '' }} {{ u.codigo or '' }}</div></div>
+    </a>{% endfor %}
+  </div>
+</div>
+{% endif %}
+{% if epis %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="bi bi-shield-check"></i> EPI individual</div>
+    <span class="badge badge-secondary">{{ epis | length }}</span>
+  </div>
+  <div class="card-body-flush">
+    {% for e in epis %}<a href="/epis/individuales/{{ e.id }}" style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);text-decoration:none" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background=''">
+      <div style="width:40px;height:40px;border-radius:8px;background:var(--gray-light);display:flex;align-items:center;justify-content:center;color:var(--text-2);font-size:1.1rem;flex-shrink:0"><i class="bi bi-shield-check"></i></div>
+      <div style="flex:1"><div style="font-size:.9rem;font-weight:600;color:var(--text)">{{ e.tipo }} {{ e.referencia_interna or e.codigo_fabricacion or '' }}</div><div style="font-size:.78rem;color:var(--text-muted)">{{ e.trabajador.nombre_completo if e.trabajador else 'Sin asignar' }} · {{ e.estado }}</div></div>
+    </a>{% endfor %}
+  </div>
+</div>
+{% endif %}
+{% if materiales %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="bi bi-box-seam"></i> Materiales</div>
+    <span class="badge badge-secondary">{{ materiales | length }}</span>
+  </div>
+  <div class="card-body-flush">
+    {% for m in materiales %}<a href="/materiales/{{ m.id }}" style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);text-decoration:none" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background=''">
+      <div style="width:40px;height:40px;border-radius:8px;background:var(--gray-light);display:flex;align-items:center;justify-content:center;color:var(--text-2);font-size:1.1rem;flex-shrink:0"><i class="bi bi-box-seam"></i></div>
+      <div style="flex:1"><div style="font-size:.9rem;font-weight:600;color:var(--text)">{{ m.nombre }}</div><div style="font-size:.78rem;color:var(--text-muted)">{{ m.codigo or '' }} · stock {{ m.stock_actual or 0 }}</div></div>
+    </a>{% endfor %}
+  </div>
+</div>
+{% endif %}
+{% if incidencias %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="bi bi-exclamation-triangle"></i> Incidencias del portal</div>
+    <span class="badge badge-secondary">{{ incidencias | length }}</span>
+  </div>
+  <div class="card-body-flush">
+    {% for i in incidencias %}<a href="/operaciones-portal-trabajadores" style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);text-decoration:none" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background=''">
+      <div style="width:40px;height:40px;border-radius:8px;background:var(--gray-light);display:flex;align-items:center;justify-content:center;color:var(--text-2);font-size:1.1rem;flex-shrink:0"><i class="bi bi-exclamation-triangle"></i></div>
+      <div style="flex:1"><div style="font-size:.9rem;font-weight:600;color:var(--text)">{{ i.numero }} — {{ i.activo_nombre or '' }}</div><div style="font-size:.78rem;color:var(--text-muted)">{{ i.estado }} · {{ (i.descripcion or '')|truncate(80) }}</div></div>
+    </a>{% endfor %}
+  </div>
+</div>
+{% endif %}
+
 
 </div>
 {% endblock %}

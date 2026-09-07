@@ -301,8 +301,8 @@ function initGlobalSearch() {
   function closeDrop() { drop.classList.remove('open'); }
 
   function renderDrop(data) {
-    const { herramientas = [], trabajadores = [], obras = [], maquinaria = [], albaranes = [] } = data;
-    const total = herramientas.length + trabajadores.length + obras.length + maquinaria.length + albaranes.length;
+    const { herramientas = [], trabajadores = [], obras = [], maquinaria = [], albaranes = [], pedidos = [], huecos = [], epis = [], materiales = [], incidencias = [] } = data;
+    const total = herramientas.length + trabajadores.length + obras.length + maquinaria.length + albaranes.length + pedidos.length + huecos.length + epis.length + materiales.length + incidencias.length;
     if (total === 0) {
       drop.innerHTML = '<div class="search-drop-empty"><i class="bi bi-search"></i> Sin resultados para "<strong>' + mrdEscapeHtml(input.value) + '</strong>"</div>';
     } else {
@@ -320,7 +320,7 @@ function initGlobalSearch() {
       if (trabajadores.length) {
         html += '<div class="search-drop-section">Trabajadores</div>';
         trabajadores.forEach(t => {
-          html += `<a href="/trabajadores" class="search-drop-item">
+          html += `<a href="/trabajadores/${mrdSafeId(t.id)}/epis" class="search-drop-item">
             <div class="search-drop-icon" style="background:var(--success-light);color:var(--success)"><i class="bi bi-person"></i></div>
             <div><div class="search-drop-name">${mrdEscapeHtml(t.nombre)}</div><div class="search-drop-sub">${mrdEscapeHtml(t.cargo || '')}</div></div>
           </a>`;
@@ -350,6 +350,51 @@ function initGlobalSearch() {
           html += `<a href="/albaranes-salida/${mrdSafeId(a.id)}" class="search-drop-item">
             <div class="search-drop-icon" style="background:var(--gray-light);color:var(--text-2)"><i class="bi bi-file-earmark-text"></i></div>
             <div><div class="search-drop-name">${mrdEscapeHtml(a.numero)}</div><div class="search-drop-sub">${mrdEscapeHtml((a.estado || '').replace(/_/g, ' '))}</div></div>
+          </a>`;
+        });
+      }
+      if (pedidos.length) {
+        html += '<div class="search-drop-section">Pedidos</div>';
+        pedidos.forEach(p => {
+          html += `<a href="/solicitudes-trabajadores?estado=todos&q=${encodeURIComponent(p.numero)}" class="search-drop-item">
+            <div class="search-drop-icon" style="background:var(--info-light);color:var(--info)"><i class="bi bi-bag"></i></div>
+            <div><div class="search-drop-name">${mrdEscapeHtml(p.numero)} — ${mrdEscapeHtml(p.quien || '')}</div><div class="search-drop-sub">${mrdEscapeHtml(p.estado || '')}</div></div>
+          </a>`;
+        });
+      }
+      if (huecos.length) {
+        html += '<div class="search-drop-section">Huecos</div>';
+        huecos.forEach(u => {
+          html += `<a href="/nave?ubicacion=${mrdSafeId(u.id)}" class="search-drop-item">
+            <div class="search-drop-icon" style="background:var(--gray-light);color:var(--text-2)"><i class="bi bi-grid-3x3-gap"></i></div>
+            <div><div class="search-drop-name">${mrdEscapeHtml(u.nombre)}</div><div class="search-drop-sub">${mrdEscapeHtml(u.zona || '')} ${mrdEscapeHtml(u.codigo || '')}</div></div>
+          </a>`;
+        });
+      }
+      if (epis.length) {
+        html += '<div class="search-drop-section">EPI individual</div>';
+        epis.forEach(e => {
+          html += `<a href="/epis/individuales/${mrdSafeId(e.id)}" class="search-drop-item">
+            <div class="search-drop-icon" style="background:var(--success-light);color:var(--success)"><i class="bi bi-shield-check"></i></div>
+            <div><div class="search-drop-name">${mrdEscapeHtml(e.tipo)} ${mrdEscapeHtml(e.codigo || '')}</div><div class="search-drop-sub">${mrdEscapeHtml(e.quien || '')}</div></div>
+          </a>`;
+        });
+      }
+      if (materiales.length) {
+        html += '<div class="search-drop-section">Materiales</div>';
+        materiales.forEach(m => {
+          html += `<a href="/materiales/${mrdSafeId(m.id)}" class="search-drop-item">
+            <div class="search-drop-icon" style="background:var(--orange-light);color:var(--orange)"><i class="bi bi-box-seam"></i></div>
+            <div><div class="search-drop-name">${mrdEscapeHtml(m.nombre)}</div><div class="search-drop-sub">${mrdEscapeHtml(m.codigo || '')} · stock ${mrdEscapeHtml(String(m.stock))}</div></div>
+          </a>`;
+        });
+      }
+      if (incidencias.length) {
+        html += '<div class="search-drop-section">Incidencias</div>';
+        incidencias.forEach(i => {
+          html += `<a href="/operaciones-portal-trabajadores" class="search-drop-item">
+            <div class="search-drop-icon" style="background:var(--danger-light);color:var(--danger)"><i class="bi bi-exclamation-triangle"></i></div>
+            <div><div class="search-drop-name">${mrdEscapeHtml(i.numero)} — ${mrdEscapeHtml(i.activo || '')}</div><div class="search-drop-sub">${mrdEscapeHtml(i.estado || '')}</div></div>
           </a>`;
         });
       }

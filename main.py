@@ -13783,6 +13783,28 @@ def borrar_foto_herramienta(
 
 # ─── Búsqueda global ──────────────────────────────────────────────────────────
 
+def _buscar_extra(db: Session, like: str, warehouse_id) -> dict:
+    """Grupos añadidos a la búsqueda global (mejora 31): pedidos, huecos, EPI individual, materiales e incidencias."""
+    def _alm(col):
+        return or_(col == warehouse_id, col.is_(None)) if warehouse_id else True
+    pedidos = db.query(SolicitudTrabajador).filter(_alm(SolicitudTrabajador.almacen_id)).filter(or_(
+        SolicitudTrabajador.numero.ilike(like),
+        SolicitudTrabajador.id.in_(db.query(LineaSolicitudTrabajador.solicitud_id).filter(LineaSolicitudTrabajador.descripcion.ilike(like))),
+    )).order_by(SolicitudTrabajador.id.desc()).limit(20).all()
+    huecos = db.query(Ubicacion).filter(Ubicacion.activo == True, _alm(Ubicacion.almacen_id)).filter(or_(
+        Ubicacion.nombre.ilike(like), Ubicacion.codigo.ilike(like), Ubicacion.zona.ilike(like))).order_by(Ubicacion.nombre).limit(20).all()
+    epis = db.query(EPIIndividual).filter(_alm(EPIIndividual.almacen_id)).filter(or_(
+        EPIIndividual.codigo_fabricacion.ilike(like), EPIIndividual.referencia_interna.ilike(like), EPIIndividual.codigo_qr.ilike(like),
+        EPIIndividual.tipo.ilike(like), EPIIndividual.marca.ilike(like))).limit(20).all()
+    materiales = db.query(Material).filter(Material.activo == True, _alm(Material.almacen_id)).filter(or_(
+        Material.nombre.ilike(like), Material.codigo.ilike(like))).order_by(Material.nombre).limit(20).all()
+    incidencias = db.query(IncidenciaPortalTrabajador).filter(_alm(IncidenciaPortalTrabajador.almacen_id)).filter(or_(
+        IncidenciaPortalTrabajador.numero.ilike(like), IncidenciaPortalTrabajador.descripcion.ilike(like),
+        IncidenciaPortalTrabajador.activo_nombre.ilike(like), IncidenciaPortalTrabajador.activo_codigo.ilike(like),
+    )).order_by(IncidenciaPortalTrabajador.id.desc()).limit(20).all()
+    return {"pedidos": pedidos, "huecos": huecos, "epis": epis, "materiales": materiales, "incidencias": incidencias}
+
+
 @app.get("/api/buscar")
 def api_buscar_global(
     request: Request,
@@ -13849,12 +13871,18 @@ def api_buscar_global(
         .order_by(AlbaranSalida.id.desc())
         .limit(4).all()
     )
+    _extra = _buscar_extra(db, like, warehouse_id)
     return {
         "herramientas": [{"id": h.id, "codigo": h.codigo, "nombre": h.nombre, "estado": h.estado} for h in herramientas],
         "trabajadores": [{"id": t.id, "nombre": t.nombre_completo, "cargo": t.cargo or ""} for t in trabajadores],
         "obras": [{"id": o.id, "nombre": o.nombre, "numero": o.numero or ""} for o in obras],
         "maquinaria": [{"id": m.id, "nombre": m.nombre, "matricula": getattr(m, "matricula", "") or ""} for m in maquinaria],
         "albaranes": [{"id": a.id, "numero": a.numero, "estado": a.estado} for a in albaranes],
+        "pedidos": [{"id": p.id, "numero": p.numero, "estado": p.estado, "quien": (p.trabajador.nombre_completo if p.trabajador else "")} for p in _extra["pedidos"]],
+        "huecos": [{"id": u.id, "nombre": u.nombre, "codigo": u.codigo or "", "zona": u.zona or ""} for u in _extra["huecos"]],
+        "epis": [{"id": e.id, "tipo": e.tipo, "codigo": e.referencia_interna or e.codigo_fabricacion or "", "quien": (e.trabajador.nombre_completo if e.trabajador else "")} for e in _extra["epis"]],
+        "materiales": [{"id": m.id, "nombre": m.nombre, "codigo": m.codigo or "", "stock": m.stock_actual or 0} for m in _extra["materiales"]],
+        "incidencias": [{"id": i.id, "numero": i.numero, "estado": i.estado, "activo": i.activo_nombre or ""} for i in _extra["incidencias"]],
     }
 
 
@@ -13922,7 +13950,8 @@ def buscar_global(
             .order_by(AlbaranSalida.id.desc())
             .limit(20).all()
         )
-    total = len(herramientas) + len(trabajadores) + len(obras) + len(maquinaria) + len(albaranes)
+    _extra = _buscar_extra(db, like, warehouse_id) if q else {"pedidos": [], "huecos": [], "epis": [], "materiales": [], "incidencias": []}
+    total = len(herramientas) + len(trabajadores) + len(obras) + len(maquinaria) + len(albaranes) + sum(len(v) for v in _extra.values())
     return templates.TemplateResponse(request, "buscar.html", ctx_base(
         request, user,
         q=q,
@@ -13932,6 +13961,7 @@ def buscar_global(
         obras=obras,
         maquinaria=maquinaria,
         albaranes=albaranes,
+        **_extra,
     ))
 
 
