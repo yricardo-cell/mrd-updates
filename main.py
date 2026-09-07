@@ -711,7 +711,7 @@ def robots_txt():
 
 _RUTAS_CONOCIDAS = (
     "/portal-trabajador", "/login", "/mostrador", "/scan", "/nave", "/herramientas", "/materiales",
-    "/trabajadores", "/calendario", "/informes", "/configuracion", "/comunicados", "/kits-trabajo", "/localizador",
+    "/trabajadores", "/calendario", "/informes", "/configuracion", "/comunicados", "/kits-trabajo", "/localizador", "/kiosco",
 )
 _ALIAS_RUTAS = {
     "/portal": "/portal-trabajador", "/portaltrabajador": "/portal-trabajador", "/portal-trabajadores": "/portal-trabajador",
@@ -10501,6 +10501,146 @@ def api_novedades(user: Usuario = Depends(requiere_login)):
     v = leer_version_actual()
     cambios = [str(c) for c in (v.get("cambios") or []) if str(c).strip()][:20]
     return {"version": v.get("version_actual", VERSION), "fecha": v.get("fecha", ""), "cambios": cambios}
+
+
+# ─── Kiosco de autoservicio en el almacén (mejora 17) ───────────────────────
+_KIOSCO_SESIONES: dict[str, tuple[int, float]] = {}
+_KIOSCO_TTL = 600
+_KIOSCO_TIPOS = {"herramienta", "maquinaria", "material", "stock_epi"}
+
+
+def _kiosco_usuario(db: Session) -> Usuario:
+    """Usuario interno con el que el kiosco opera el Mostrador (permisos de patio, sin acceso a la oficina)."""
+    u = db.query(Usuario).filter(Usuario.username == "kiosco").first()
+    if u is None:
+        u = Usuario(username="kiosco", password_hash=hash_password(secrets.token_urlsafe(24)), nombre="Kiosco de autoservicio",
+                    rol="encargado_patio", activo=True, must_change_password=False)
+        db.add(u)
+        db.flush()
+    return u
+
+
+def _kiosco_worker(request: Request, db: Session):
+    tok = request.cookies.get("mrd_kiosco") or ""
+    ahora = datetime.now().timestamp()
+    for k in [k for k, (_, exp) in _KIOSCO_SESIONES.items() if exp < ahora]:
+        _KIOSCO_SESIONES.pop(k, None)
+    dato = _KIOSCO_SESIONES.get(tok)
+    if not dato:
+        return None
+    w = db.get(Trabajador, dato[0])
+    if w is None or not w.activo:
+        _KIOSCO_SESIONES.pop(tok, None)
+        return None
+    _KIOSCO_SESIONES[tok] = (w.id, ahora + _KIOSCO_TTL)
+    return w
+
+
+def _kiosco_worker_required(request: Request, db: Session):
+    w = _kiosco_worker(request, db)
+    if w is None:
+        raise HTTPException(401, "Identifícate en el kiosco")
+    return w
+
+
+@app.get("/kiosco", response_class=HTMLResponse)
+def kiosco(request: Request, db: Session = Depends(get_db)):
+    w = _kiosco_worker(request, db)
+    resp = templates.TemplateResponse(request, "kiosco.html", {"request": request, "worker": w, "version": VERSION, "error": request.query_params.get("error", ""),
+                                                                  "app_name": "MRD Tool Control", "ttl_min": _KIOSCO_TTL // 60})
+    if not request.cookies.get(CSRF_COOKIE_NAME):
+        resp.set_cookie(CSRF_COOKIE_NAME, generar_csrf_token(), httponly=False, samesite="lax", secure=request.url.scheme == "https")
+    return resp
+
+
+@app.post("/kiosco/acceso", response_class=RedirectResponse)
+async def kiosco_acceso(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    codigo = " ".join(str(form.get("codigo") or "").split()).upper()[:40]
+    pin = re.sub(r"[^0-9]", "", str(form.get("pin") or ""))[:12]
+    w = db.query(Trabajador).filter(Trabajador.activo == True, func.upper(Trabajador.codigo) == codigo).first() if codigo else None
+    if w is None or not w.portal_pin_hash or not verificar_password(pin, w.portal_pin_hash):
+        import time as _t
+        _t.sleep(0.6)
+        security_events.emitir("kiosco_pin_incorrecto", request)
+        return RedirectResponse("/kiosco?error=pin", status_code=303)
+    tok = secrets.token_urlsafe(32)
+    _KIOSCO_SESIONES[tok] = (w.id, datetime.now().timestamp() + _KIOSCO_TTL)
+    resp = RedirectResponse("/kiosco", status_code=303)
+    resp.set_cookie("mrd_kiosco", tok, httponly=True, samesite="lax", secure=request.url.scheme == "https", max_age=_KIOSCO_TTL)
+    return resp
+
+
+@app.post("/kiosco/salir", response_class=RedirectResponse)
+def kiosco_salir(request: Request):
+    _KIOSCO_SESIONES.pop(request.cookies.get("mrd_kiosco") or "", None)
+    resp = RedirectResponse("/kiosco", status_code=303)
+    resp.delete_cookie("mrd_kiosco")
+    return resp
+
+
+@app.get("/kiosco/api/resolver")
+def kiosco_resolver(codigo: str, request: Request, db: Session = Depends(get_db)):
+    w = _kiosco_worker_required(request, db)
+    if "[object " in codigo or len(codigo.strip()) < 2:
+        raise HTTPException(400, "Lectura vacía")
+    try:
+        item = resolve_counter_item(db, codigo.strip(), w.almacen_id)
+    except CounterError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+    if item.get("tipo") not in _KIOSCO_TIPOS:
+        raise HTTPException(409, "Ese artículo no se opera desde el kiosco: pásate por el Mostrador")
+    item["puede_devolver"] = bool(item.get("tipo") != "herramienta" or item.get("responsable_id") == w.id)
+    return {"item": item}
+
+
+@app.post("/kiosco/api/operar")
+async def kiosco_operar(request: Request, db: Session = Depends(get_db)):
+    w = _kiosco_worker_required(request, db)
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "Petición inválida")
+    accion = str(body.get("accion") or "")
+    if accion not in ("salida", "entrada"):
+        raise HTTPException(400, "Operación no válida")
+    lineas_in = list(body.get("lineas") or [])[:50]
+    lineas = []
+    for l in lineas_in:
+        tipo, oid = str(l.get("tipo") or ""), int(l.get("id") or 0)
+        if tipo not in _KIOSCO_TIPOS or oid <= 0:
+            raise HTTPException(400, "Línea no válida")
+        cant = max(1, min(999, int(l.get("cantidad") or 1)))
+        lineas.append({"tipo": tipo, "id": oid, "cantidad": cant, "condicion": str(l.get("condicion") or "buena"), "foto": str(l.get("foto") or "")})
+    if not lineas:
+        raise HTTPException(400, "El carrito está vacío")
+    if accion == "entrada":
+        for l in lineas:
+            if l["tipo"] == "herramienta" and l["condicion"] == "danada" and not l["foto"].startswith("data:image/"):
+                raise HTTPException(400, "Haz la foto del estado de la herramienta dañada antes de confirmar")
+    user = _kiosco_usuario(db)
+    expected = None
+    if accion == "salida":
+        dias = _plazo_sugerido(db, lineas)
+        if dias:
+            expected = (datetime.now() + timedelta(days=dias)).replace(hour=18, minute=0, second=0, microsecond=0)
+    try:
+        result = operate_counter(db, user, operation_id=f"kiosco-{uuid.uuid4().hex[:20]}", action=accion,
+                                 lines=[{"tipo": l["tipo"], "id": l["id"], "cantidad": l["cantidad"]} for l in lineas],
+                                 worker_id=w.id, work_id=None, warehouse_id=w.almacen_id,
+                                 notes=f"Kiosco de autoservicio: {w.nombre_completo}", expected_return=expected, origin="Kiosco")
+    except CounterError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.detail)
+    if accion == "entrada":
+        for l in lineas:
+            if l["tipo"] == "herramienta" and l["condicion"] != "buena":
+                h_dan = db.get(Herramienta, l["id"])
+                if h_dan is not None:
+                    _registrar_devolucion_danada(db, h_dan, l["condicion"], l["foto"], user.id, f"Kiosco ({w.nombre_completo})")
+    db.add(AuditoriaLog(tabla="mostrador", registro_id=w.id, accion=f"kiosco_{accion}", resumen=f"{w.nombre_completo}: {len(lineas)} líneas por el kiosco", usuario_id=user.id))
+    db.commit()
+    return {"ok": True, "lineas": len(lineas), "plazo": expected.strftime("%d/%m/%Y") if expected else None}
 
 
 def _alertas_consumo_obras_bg():
