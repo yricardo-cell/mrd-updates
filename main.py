@@ -956,6 +956,7 @@ def startup_event():
                     _ensayo_restauracion_bg()
                     _avisos_trabajador_bg()
                     _espera_disponible_bg()
+                    _limpieza_automatica_bg()
                     _tm.sleep(6*3600)  # cada 6 horas
             _thr.Thread(target=_run_alerts, daemon=True, name="alertas_bg").start()
 
@@ -9508,6 +9509,139 @@ def configuracion_telegram_resumen(user: Usuario = Depends(requiere_login), db: 
     if not r.get("ok"):
         raise HTTPException(400, r.get("error") or "No enviado")
     return {"ok": True}
+
+
+# ─── Limpieza automática (mejora 32) ─────────────────────────────────────────
+
+_LIMPIEZA_ESTADO = BASE_DIR / "config" / "limpieza_estado.json"
+LIMPIEZA_DIAS_ADJUNTOS = 365      # fotos/audios de incidencias y devoluciones resueltas
+LIMPIEZA_DIAS_NOTIFICACIONES = 180
+LIMPIEZA_DIAS_HUERFANOS = 30
+
+
+def _limpieza_automatica(db: Session, ejecutar: bool = True, hoy: datetime | None = None) -> dict:
+    """Cuenta (y si ejecutar=True borra) lo que ya no hace falta. Devuelve totales y bytes liberados."""
+    ahora = hoy or datetime.now()
+    limite_adj = ahora - timedelta(days=LIMPIEZA_DIAS_ADJUNTOS)
+    carpeta = UPLOADS_DIR / "portal_trabajador"
+    res = {"adjuntos": 0, "ficheros": 0, "bytes": 0, "sesiones": 0, "notificaciones": 0, "huerfanos": 0, "ejecutado": bool(ejecutar)}
+
+    def _quitar(rel: str):
+        if not rel:
+            return
+        p = UPLOADS_DIR / rel
+        try:
+            if p.is_file():
+                res["bytes"] += p.stat().st_size
+                res["ficheros"] += 1
+                if ejecutar:
+                    p.unlink()
+        except OSError:
+            pass
+
+    incs = db.query(IncidenciaPortalTrabajador).filter(
+        IncidenciaPortalTrabajador.estado.in_(("resuelta", "archivada")),
+        IncidenciaPortalTrabajador.actualizado_en < limite_adj,
+        or_(IncidenciaPortalTrabajador.fotos_json.isnot(None), IncidenciaPortalTrabajador.foto_path.isnot(None), IncidenciaPortalTrabajador.audio_path.isnot(None)),
+    ).all()
+    for inc in incs:
+        for rel in set(inc.fotos_lista + ([inc.audio_path] if inc.audio_path else [])):
+            _quitar(rel)
+        res["adjuntos"] += 1
+        if ejecutar:
+            inc.fotos_json, inc.foto_path, inc.audio_path = None, None, None
+    devs = db.query(SolicitudDevolucionTrabajador).filter(
+        SolicitudDevolucionTrabajador.estado.in_(("resuelta", "archivada", "cerrada", "recibida_almacen", "rechazada")),
+        SolicitudDevolucionTrabajador.creado_en < limite_adj,
+        or_(SolicitudDevolucionTrabajador.fotos_json.isnot(None), SolicitudDevolucionTrabajador.foto_path.isnot(None)),
+    ).all()
+    for d in devs:
+        for rel in set(d.fotos_lista):
+            _quitar(rel)
+        res["adjuntos"] += 1
+        if ejecutar:
+            d.fotos_json, d.foto_path = None, None
+    if carpeta.is_dir():
+        referenciados: set[str] = set()
+        for inc in db.query(IncidenciaPortalTrabajador).filter(or_(IncidenciaPortalTrabajador.fotos_json.isnot(None), IncidenciaPortalTrabajador.foto_path.isnot(None), IncidenciaPortalTrabajador.audio_path.isnot(None))).all():
+            referenciados.update(inc.fotos_lista); referenciados.add(inc.audio_path or "")
+        for d in db.query(SolicitudDevolucionTrabajador).filter(or_(SolicitudDevolucionTrabajador.fotos_json.isnot(None), SolicitudDevolucionTrabajador.foto_path.isnot(None))).all():
+            referenciados.update(d.fotos_lista)
+        for s in db.query(SolicitudTrabajador).filter(SolicitudTrabajador.fotos_json.isnot(None)).all():
+            referenciados.update(s.fotos_lista)
+        for c in db.query(ComunicacionTrabajador).filter(ComunicacionTrabajador.audio_path.isnot(None)).all():
+            referenciados.add(c.audio_path or "")
+        limite_h = (ahora - timedelta(days=LIMPIEZA_DIAS_HUERFANOS)).timestamp()
+        for f in carpeta.iterdir():
+            if not f.is_file():
+                continue
+            rel = f"portal_trabajador/{f.name}"
+            try:
+                if rel not in referenciados and f.stat().st_mtime < limite_h:
+                    res["huerfanos"] += 1
+                    _quitar(rel)
+            except OSError:
+                pass
+    q_ses = db.query(SesionPortalTrabajador).filter(SesionPortalTrabajador.expira_en < ahora)
+    res["sesiones"] = q_ses.count()
+    q_not = db.query(NotificacionTrabajador).filter(NotificacionTrabajador.leida_en.isnot(None), NotificacionTrabajador.creado_en < ahora - timedelta(days=LIMPIEZA_DIAS_NOTIFICACIONES))
+    res["notificaciones"] = q_not.count()
+    if ejecutar:
+        q_ses.delete(synchronize_session=False)
+        q_not.delete(synchronize_session=False)
+        db.commit()
+        if res["ficheros"] or res["sesiones"] or res["notificaciones"]:
+            mb = res["bytes"] / (1024 * 1024)
+            db.add(Aviso(titulo=f"Limpieza automática: {mb:.1f} MB liberados",
+                         mensaje=f"{res['ficheros']} ficheros de {res['adjuntos']} incidencias/devoluciones resueltas de más de un año, {res['huerfanos']} huérfanos, {res['sesiones']} sesiones caducadas y {res['notificaciones']} avisos leídos antiguos.",
+                         prioridad="baja", tipo="sistema", enlace="/configuracion"))
+            db.commit()
+    return res
+
+
+def _limpieza_automatica_bg():
+    """Una vez por semana, dentro del bucle de fondo."""
+    try:
+        try:
+            estado = json.loads(_LIMPIEZA_ESTADO.read_text(encoding="utf-8")) if _LIMPIEZA_ESTADO.is_file() else {}
+        except ValueError:
+            estado = {}
+        ultimo = estado.get("ultimo")
+        if ultimo and (date.today() - date.fromisoformat(ultimo)).days < 7:
+            return
+        from database import SessionLocal as _SLl
+        db = _SLl()
+        try:
+            res = _limpieza_automatica(db, ejecutar=True)
+        finally:
+            db.close()
+        _LIMPIEZA_ESTADO.write_text(json.dumps({"ultimo": date.today().isoformat(), "resultado": res}), encoding="utf-8")
+        mrd_logging.log_app(f"Limpieza automática: {res}")
+    except Exception as exc:  # pragma: no cover
+        mrd_logging.log_error(f"Limpieza automática: {exc}")
+
+
+@app.get("/api/limpieza/previa")
+def api_limpieza_previa(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    res = _limpieza_automatica(db, ejecutar=False)
+    try:
+        res["ultima"] = (json.loads(_LIMPIEZA_ESTADO.read_text(encoding="utf-8")) if _LIMPIEZA_ESTADO.is_file() else {}).get("ultimo")
+    except ValueError:
+        res["ultima"] = None
+    return res
+
+
+@app.post("/api/limpieza/ejecutar")
+def api_limpieza_ejecutar(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    res = _limpieza_automatica(db, ejecutar=True)
+    _LIMPIEZA_ESTADO.write_text(json.dumps({"ultimo": date.today().isoformat(), "resultado": res}), encoding="utf-8")
+    db.add(AuditoriaLog(tabla="sistema", registro_id=0, accion="limpieza_manual", resumen=f"Limpieza manual: {res}", usuario_id=user.id))
+    db.commit()
+    return res
 
 
 def _ensayo_restauracion_bg():
