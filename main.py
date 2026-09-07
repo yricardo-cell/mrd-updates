@@ -1031,6 +1031,10 @@ def startup_event():
                 except Exception as _e:
                     mrd_logging.log_error(f"Prueba de humo: {_e}")
             _thr.Thread(target=_run_humo, daemon=True, name="prueba_humo_bg").start()
+            try:
+                _bot_asegurar_token()   # mejora 29: token compartido con el bot de Telegram
+            except Exception as _e:
+                mrd_logging.log_error(f"Token del bot: {_e}")
         except Exception:
             pass
 
@@ -11289,6 +11293,136 @@ def informe_inventario_valorado_pdf(user: Usuario = Depends(requiere_login), db:
     partes.append(t2)
     doc.build(partes)
     return Response(content=buf.getvalue(), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=inventario_valorado_{d['fecha']:%Y%m%d}.pdf"})
+
+
+# ─── Consultas del bot de Telegram (mejora 29) y mando a distancia (38) ─────
+def _bot_token_ok(request: Request) -> bool:
+    tok = os.getenv("MRD_BOT_TOKEN", "") or ""
+    dado = request.headers.get("X-MRD-Bot-Token", "") or ""
+    return bool(tok) and bool(dado) and secrets.compare_digest(tok, dado)
+
+
+def _bot_requiere(request: Request) -> None:
+    if not _bot_token_ok(request):
+        raise HTTPException(401, "Token del bot incorrecto")
+
+
+def _bot_asegurar_token() -> str:
+    """Genera MRD_BOT_TOKEN en config/local.env la primera vez (nunca se muestra)."""
+    tok = os.getenv("MRD_BOT_TOKEN", "")
+    if tok:
+        return tok
+    tok = secrets.token_urlsafe(32)
+    try:
+        _guardar_local_env({"MRD_BOT_TOKEN": tok})
+    except Exception as exc:
+        mrd_logging.log_error(f"MRD_BOT_TOKEN: {exc}")
+        os.environ["MRD_BOT_TOKEN"] = tok
+    return tok
+
+
+def _bot_quien_tiene(db: Session, q: str) -> str:
+    like = f"%{q}%"
+    hs = db.query(Herramienta).filter(Herramienta.activa == True, or_(func.lower(Herramienta.nombre).like(like.lower()), func.upper(Herramienta.codigo).like(like.upper()))).order_by(Herramienta.nombre).limit(12).all()
+    if not hs:
+        return f"No encuentro ninguna herramienta que se llame «{q}»."
+    lineas = []
+    for h in hs:
+        if h.estado in ("disponible", "en_almacen"):
+            lineas.append(f"• {h.nombre} ({h.codigo}): en el almacén" + (f", {h.ubicacion_texto}" if h.ubicacion_texto else ""))
+            continue
+        t = db.get(Trabajador, h.responsable_id) if h.responsable_id else None
+        ultimo = db.query(Movimiento).filter(Movimiento.herramienta_id == h.id, Movimiento.tipo.in_(("entrega", "traslado"))).order_by(Movimiento.id.desc()).first()
+        desde = _utc_a_local(ultimo.fecha).strftime("%d/%m") if ultimo and ultimo.fecha else ""
+        lineas.append(f"• {h.nombre} ({h.codigo}): {h.estado.replace('_', ' ')}" + (f", la tiene {t.nombre_completo}" if t else "") + (f" desde el {desde}" if desde else ""))
+    return chr(10).join(lineas)
+
+
+def _bot_stock(db: Session, q: str) -> str:
+    like = f"%{q.lower()}%"
+    ms = db.query(Material).filter(Material.activo == True, func.lower(Material.nombre).like(like)).order_by(Material.nombre).limit(10).all()
+    lineas = [f"• {m.nombre}: {m.stock_actual:g} {m.unidad or 'ud'}" + (f" (mínimo {m.stock_minimo:g})" if m.stock_minimo else "") + (" ⚠ bajo mínimo" if m.stock_minimo and (m.stock_actual or 0) < m.stock_minimo else "") for m in ms]
+    if hasattr(StockEPI, "nombre"):
+        for e in db.query(StockEPI).filter(func.lower(StockEPI.nombre).like(like)).limit(10).all():
+            talla = getattr(e, "talla", None)
+            lineas.append(f"• {getattr(e, 'nombre', 'EPI')}{(' ' + talla) if talla else ''}: {getattr(e, 'cantidad', getattr(e, 'stock', 0))} ud")
+    return chr(10).join(lineas) if lineas else f"No encuentro materiales ni EPI llamados «{q}»."
+
+
+def _bot_listos(db: Session) -> str:
+    listos = db.query(SolicitudTrabajador).filter(SolicitudTrabajador.estado == "lista").order_by(SolicitudTrabajador.actualizado_en.asc()).limit(15).all()
+    if not listos:
+        return "No hay pedidos listos sin recoger."
+    out = []
+    for s in listos:
+        t = db.get(Trabajador, s.trabajador_id)
+        out.append(f"• {s.numero} · {t.nombre_completo if t else '?'}" + (" · viene a por él" if s.voy_a_recoger_en else ""))
+    return f"Listos sin recoger ({len(listos)}):" + chr(10) + chr(10).join(out)
+
+
+_BOT_RE_QUIEN = re.compile(r"^(?:quién tiene|quien tiene|dónde está|donde está|donde esta|quién|quien)\s+(?:el |la |los |las )?(.+?)\??$")
+_BOT_RE_STOCK = re.compile(r"^(?:cuantos|cuántos|cuantas|cuántas|stock|quedan|hay)\s+(?:de )?(.+?)(?:\s+quedan|\s+hay)?\??$")
+
+
+def _bot_responder(db: Session, texto: str) -> str:
+    """Contesta en lenguaje llano a preguntas del almacén desde Telegram."""
+    t = " ".join((texto or "").strip().split())
+    tl = t.lower().lstrip("?¿ ")
+    m = _BOT_RE_QUIEN.match(tl)
+    if m:
+        return _bot_quien_tiene(db, m.group(1))
+    m = _BOT_RE_STOCK.match(tl)
+    if m:
+        return _bot_stock(db, m.group(1))
+    if tl.startswith("listo") or "sin recoger" in tl:
+        return _bot_listos(db)
+    if tl in ("hoy", "resumen", "resumen de hoy") or tl.startswith("resumen"):
+        return _resumen_diario_texto(db)
+    if tl.startswith("cola") or "por preparar" in tl:
+        cola = _cola_mostrador(db, None)
+        return f"Pedidos por preparar: {len(cola)}" + ("".join(chr(10) + f"• {c.get('numero')} · {c.get('trabajador') or ''}" for c in cola[:10]) if cola else ".")
+    if tl.startswith("vencid") or "plazo" in tl:
+        v = _tv_vencidos(db, 15)
+        return ("Plazos vencidos:" + chr(10) + chr(10).join(f"• {x['nombre']} · {x['quien']} · {x['dias']} días" for x in v)) if v else "No hay plazos vencidos."
+    like = f"%{tl}%"
+    hs = db.query(Herramienta).filter(Herramienta.activa == True, func.lower(Herramienta.nombre).like(like)).limit(5).all()
+    ms = db.query(Material).filter(Material.activo == True, func.lower(Material.nombre).like(like)).limit(5).all()
+    ts = db.query(Trabajador).filter(Trabajador.activo == True, func.lower(Trabajador.nombre + " " + func.coalesce(Trabajador.apellidos, "")).like(like)).limit(5).all()
+    partes = []
+    if hs:
+        partes.append("Herramientas:" + chr(10) + _bot_quien_tiene(db, tl))
+    if ms:
+        partes.append("Materiales:" + chr(10) + _bot_stock(db, tl))
+    for w in ts:
+        n = db.query(Herramienta).filter(Herramienta.activa == True, Herramienta.responsable_id == w.id).count()
+        partes.append(f"{w.nombre_completo}: tiene {n} herramienta{'s' if n != 1 else ''} a su nombre")
+    if partes:
+        return (chr(10) + chr(10)).join(partes)
+    return "No te he entendido. Prueba con: ¿quién tiene el taladro 12? · ¿cuántos guantes quedan? · listos · cola · hoy · vencidos"
+
+
+@app.get("/api/bot/consulta")
+def api_bot_consulta(request: Request, q: str = "", db: Session = Depends(get_db)):
+    _bot_requiere(request)
+    return {"respuesta": _bot_responder(db, q[:200])}
+
+
+@app.get("/api/bot/estado")
+def api_bot_estado(request: Request, db: Session = Depends(get_db)):
+    _bot_requiere(request)
+    try:
+        humo = json.loads(_HUMO_ESTADO.read_text(encoding="utf-8")) if _HUMO_ESTADO.is_file() else {}
+    except ValueError:
+        humo = {}
+    try:
+        libre = round(shutil.disk_usage(str(BASE_DIR)).free / 1024 ** 3, 1)
+    except OSError:
+        libre = None
+    uptime_h = round((datetime.now() - _APP_INICIO).total_seconds() / 3600, 1)
+    errores = [e for e in _salud_errores(1) if e["grave"]]
+    return {"version": leer_version_actual().get("version_actual", VERSION), "uptime_horas": uptime_h, "disco_libre_gb": libre,
+            "humo_ok": humo.get("ok"), "errores_500_hoy": sum(e["veces"] for e in errores), "cola": len(_cola_mostrador(db, None)),
+            "listos": db.query(SolicitudTrabajador).filter(SolicitudTrabajador.estado == "lista").count()}
 
 
 def _alertas_consumo_obras_bg():
