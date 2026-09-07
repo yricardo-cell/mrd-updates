@@ -1032,6 +1032,8 @@ def startup_event():
                 except Exception as _e:
                     mrd_logging.log_error(f"Prueba de humo: {_e}")
             _thr.Thread(target=_run_humo, daemon=True, name="prueba_humo_bg").start()
+            if IS_PRODUCTION:
+                _thr.Thread(target=_reparacion_bg, daemon=True, name="reparacion_bg").start()   # mejora 32
             try:
                 import asyncio as _aio_v
                 globals()["_APP_LOOP"] = _aio_v.get_event_loop()
@@ -11672,6 +11674,78 @@ def _vigilante_bg():
         except Exception as exc:
             mrd_logging.log_error(f"Vigilante: {exc}")
         _t.sleep(30)
+
+
+# ─── 32: reparación automática de ficheros con el repair-center ──────────────
+_REPAIR_STATE_ROOT = Path(os.getenv("MRD_REPAIR_STATE_ROOT", "C:" + chr(92) + "ProgramData" + chr(92) + "MRDToolControl" + chr(92) + "repair-center"))
+_REPARACION_ESTADO = BASE_DIR / "config" / "reparacion_estado.json"
+
+
+def _repair_center():
+    ruta = str(BASE_DIR / "scripts" / "operations")
+    if ruta not in sys.path:
+        sys.path.insert(0, ruta)
+    import repair_center as _rc
+    return _rc
+
+
+def _reparacion_decidir(res: dict, version: str) -> str:
+    """'error' | 'sellar' (la base es de otra versión) | 'reparar' | 'ok'."""
+    if not isinstance(res, dict) or res.get("result") == "error_interno":
+        return "error"
+    if not res.get("baseline") or str(res.get("baseline")) != str(version):
+        return "sellar"
+    componentes = res.get("components") or {}
+    con_error = [k for k, v in componentes.items() if isinstance(v, dict) and v.get("status") == "error" and k != "base_datos"]
+    if res.get("result") == "problemas" or con_error or res.get("missing_files") or res.get("changed_files"):
+        return "reparar"
+    return "ok"
+
+
+def _reparacion_automatica(aplicar: bool = True) -> dict:
+    """Comprueba el programa contra la línea base sellada y repone lo que falte o esté cambiado (solo si la base es de la versión en marcha)."""
+    version = leer_version_actual().get("version_actual", VERSION)
+    try:
+        rc = _repair_center()
+        res = rc.run_once(BASE_DIR, _REPAIR_STATE_ROOT, apply=False)
+    except Exception as exc:
+        return {"accion": "error", "detalle": str(exc)[:300]}
+    accion = _reparacion_decidir(res, version)
+    estado = _estado_json_leer(_REPARACION_ESTADO)
+    salida = {"accion": accion, "baseline": res.get("baseline"), "result": res.get("result")}
+    if accion == "sellar":
+        if estado.get("aviso_sellar") != version:
+            estado["aviso_sellar"] = version
+            _estado_json_escribir(_REPARACION_ESTADO, estado)
+            _notificar_sistema("Falta sellar la línea base", f"El programa va con la {version} y la línea base sellada es la {res.get('baseline') or 'ninguna'}. La reparación automática no actúa hasta que selles (repair_center --mode seal como administrador).", prioridad="media")
+        return salida
+    if accion == "reparar" and aplicar:
+        try:
+            res2 = rc.run_once(BASE_DIR, _REPAIR_STATE_ROOT, apply=True)
+        except Exception as exc:
+            return {"accion": "error", "detalle": str(exc)[:300]}
+        reparados = list(res2.get("repaired_files") or [])
+        salida.update({"reparados": reparados, "result": res2.get("result")})
+        if reparados:
+            estado["ultima_reparacion"] = datetime.now().isoformat(timespec="seconds")
+            estado["ficheros"] = reparados[:50]
+            _estado_json_escribir(_REPARACION_ESTADO, estado)
+            codigo = [f for f in reparados if str(f).endswith((".py", ".html", ".js", ".css"))]
+            _notificar_sistema("Ficheros del programa repuestos", f"{len(reparados)} ficheros faltaban o estaban cambiados y se han repuesto de la línea base {version}: " + ", ".join(str(f) for f in reparados[:8]) + (" …" if len(reparados) > 8 else "") + (". Se reinicia para cargarlos." if codigo and _supervisado() else "."))
+            if codigo and _supervisado():
+                _reiniciar_proceso("ficheros repuestos")
+    return salida
+
+
+def _reparacion_bg():
+    import time as _t
+    _t.sleep(90)
+    while True:
+        try:
+            _reparacion_automatica(aplicar=True)
+        except Exception as exc:
+            mrd_logging.log_error(f"Reparación automática: {exc}")
+        _t.sleep(3600)
 
 
 def _alertas_consumo_obras_bg():
