@@ -12293,6 +12293,34 @@ def api_bot_error_ignorar(eid: int, request: Request, db: Session = Depends(get_
     return {"ok": True}
 
 
+@app.get("/configuracion/arreglos", response_class=HTMLResponse)
+def configuracion_arreglos(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    from models import ErrorCodigo as _EC
+    rows = db.query(_EC).order_by(_EC.ultima_vez.desc()).limit(200).all()
+    abiertos = sum(1 for e in rows if e.estado in _ERROR_ESTADOS_ABIERTOS)
+    return templates.TemplateResponse(request, "configuracion_arreglos.html", ctx_base(request, user, db, errores=rows, abiertos=abiertos, bot_ok=bool(os.getenv("MRD_BOT_TOKEN")), telegram_ok=bool(_telegram_config().get("bot_token"))))
+
+
+@app.post("/configuracion/arreglos/{eid}/estado", response_class=RedirectResponse)
+async def configuracion_arreglos_estado(eid: int, request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    from models import ErrorCodigo as _EC
+    e = db.get(_EC, eid)
+    if e is None:
+        raise HTTPException(404, "Error no encontrado")
+    form = await request.form()
+    estado = str(form.get("estado") or "")
+    if estado not in ("ignorado", "nuevo"):
+        raise HTTPException(400, "Estado no válido")
+    e.estado = estado
+    e.actualizado_en = datetime.now()
+    db.commit()
+    return RedirectResponse("/configuracion/arreglos", status_code=303)
+
+
 def _alertas_consumo_obras_bg():
     """Una vez por semana: un aviso por cada obra/material con consumo anómalo (sin repetir la misma semana)."""
     try:
