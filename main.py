@@ -31,6 +31,7 @@ import hashlib
 import math
 import base64
 import secrets
+import sys
 from collections import OrderedDict
 
 from fastapi import (
@@ -11423,6 +11424,99 @@ def api_bot_estado(request: Request, db: Session = Depends(get_db)):
     return {"version": leer_version_actual().get("version_actual", VERSION), "uptime_horas": uptime_h, "disco_libre_gb": libre,
             "humo_ok": humo.get("ok"), "errores_500_hoy": sum(e["veces"] for e in errores), "cola": len(_cola_mostrador(db, None)),
             "listos": db.query(SolicitudTrabajador).filter(SolicitudTrabajador.estado == "lista").count()}
+
+
+# ─── Copia de seguridad en Google Drive (mejora 30) ──────────────────────────
+_DRIVE_ESTADO = BASE_DIR / "config" / "drive_estado.json"
+_DRIVE_TAREA = "MRD Tool Control - Copia a Drive"
+_DRIVE_SCRIPT = BASE_DIR / "scripts" / "operations" / "copia_drive.ps1"
+
+
+def _drive_config(db: Session) -> dict:
+    cfg = {"activo": False, "ruta": "G:" + chr(92) + "Mi unidad" + chr(92) + "MRD Tool Control" + chr(92) + "copias", "usuario": "yrica", "hora": "03:40"}
+    cfg.update(_ajuste_get(db, "drive", {}) or {})
+    return cfg
+
+
+def _drive_estado() -> dict:
+    try:
+        return json.loads(_DRIVE_ESTADO.read_text(encoding="utf-8")) if _DRIVE_ESTADO.is_file() else {}
+    except ValueError:
+        return {}
+
+
+def _drive_comando_tarea(cfg: dict) -> str:
+    """PowerShell que registra la tarea diaria como el usuario que tiene Google Drive abierto (sin contraseña: sesión interactiva)."""
+    hora = cfg.get("hora") or "03:40"
+    args = f'-NoProfile -ExecutionPolicy Bypass -File "{_DRIVE_SCRIPT}" -Origen "{BASE_DIR / "backups"}" -Destino "{cfg.get("ruta")}" -Estado "{_DRIVE_ESTADO}"'
+    return (f"$a = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '{args}'; "
+            f"$t = New-ScheduledTaskTrigger -Daily -At {hora}; "
+            f"$p = New-ScheduledTaskPrincipal -UserId '{cfg.get('usuario')}' -LogonType Interactive -RunLevel Limited; "
+            f"$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 30); "
+            f"Register-ScheduledTask -TaskName '{_DRIVE_TAREA}' -Action $a -Trigger $t -Principal $p -Settings $s -Force | Out-Null; 'ok'")
+
+
+def _drive_tarea_existe() -> bool:
+    if sys.platform != "win32":
+        return False
+    try:
+        r = subprocess.run(["schtasks", "/Query", "/TN", _DRIVE_TAREA], capture_output=True, text=True, timeout=20)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+@app.get("/configuracion/drive", response_class=HTMLResponse)
+def configuracion_drive(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    return templates.TemplateResponse(request, "configuracion_drive.html", ctx_base(request, user, db, cfg=_drive_config(db), estado=_drive_estado(), tarea=_drive_tarea_existe(), msg=request.query_params.get("msg", "")))
+
+
+@app.post("/configuracion/drive", response_class=RedirectResponse)
+async def configuracion_drive_guardar(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    form = await request.form()
+    cfg = _drive_config(db)
+    cfg.update({"activo": form.get("activo") == "1", "ruta": str(form.get("ruta") or cfg["ruta"]).strip()[:260], "usuario": str(form.get("usuario") or cfg["usuario"]).strip()[:60],
+                "hora": str(form.get("hora") or cfg["hora"]).strip()[:5]})
+    _ajuste_set(db, "drive", cfg)
+    db.commit()
+    return RedirectResponse("/configuracion/drive?msg=guardado", status_code=303)
+
+
+@app.post("/configuracion/drive/instalar", response_class=RedirectResponse)
+def configuracion_drive_instalar(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    cfg = _drive_config(db)
+    if sys.platform != "win32":
+        return RedirectResponse("/configuracion/drive?msg=solo-windows", status_code=303)
+    try:
+        r = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", _drive_comando_tarea(cfg)], capture_output=True, text=True, timeout=60)
+        ok = r.returncode == 0 and "ok" in (r.stdout or "")
+        msg = "tarea-instalada" if ok else "tarea-error"
+        if not ok:
+            mrd_logging.log_error(f"Tarea Drive: {(r.stderr or r.stdout)[:300]}")
+    except Exception as exc:
+        mrd_logging.log_error(f"Tarea Drive: {exc}")
+        msg = "tarea-error"
+    return RedirectResponse(f"/configuracion/drive?msg={msg}", status_code=303)
+
+
+@app.post("/configuracion/drive/copiar", response_class=RedirectResponse)
+def configuracion_drive_copiar(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    if sys.platform != "win32":
+        return RedirectResponse("/configuracion/drive?msg=solo-windows", status_code=303)
+    try:
+        r = subprocess.run(["schtasks", "/Run", "/TN", _DRIVE_TAREA], capture_output=True, text=True, timeout=30)
+        msg = "copia-lanzada" if r.returncode == 0 else "tarea-falta"
+    except Exception:
+        msg = "tarea-falta"
+    return RedirectResponse(f"/configuracion/drive?msg={msg}", status_code=303)
 
 
 def _alertas_consumo_obras_bg():
