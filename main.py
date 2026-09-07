@@ -18326,6 +18326,85 @@ def documento_trabajador_eliminar(tid: int, did: int,
 
 # ─── PDF ficha completa del trabajador ────────────────────────────────────────────────
 
+@app.get("/trabajadores/{tid}/informe-epi.pdf")
+def trabajador_informe_epi_pdf(tid: int, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Informe de EPI para la inspección (mejora 30): todo lo que prevención de riesgos pide, en un PDF."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    import io
+    t = db.get(Trabajador, tid)
+    if not t:
+        raise HTTPException(404)
+    hoy = date.today()
+    styles = getSampleStyleSheet()
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
+    story = [Paragraph("<b>Informe de equipos de protección individual</b>", styles["Title"]),
+             Paragraph(f"{t.nombre_completo} — {t.cargo or ''}{(' · DNI ' + t.dni) if t.dni else ''}", styles["Heading2"]),
+             Paragraph(f"MRD Estructuras · emitido el {hoy.strftime('%d/%m/%Y')} por {user.nombre or user.username}", styles["Normal"]), Spacer(1, 10)]
+
+    def tabla(cabecera, filas, anchos):
+        tb = Table([cabecera] + (filas or [["—"] + [""] * (len(cabecera) - 1)]), colWidths=anchos, repeatRows=1)
+        tb.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a3a5c")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f0f4f8")]),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.grey), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        return tb
+
+    story.append(Paragraph("<b>1. EPI individual asignado</b>", styles["Heading3"]))
+    filas = []
+    for e in db.query(EPIIndividual).filter(EPIIndividual.trabajador_id == tid).order_by(EPIIndividual.estado, EPIIndividual.tipo).all():
+        ult = db.query(RevisionEPI).filter(RevisionEPI.epi_id == e.id).order_by(RevisionEPI.fecha.desc()).first()
+        filas.append([e.tipo, e.referencia_interna or e.codigo_fabricacion or "", " ".join(x for x in (e.marca or "", e.modelo or "") if x),
+                      e.fecha_puesta_servicio.strftime("%d/%m/%Y") if e.fecha_puesta_servicio else "", (e.estado or "").replace("_", " "),
+                      (ult.fecha.strftime("%d/%m/%Y") + " · " + (ult.resultado or "")) if ult else "sin revisiones",
+                      e.proxima_revision.strftime("%d/%m/%Y") if e.proxima_revision else ""])
+    story.append(tabla(["Tipo", "Código", "Marca/modelo", "Puesta en servicio", "Estado", "Última revisión", "Próxima"], filas, [70, 70, 90, 65, 55, 100, 55]))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("<b>2. Entregas de EPI y ropa (firmadas)</b>", styles["Heading3"]))
+    filas = []
+    for en in db.query(EntregaEPI).filter(EntregaEPI.trabajador_id == tid).order_by(EntregaEPI.fecha.desc()).limit(60).all():
+        try:
+            items = json.loads(en.items_json or "[]")
+        except (TypeError, ValueError):
+            items = []
+        desc = ", ".join(f"{(i or {}).get('cantidad', 1)}x {(i or {}).get('nombre', '')}" + (f" T.{i.get('talla')}" if (i or {}).get("talla") else "") for i in items if isinstance(i, dict)) or "(marca manual: ya lo tenía)"
+        filas.append([en.fecha.strftime("%d/%m/%Y") if en.fecha else "", (en.tipo or "").upper(), Paragraph(desc, styles["BodyText"]), en.entregado_por or "", en.firmado_por or "sin firma"])
+    story.append(tabla(["Fecha", "Tipo", "Artículos", "Entregó", "Firmó"], filas, [60, 45, 240, 90, 90]))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("<b>3. Revisiones mensuales del EPI hechas por el trabajador (portal)</b>", styles["Heading3"]))
+    filas = []
+    for a in db.query(AuditoriaLog).filter(AuditoriaLog.tabla == "trabajadores", AuditoriaLog.registro_id == tid, AuditoriaLog.accion == "epi_revision_portal").order_by(AuditoriaLog.fecha.desc()).limit(24).all():
+        filas.append([_utc_a_local(a.fecha).strftime("%d/%m/%Y %H:%M") if a.fecha else "", Paragraph(a.resumen or "", styles["BodyText"])])
+    story.append(Paragraph(f"Última revisión: {t.epi_revisado_en.strftime('%d/%m/%Y') if t.epi_revisado_en else 'ninguna'}", styles["Normal"]))
+    story.append(tabla(["Fecha", "Resultado"], filas, [110, 415]))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("<b>4. Formaciones</b>", styles["Heading3"]))
+    filas = []
+    for fo in db.query(FormacionTrabajador).filter(FormacionTrabajador.trabajador_id == tid).order_by(FormacionTrabajador.fecha_caducidad.desc().nullslast()).all():
+        vigente = (fo.fecha_caducidad is None) or fo.fecha_caducidad >= hoy
+        filas.append([fo.nombre_curso, fo.tipo or "", fo.entidad or "", fo.fecha_realizacion.strftime("%d/%m/%Y") if fo.fecha_realizacion else "",
+                      fo.fecha_caducidad.strftime("%d/%m/%Y") if fo.fecha_caducidad else "sin caducidad", "EN VIGOR" if vigente else "CADUCADA", fo.num_certificado or ""])
+    story.append(tabla(["Curso", "Tipo", "Entidad", "Realizado", "Caduca", "Estado", "Nº cert."], filas, [120, 50, 90, 55, 60, 55, 95]))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("<b>5. Reconocimiento médico</b>", styles["Heading3"]))
+    filas = []
+    for rm in db.query(ReconocimientoMedico).filter(ReconocimientoMedico.trabajador_id == tid).order_by(ReconocimientoMedico.fecha.desc()).limit(5).all():
+        filas.append([rm.fecha.strftime("%d/%m/%Y") if rm.fecha else "", rm.resultado or "", rm.fecha_proxima.strftime("%d/%m/%Y") if rm.fecha_proxima else "", rm.centro or "", Paragraph(rm.restricciones or "", styles["BodyText"])])
+    story.append(tabla(["Fecha", "Resultado", "Próximo", "Centro", "Restricciones"], filas, [60, 70, 60, 120, 215]))
+    story.append(Spacer(1, 14))
+    story.append(Paragraph("Firma del trabajador: ______________________          Firma de la empresa: ______________________", styles["Normal"]))
+    doc.build(story)
+    buf.seek(0)
+    from fastapi.responses import StreamingResponse
+    nombre = re.sub(r"[^A-Za-z0-9_-]+", "_", t.nombre_completo)[:40]
+    return StreamingResponse(buf, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=informe_epi_{nombre}.pdf"})
+
+
 @app.get("/trabajadores/{tid}/pdf-ficha")
 def trabajador_pdf_ficha(tid: int,
                          user: Usuario = Depends(requiere_login),
