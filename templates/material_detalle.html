@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ mat.nombre }}{% endblock %}
 {% block content %}
+{% if mat.unidad and (mat.unidad|trim).isdigit() %}<div class="alert alert-warning d-flex justify-content-between align-items-center gap-3 flex-wrap"><div><strong>La unidad de este material es un número ({{ mat.unidad }}).</strong> El tamaño de paquete va en «unidades por paquete», no en la unidad; así el Mostrador y el inventario cuentan bien.</div><form method="post" action="/materiales/{{ mat.id }}/arreglar-unidad"><input type="hidden" name="_csrf_token"><button class="btn btn-sm btn-warning">Arreglar: {{ mat.unidad }} unidades por paquete, unidad «ud»</button></form></div>{% endif %}
+{% if request.query_params.get('ok') == 'unidad' %}<div class="alert alert-success">Unidad corregida.</div>{% endif %}
 <div class="d-flex align-items-center gap-3 mb-4">
   <a href="/materiales" class="btn btn-sm btn-outline-secondary">
     <i class="bi bi-arrow-left"></i> Volver

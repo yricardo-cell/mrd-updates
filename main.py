@@ -10468,6 +10468,24 @@ def epis_entregas_excel(request: Request, user: Usuario = Depends(requiere_login
                     headers={"Content-Disposition": f"attachment; filename=entregas_epi_{date.today():%Y%m%d}.xlsx"})
 
 
+@app.post("/materiales/{mid}/arreglar-unidad", response_class=RedirectResponse)
+def material_arreglar_unidad(mid: int, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Mejora 14: el número que estaba en «unidad» pasa a «unidades por paquete» y la unidad queda en «ud»."""
+    if not (tiene_permiso(user, "editar") or tiene_permiso(user, "stock_operar")):
+        raise HTTPException(403, "Sin permiso")
+    mat = db.get(Material, mid)
+    if mat is None:
+        raise HTTPException(404, "Material no encontrado")
+    u = (mat.unidad or "").strip()
+    if not u.isdigit() or int(u) <= 0:
+        raise HTTPException(409, "La unidad de este material no es un número")
+    mat.unidades_por_paquete = int(u)
+    mat.unidad = "ud"
+    db.add(AuditoriaLog(tabla="materiales", registro_id=mat.id, accion="arreglar_unidad", resumen=f"Unidad '{u}' pasada a {u} unidades por paquete", usuario_id=user.id))
+    db.commit()
+    return RedirectResponse(f"/materiales/{mid}?ok=unidad", status_code=303)
+
+
 def _alertas_consumo_obras_bg():
     """Una vez por semana: un aviso por cada obra/material con consumo anómalo (sin repetir la misma semana)."""
     try:
