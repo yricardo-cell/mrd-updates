@@ -10636,7 +10636,7 @@ def _kiosco_usuario(db: Session) -> Usuario:
         u = Usuario(username="kiosco", password_hash=hash_password(secrets.token_urlsafe(24)), nombre="Kiosco de autoservicio",
                     rol="encargado_patio", activo=True, must_change_password=False)
         db.add(u)
-        db.flush()
+        db.commit()   # el usuario debe existir de verdad antes de operar (clave ajena en las operaciones)
     return u
 
 
