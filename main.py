@@ -18397,11 +18397,31 @@ async def _save_worker_portal_photo(
     return f"portal_trabajador/{filename}"
 
 
+async def _save_worker_portal_photos(form, worker_id: int, prefix: str, max_n: int = 5) -> list[str]:
+    """Varias fotos del portal (P3): campo `fotos` (múltiple) y el antiguo `foto`."""
+    subidas = []
+    for up in list(form.getlist("fotos")) + [form.get("foto")]:
+        if up is None or not getattr(up, "filename", ""):
+            continue
+        if len(subidas) >= max_n:
+            break
+        try:
+            ruta = await _save_worker_portal_photo(up, worker_id, prefix)
+        except HTTPException:
+            for r in subidas:
+                (UPLOADS_DIR / r).unlink(missing_ok=True)
+            raise
+        if ruta:
+            subidas.append(ruta)
+    return subidas
+
+
 @app.post("/portal/{token}/incidencias", response_class=RedirectResponse)
 async def portal_crear_incidencia(token: str, request: Request, db: Session = Depends(get_db)):
     worker = _portal_worker_required(token, request, db)
     form = await request.form()
-    photo = await _save_worker_portal_photo(form.get("foto"), worker.id, "inc")
+    fotos = await _save_worker_portal_photos(form, worker.id, "inc")
+    photo = fotos[0] if fotos else None
     try:
         row = create_worker_incident(
             db, worker, category=str(form.get("categoria") or "otro"),
@@ -18410,13 +18430,14 @@ async def portal_crear_incidencia(token: str, request: Request, db: Session = De
             asset_name=str(form.get("activo_nombre") or ""),
             description=str(form.get("descripcion") or ""), photo_path=photo,
         )
+        row.fotos_json = json.dumps(fotos) if fotos else None
         db.add(AuditoriaLog(tabla="incidencias_portal_trabajador", registro_id=row.id,
                             accion="crear_portal", resumen=row.numero, usuario_id=None))
         db.commit()
     except WorkerPortalError as exc:
         db.rollback()
-        if photo:
-            (UPLOADS_DIR / photo).unlink(missing_ok=True)
+        for r in fotos:
+            (UPLOADS_DIR / r).unlink(missing_ok=True)
         raise HTTPException(exc.status_code, exc.detail)
     return RedirectResponse(f"/portal/{token}?ok=incidencia&numero={row.numero}#incidencias", status_code=303)
 
@@ -18425,7 +18446,8 @@ async def portal_crear_incidencia(token: str, request: Request, db: Session = De
 async def portal_crear_devolucion(token: str, request: Request, db: Session = Depends(get_db)):
     worker = _portal_worker_required(token, request, db)
     form = await request.form()
-    photo = await _save_worker_portal_photo(form.get("foto"), worker.id, "dev")
+    fotos = await _save_worker_portal_photos(form, worker.id, "dev")
+    photo = fotos[0] if fotos else None
     try:
         row = create_worker_return(
             db, worker, asset_type=str(form.get("activo_tipo") or "otro"),
@@ -18435,13 +18457,14 @@ async def portal_crear_devolucion(token: str, request: Request, db: Session = De
             item_state=str(form.get("estado_material") or "correcto"),
             reason=str(form.get("motivo") or ""), photo_path=photo,
         )
+        row.fotos_json = json.dumps(fotos) if fotos else None
         db.add(AuditoriaLog(tabla="devoluciones_trabajador", registro_id=row.id,
                             accion="crear_portal", resumen=row.numero, usuario_id=None))
         db.commit()
     except (ValueError, WorkerPortalError) as exc:
         db.rollback()
-        if photo:
-            (UPLOADS_DIR / photo).unlink(missing_ok=True)
+        for r in fotos:
+            (UPLOADS_DIR / r).unlink(missing_ok=True)
         if isinstance(exc, WorkerPortalError):
             raise HTTPException(exc.status_code, exc.detail)
         raise HTTPException(422, "Cantidad no válida")

@@ -691,6 +691,9 @@ def apply_migrations(target_engine=None):
         ("herramientas", "maletin_id",           "INTEGER REFERENCES herramientas(id)"),
         # Avisos push del portal del trabajador (2.7.48)
         ("push_suscripciones", "trabajador_id",  "INTEGER REFERENCES trabajadores(id)"),
+        # Varias fotos en incidencias y devoluciones del portal (P3)
+        ("incidencias_portal_trabajador", "fotos_json", "TEXT"),
+        ("devoluciones_trabajador", "fotos_json", "TEXT"),
         # Pedidos a proveedor en tres pasos (2.7.50)
         ("pedidos_proveedor", "proveedor_id",    "INTEGER REFERENCES proveedores(id)"),
         # Zonas y elementos en 3D (2.7.54): cada hueco sabe de qué elemento sale

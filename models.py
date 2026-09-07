@@ -360,6 +360,18 @@ class IncidenciaPortalTrabajador(Base):
     activo_nombre = Column(String(200), nullable=True)
     descripcion = Column(Text, nullable=False)
     foto_path = Column(String(255), nullable=True)
+    fotos_json = Column(Text, nullable=True)  # varias fotos del portal (P3)
+
+    @property
+    def fotos_lista(self) -> list:
+        import json as _json
+        try:
+            lista = _json.loads(self.fotos_json) if self.fotos_json else []
+        except (TypeError, ValueError):
+            lista = []
+        if not lista and self.foto_path:
+            lista = [self.foto_path]
+        return [str(x) for x in lista if x]
     estado = Column(String(20), nullable=False, default="recibida", index=True)
     respuesta = Column(Text, nullable=True)
     creado_en = Column(DateTime, nullable=False, server_default=func.now())
@@ -384,6 +396,18 @@ class SolicitudDevolucionTrabajador(Base):
     estado_material = Column(String(30), nullable=False, default="correcto")
     motivo = Column(Text, nullable=True)
     foto_path = Column(String(255), nullable=True)
+    fotos_json = Column(Text, nullable=True)  # varias fotos del portal (P3)
+
+    @property
+    def fotos_lista(self) -> list:
+        import json as _json
+        try:
+            lista = _json.loads(self.fotos_json) if self.fotos_json else []
+        except (TypeError, ValueError):
+            lista = []
+        if not lista and self.foto_path:
+            lista = [self.foto_path]
+        return [str(x) for x in lista if x]
     estado = Column(String(20), nullable=False, default="solicitada", index=True)
     notas_gestion = Column(Text, nullable=True)
     creado_en = Column(DateTime, nullable=False, server_default=func.now())
