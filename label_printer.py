@@ -5,6 +5,7 @@ Formato oficial MRD: 105x55 mm para Zebra ZT231 a 203 dpi y PDF.
 import io
 import sys
 import os
+import subprocess
 from typing import List, Dict
 
 
@@ -376,8 +377,14 @@ def set_tamano_etiqueta(ancho_mm: int, alto_mm: int, preset: str = "personalizad
     claves = {p[0] for p in PRESETS_ETIQUETA}
     p = _etiqueta_cfg_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(_json.dumps({"ancho_mm": ancho, "alto_mm": alto, "preset": preset if preset in claves else "personalizado"},
-                             ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        d = _json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    except Exception:
+        d = {}
+    if not isinstance(d, dict):
+        d = {}
+    d.update({"ancho_mm": ancho, "alto_mm": alto, "preset": preset if preset in claves else "personalizado"})
+    p.write_text(_json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
     return get_tamano_etiqueta()
 
 
@@ -508,3 +515,195 @@ def item_etiqueta_herramienta(h, empresa: str = "MRD Estructuras") -> Dict:
     detalle = " · ".join(p for p in (h.marca, h.modelo) if p)
     return {"sup": empresa, "grande": h.nombre or "", "detalle": detalle, "codigo": h.codigo or "", "qr": h.codigo or "",
             "pie": f"Nº serie {h.num_serie}" if h.num_serie else ""}
+
+
+# ─── Impresión directa en la etiquetadora (2.7.62) ───────────────────────────
+# La etiqueta se dibuja como imagen a 300 ppp con la misma maqueta que el PDF y
+# se manda a una impresora de Windows instalada en el PC del programa mediante
+# PowerShell (System.Drawing.Printing). También se ofrece el PNG para las apps
+# de etiquetadoras de móvil (Niimbot, Phomemo…).
+_FUENTES_WIN = {
+    "bold": r"C:\Windows\Fonts\arialbd.ttf", "reg": r"C:\Windows\Fonts\arial.ttf",
+    "mono": r"C:\Windows\Fonts\courbd.ttf", "monor": r"C:\Windows\Fonts\cour.ttf",
+}
+
+
+def get_impresora() -> str:
+    import json as _json
+    try:
+        p = _etiqueta_cfg_path()
+        d = _json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    except Exception:
+        d = {}
+    return str(d.get("impresora") or "").strip()
+
+
+def set_impresora(nombre: str) -> str:
+    import json as _json
+    p = _etiqueta_cfg_path()
+    try:
+        d = _json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    except Exception:
+        d = {}
+    d["impresora"] = str(nombre or "").strip()[:200]
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(_json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    return d["impresora"]
+
+
+def _fuente(clave: str, px: int):
+    from PIL import ImageFont
+    try:
+        return ImageFont.truetype(_FUENTES_WIN[clave], max(6, int(px)))
+    except Exception:
+        try:
+            return ImageFont.load_default(size=max(6, int(px)))
+        except TypeError:
+            return ImageFont.load_default()
+
+
+def renderizar_etiqueta_png(item: Dict, ancho_mm: int, alto_mm: int, dpi: int = 300, empresa: str = "MRD Estructuras") -> bytes:
+    """Etiqueta como PNG al tamaño físico exacto (para la etiquetadora o para el móvil)."""
+    from PIL import Image, ImageDraw
+    import qrcode
+
+    lay = layout_etiqueta(ancho_mm, alto_mm)
+    px = lambda mm_: int(round(mm_ / 25.4 * dpi))
+    pt = lambda p: max(6, int(round(p / 72 * dpi)))
+    W, H, M = px(ancho_mm), px(alto_mm), px(lay["margen_mm"])
+    img = Image.new("RGB", (W, H), "white")
+    d = ImageDraw.Draw(img)
+    d.rectangle([1, 1, W - 2, H - 2], outline="black", width=max(1, px(0.35)))
+    sup = str(item.get("sup") or empresa).upper()
+    grande, detalle = str(item.get("grande") or ""), str(item.get("detalle") or "")
+    codigo, pie = str(item.get("codigo") or ""), str(item.get("pie") or "")
+
+    def ancho(texto, font):
+        return d.textlength(texto, font=font)
+
+    def ajustar(texto, clave, max_w, max_pt, min_pt=5.0):
+        size = max_pt
+        while size > min_pt and ancho(texto, _fuente(clave, pt(size))) > max_w:
+            size -= 0.5
+        return _fuente(clave, pt(size)), pt(size)
+
+    def recortar(texto, font, max_w):
+        if ancho(texto, font) <= max_w:
+            return texto
+        while texto and ancho(texto + "…", font) > max_w:
+            texto = texto[:-1]
+        return texto + "…"
+
+    qr_s = px(lay["qr_mm"])
+    qr = qrcode.make(item.get("qr") or codigo or grande, border=1).convert("RGB").resize((qr_s, qr_s), Image.NEAREST)
+    if lay["horizontal"]:
+        img.paste(qr, (M, (H - qr_s) // 2))
+        tx = M + qr_s + M
+        tw = W - tx - M
+        y = M
+        f = _fuente("bold", pt(lay["f_sup"])); d.text((tx, y), recortar(sup, f, tw), fill="#333", font=f); y += pt(lay["f_sup"]) + px(1)
+        f, h = ajustar(grande, "bold", tw, lay["f_grande"], 7); d.text((tx, y), recortar(grande, f, tw), fill="black", font=f); y += h + px(1)
+        if detalle:
+            f = _fuente("reg", pt(lay["f_detalle"])); d.text((tx, y), recortar(detalle, f, tw), fill="#555", font=f); y += pt(lay["f_detalle"]) + px(0.8)
+        if codigo:
+            f = _fuente("mono", pt(lay["f_ref"])); d.text((tx, y), codigo[-8:], fill="black", font=f); y += pt(lay["f_ref"]) + px(0.5)
+            f, h = ajustar(codigo, "monor", tw, lay["f_codigo"], 3.5); d.text((tx, y), recortar(codigo, f, tw), fill="#333", font=f); y += h
+        if pie:
+            f = _fuente("reg", pt(lay["f_pie"])); d.text((W - M - ancho(pie, f), H - M - pt(lay["f_pie"])), recortar(pie, f, tw), fill="#555", font=f)
+    else:
+        tw = W - 2 * M
+        y = M
+        f = _fuente("bold", pt(lay["f_sup"])); t = recortar(sup, f, tw); d.text(((W - ancho(t, f)) / 2, y), t, fill="#333", font=f); y += pt(lay["f_sup"]) + px(1)
+        f, h = ajustar(grande, "bold", tw, lay["f_grande"], 7); t = recortar(grande, f, tw); d.text(((W - ancho(t, f)) / 2, y), t, fill="black", font=f); y += h + px(1.2)
+        if detalle:
+            f = _fuente("reg", pt(lay["f_detalle"])); t = recortar(detalle, f, tw); d.text(((W - ancho(t, f)) / 2, y), t, fill="#555", font=f); y += pt(lay["f_detalle"]) + px(0.8)
+        y_qr = max(y, min(y, H - M - qr_s - pt(lay["f_ref"]) - pt(lay["f_codigo"]) - pt(lay["f_pie"]) - px(3)))
+        img.paste(qr, ((W - qr_s) // 2, int(y_qr)))
+        y = int(y_qr) + qr_s + px(0.8)
+        if codigo:
+            f = _fuente("mono", pt(lay["f_ref"])); t = codigo[-8:]; d.text(((W - ancho(t, f)) / 2, y), t, fill="black", font=f); y += pt(lay["f_ref"]) + px(0.4)
+            f, h = ajustar(codigo, "monor", tw, lay["f_codigo"], 3.5); t = recortar(codigo, f, tw)
+            if y + h < H - M - pt(lay["f_pie"]):
+                d.text(((W - ancho(t, f)) / 2, y), t, fill="#333", font=f)
+        if pie:
+            f = _fuente("reg", pt(lay["f_pie"])); t = recortar(pie, f, tw); d.text(((W - ancho(t, f)) / 2, H - M - pt(lay["f_pie"])), t, fill="#555", font=f)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", dpi=(dpi, dpi))
+    return buf.getvalue()
+
+
+def _powershell(script: str, args: list, timeout: int = 60) -> subprocess.CompletedProcess:
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False, encoding="utf-8-sig") as fh:
+        fh.write(script)
+        ruta = fh.name
+    try:
+        return subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ruta, *args],
+                              capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace")
+    finally:
+        try:
+            os.unlink(ruta)
+        except OSError:
+            pass
+
+
+def listar_impresoras() -> list:
+    """Impresoras instaladas en el PC del programa (Windows). Vacío en otros sistemas."""
+    if os.name != "nt":
+        return []
+    try:
+        r = _powershell("Add-Type -AssemblyName System.Drawing; [System.Drawing.Printing.PrinterSettings]::InstalledPrinters | ForEach-Object { Write-Output $_ }", [], timeout=25)
+        return [l.strip() for l in (r.stdout or "").splitlines() if l.strip()]
+    except Exception:
+        return []
+
+
+_PS_IMPRIMIR = r"""
+param([string]$png, [string]$printer, [double]$w, [double]$h, [int]$copias)
+Add-Type -AssemblyName System.Drawing
+$img = [System.Drawing.Image]::FromFile($png)
+$doc = New-Object System.Drawing.Printing.PrintDocument
+$doc.PrinterSettings.PrinterName = $printer
+if (-not $doc.PrinterSettings.IsValid) { Write-Output "ERROR:La impresora no existe en este PC: $printer"; exit 2 }
+$wc = [int][math]::Round($w / 25.4 * 100); $hc = [int][math]::Round($h / 25.4 * 100)
+$sel = $null
+foreach ($p in $doc.PrinterSettings.PaperSizes) { if ([math]::Abs($p.Width - $wc) -le 12 -and [math]::Abs($p.Height - $hc) -le 12) { $sel = $p; break } }
+if ($sel -eq $null) { $sel = New-Object System.Drawing.Printing.PaperSize("MRD $w x $h mm", $wc, $hc) }
+$doc.DefaultPageSettings.PaperSize = $sel
+$doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)
+$doc.DefaultPageSettings.Landscape = $false
+$doc.DocumentName = "Etiqueta MRD"
+$doc.add_PrintPage({ param($s, $e) $e.Graphics.DrawImage($img, 0, 0, $e.PageBounds.Width, $e.PageBounds.Height); $e.HasMorePages = $false })
+for ($i = 0; $i -lt [math]::Max(1, $copias); $i++) { $doc.Print() }
+$img.Dispose()
+Write-Output "OK:$($sel.PaperName)"
+"""
+
+
+def imprimir_png(png_bytes: bytes, impresora: str, ancho_mm: int, alto_mm: int, copias: int = 1) -> dict:
+    """Manda la etiqueta a la impresora de Windows elegida. Devuelve ok/error/papel."""
+    if os.name != "nt":
+        return {"ok": False, "error": "La impresión directa solo funciona en Windows"}
+    if not impresora:
+        return {"ok": False, "error": "No hay etiquetadora elegida"}
+    import tempfile
+    fd, ruta = tempfile.mkstemp(suffix=".png", prefix="mrd_etq_")
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(png_bytes)
+    try:
+        r = _powershell(_PS_IMPRIMIR, [ruta, impresora, str(ancho_mm), str(alto_mm), str(max(1, min(20, int(copias))))], timeout=90)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "La impresora no respondió en 90 segundos"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    finally:
+        try:
+            os.unlink(ruta)
+        except OSError:
+            pass
+    salida = (r.stdout or "").strip().splitlines()
+    ultima = salida[-1] if salida else ""
+    if ultima.startswith("OK:"):
+        return {"ok": True, "papel": ultima[3:], "copias": max(1, min(20, int(copias)))}
+    error = ultima[6:] if ultima.startswith("ERROR:") else ((r.stderr or "").strip()[-400:] or "No se pudo imprimir")
+    return {"ok": False, "error": error}

@@ -30,23 +30,33 @@
     .sel-tam button { font: inherit; font-weight: 700; padding: 6px 12px; border: 0; border-radius: 8px; background: #0891b2; color: #fff; cursor: pointer; }
     .sel-tam button.secundario { background: #111; }
     .sel-tam span { flex-basis: 100%; color: #666; font-size: 12px; }
+    .imp-bloque { flex-basis: 100%; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-top: 1px solid #ddd; padding-top: 6px; }
+    .imp-enlace { font-size: 12px; color: #0891b2; }
     @media print { .sel-tam { display: none !important; } }
     @media print { body { padding: 0; } .zona-print { display: block; } }
   </style>
 </head>
 <body>
-  <div class="sel-tam" id="sel-tam">
+  <div class="sel-tam" id="sel-tam" data-tipo="ubicacion" data-id="{{ ubicacion.id }}">
     <strong>Tamaño de etiqueta</strong>
     <select id="tam-preset">{% for p in tam.presets %}<option value="{{ p[0] }}" data-w="{{ p[2] }}" data-h="{{ p[3] }}" {% if p[0] == tam.preset %}selected{% endif %}>{{ p[1] }}</option>{% endfor %}</select>
     <label>Ancho <input id="tam-w" type="number" min="20" max="300" value="{{ tam.ancho_mm }}"> mm</label>
     <label>Alto <input id="tam-h" type="number" min="15" max="300" value="{{ tam.alto_mm }}"> mm</label>
     <button type="button" id="tam-guardar">Guardar y usar</button>
     <button type="button" class="secundario" onclick="window.print()">Imprimir</button>
+    <span class="imp-bloque"><strong>Etiquetadora</strong> <select id="imp-sel"><option value="">Cargando…</option></select> <button type="button" id="imp-imprimir">Imprimir en la etiquetadora</button> <button type="button" class="secundario" id="imp-prueba">Etiqueta de prueba</button> <a id="imp-png" href="#" class="imp-enlace">Descargar PNG (app del móvil)</a></span>
     <span id="tam-estado">Ahora: {{ tam.ancho_mm }} × {{ tam.alto_mm }} mm. En la impresora elige el mismo tamaño de papel, sin márgenes y sin "ajustar a la página".</span>
   </div>
   <script>
   (()=>{const p=document.getElementById('tam-preset'),w=document.getElementById('tam-w'),h=document.getElementById('tam-h'),e=document.getElementById('tam-estado');
     p.onchange=()=>{const o=p.selectedOptions[0];if(o&&o.value!=='personalizado'){w.value=o.dataset.w;h.value=o.dataset.h}};
+    const impSel=document.getElementById('imp-sel'),impEst=document.getElementById('tam-estado'),bloque=document.getElementById('sel-tam');const csrf=()=>decodeURIComponent((document.cookie.match(/(?:^|; )mrd_csrf=([^;]*)/)||[])[1]||'');
+    document.getElementById('imp-png').href=`/etiquetas/png/${bloque.dataset.tipo}/${bloque.dataset.id}`;
+    fetch('/api/etiquetas/impresoras').then(r=>r.json()).then(d=>{impSel.innerHTML='<option value="">— elige la etiquetadora —</option>'+(d.impresoras||[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}" ${n===d.seleccionada?'selected':''}>${n.replace(/</g,'&lt;')}</option>`).join('');if(!(d.impresoras||[]).length)impSel.innerHTML='<option value="">Ninguna impresora instalada en el PC del programa</option>'}).catch(()=>{});
+    impSel.onchange=async()=>{await fetch('/api/etiquetas/impresora',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf()},body:JSON.stringify({nombre:impSel.value})});impEst.textContent=impSel.value?'Etiquetadora guardada: '+impSel.value:'Sin etiquetadora'};
+    const imprimir=async(url,body)=>{impEst.textContent='Imprimiendo…';try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf()},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo imprimir');impEst.textContent='Enviado a '+d.impresora+(d.papel?' (papel: '+d.papel+')':'')}catch(err){impEst.textContent=err.message}};
+    document.getElementById('imp-imprimir').onclick=()=>imprimir('/api/etiquetas/imprimir',{tipo:bloque.dataset.tipo,id:Number(bloque.dataset.id),copias:1});
+    document.getElementById('imp-prueba').onclick=()=>imprimir('/api/etiquetas/prueba',{});
     document.getElementById('tam-guardar').onclick=async()=>{try{const r=await fetch('/api/etiquetas/tamano',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':decodeURIComponent((document.cookie.match(/(?:^|; )mrd_csrf=([^;]*)/)||[])[1]||'')},body:JSON.stringify({ancho_mm:Number(w.value),alto_mm:Number(h.value),preset:p.value})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo guardar');location.reload()}catch(err){e.textContent=err.message}};
   })();
   </script>

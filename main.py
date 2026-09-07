@@ -127,6 +127,7 @@ from label_printer import generar_zpl_herramienta, generar_zpl_lote, generar_pdf
 from label_printer import (
     get_tamano_etiqueta, set_tamano_etiqueta, layout_etiqueta, PRESETS_ETIQUETA,
     generar_pdf_etiquetas_tamano, item_etiqueta_ubicacion, item_etiqueta_herramienta,
+    get_impresora, set_impresora, listar_impresoras, renderizar_etiqueta_png, imprimir_png,
 )
 from stock_service import (
     StockError, move_material, move_stock_epi, move_variante, require_stock_permission,
@@ -6285,6 +6286,129 @@ def _tamano_pdf(ancho: str, alto: str) -> tuple[int, int]:
     return max(20, min(300, a)), max(15, min(300, b))
 
 
+# ─── Impresión directa en la etiquetadora (2.7.62) ───────────────────────────
+
+def _etiqueta_item_por_tipo(db: Session, tipo: str, item_id: int, warehouse) -> dict:
+    if tipo == "ubicacion":
+        u = db.get(Ubicacion, int(item_id))
+        if not u or (warehouse and u.almacen_id != warehouse.id):
+            raise HTTPException(404, "Ese hueco no existe en este almacén")
+        return item_etiqueta_ubicacion(u)
+    if tipo == "herramienta":
+        h = db.get(Herramienta, int(item_id))
+        if not h:
+            raise HTTPException(404, "Herramienta no encontrada")
+        return item_etiqueta_herramienta(h, COMPANY_NAME)
+    raise HTTPException(400, "Tipo de etiqueta no válido")
+
+
+@app.get("/api/etiquetas/impresoras")
+def api_etiquetas_impresoras(user: Usuario = Depends(requiere_login)):
+    """Impresoras instaladas en el PC donde corre el programa y la elegida."""
+    if user.rol not in ("admin", "almacen") and not tiene_permiso(user, "editar"):
+        raise HTTPException(403, "Sin permiso")
+    return {"ok": True, "impresoras": listar_impresoras(), "seleccionada": get_impresora(), "windows": os.name == "nt"}
+
+
+class ImpresoraRequest(BaseModel):
+    nombre: str = Field("", max_length=200)
+
+
+@app.post("/api/etiquetas/impresora")
+def api_etiquetas_impresora_guardar(payload: ImpresoraRequest, user: Usuario = Depends(requiere_login)):
+    if user.rol not in ("admin", "almacen") and not tiene_permiso(user, "editar"):
+        raise HTTPException(403, "Sin permiso")
+    return {"ok": True, "seleccionada": set_impresora(payload.nombre)}
+
+
+class ImprimirEtiquetaRequest(BaseModel):
+    tipo: str = Field(..., max_length=20)
+    id: int = Field(..., gt=0)
+    copias: int = Field(1, ge=1, le=20)
+
+
+@app.post("/api/etiquetas/imprimir")
+async def api_etiquetas_imprimir(payload: ImprimirEtiquetaRequest, request: Request,
+                                 user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Imprime una etiqueta en la etiquetadora elegida, sin diálogo."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    impresora = get_impresora()
+    if not impresora:
+        raise HTTPException(400, "Elige primero la etiquetadora en cualquier etiqueta (Tamaño de etiqueta → Etiquetadora)")
+    warehouse = _active_warehouse(db, user, request)
+    item = _etiqueta_item_por_tipo(db, payload.tipo, payload.id, warehouse if payload.tipo == "ubicacion" else None)
+    tam = get_tamano_etiqueta()
+    png = renderizar_etiqueta_png(item, tam["ancho_mm"], tam["alto_mm"], 300, COMPANY_NAME)
+    res = await run_in_threadpool(imprimir_png, png, impresora, tam["ancho_mm"], tam["alto_mm"], payload.copias)
+    if not res.get("ok"):
+        raise HTTPException(502, res.get("error") or "No se pudo imprimir")
+    return JSONResponse({"ok": True, "impresora": impresora, **res})
+
+
+class ImprimirZonaRequest(BaseModel):
+    zona: str = Field(..., min_length=1, max_length=120)
+    copias: int = Field(1, ge=1, le=5)
+
+
+@app.post("/api/etiquetas/imprimir-zona")
+async def api_etiquetas_imprimir_zona(payload: ImprimirZonaRequest, request: Request,
+                                      user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Imprime en la etiquetadora todas las etiquetas de los huecos de una zona."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    impresora = get_impresora()
+    if not impresora:
+        raise HTTPException(400, "Elige primero la etiquetadora")
+    warehouse = _operation_warehouse(request, user, db)
+    huecos = db.query(Ubicacion).filter(Ubicacion.almacen_id == warehouse.id, Ubicacion.activo == True, Ubicacion.zona == payload.zona).all()
+    huecos.sort(key=lambda u: (_nave_clave_natural(u.estanteria), _nave_clave_natural(u.balda), _nave_clave_natural(u.posicion)))
+    if not huecos:
+        raise HTTPException(404, "Esa zona no tiene huecos")
+    tam = get_tamano_etiqueta()
+    impresas, errores = 0, []
+    for u in huecos[:200]:
+        png = renderizar_etiqueta_png(item_etiqueta_ubicacion(u), tam["ancho_mm"], tam["alto_mm"], 300, COMPANY_NAME)
+        res = await run_in_threadpool(imprimir_png, png, impresora, tam["ancho_mm"], tam["alto_mm"], payload.copias)
+        if res.get("ok"):
+            impresas += 1
+        else:
+            errores.append(f"{u.nombre}: {res.get('error')}")
+            if len(errores) >= 3:
+                break
+    return JSONResponse({"ok": not errores, "impresas": impresas, "total": len(huecos), "errores": errores})
+
+
+@app.post("/api/etiquetas/prueba")
+async def api_etiquetas_prueba(user: Usuario = Depends(requiere_login)):
+    """Etiqueta de prueba para comprobar la etiquetadora y el tamaño."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    impresora = get_impresora()
+    if not impresora:
+        raise HTTPException(400, "Elige primero la etiquetadora")
+    tam = get_tamano_etiqueta()
+    png = renderizar_etiqueta_png({"sup": COMPANY_NAME, "grande": "PRUEBA", "detalle": f"{tam['ancho_mm']} × {tam['alto_mm']} mm", "codigo": "MRD-PRUEBA-00000000", "qr": "MRD-PRUEBA", "pie": datetime.now().strftime("%d/%m/%Y %H:%M")},
+                                 tam["ancho_mm"], tam["alto_mm"], 300, COMPANY_NAME)
+    res = await run_in_threadpool(imprimir_png, png, impresora, tam["ancho_mm"], tam["alto_mm"], 1)
+    if not res.get("ok"):
+        raise HTTPException(502, res.get("error") or "No se pudo imprimir")
+    return JSONResponse({"ok": True, "impresora": impresora, **res})
+
+
+@app.get("/etiquetas/png/{tipo}/{item_id}")
+def etiqueta_png(tipo: str, item_id: int, request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """La etiqueta como imagen PNG al tamaño configurado, para las apps de etiquetadoras de móvil."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _active_warehouse(db, user, request)
+    item = _etiqueta_item_por_tipo(db, tipo, item_id, warehouse if tipo == "ubicacion" else None)
+    tam = get_tamano_etiqueta()
+    png = renderizar_etiqueta_png(item, tam["ancho_mm"], tam["alto_mm"], 300, COMPANY_NAME)
+    nombre = re.sub(r"[^A-Za-z0-9_-]+", "_", item.get("grande") or tipo)[:40]
+    return Response(content=png, media_type="image/png", headers={"Content-Disposition": f"attachment; filename=etiqueta_{nombre}.png"})
+
+
 # ─── Almacenes — QR por ubicación ───────────────────────────────────────────────
 @app.get("/almacenes/{aid}/ubicaciones/{uid}/qr", response_class=HTMLResponse)
 def ubicacion_qr(
@@ -8942,7 +9066,7 @@ def _resumen_semanal_publicar(db: Session, forzar: bool = False) -> dict:
 
 
 @app.post("/api/resumen-semanal/push")
-def api_resumen_semanal_push(user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+def api_resumen_semanal_push(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     if user.rol not in ("admin", "almacen") and not tiene_permiso(user, "editar"):
         raise HTTPException(403, "Sin permiso")
     return JSONResponse(_resumen_semanal_publicar(db, forzar=True))
@@ -9218,7 +9342,7 @@ def calendario_page(request: Request, user: Usuario = Depends(requiere_login), d
 
 
 @app.get("/api/calendario/eventos")
-def api_calendario_eventos(request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+def api_calendario_eventos(request: Request = None, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     if not _cal_permitido(user):
         raise HTTPException(403, "Sin permiso")
     warehouse = _active_warehouse(db, user, request)
@@ -9240,7 +9364,7 @@ class CalendarioProgramarRequest(BaseModel):
 
 @app.post("/api/calendario/hecho")
 def api_calendario_hecho(payload: CalendarioHechoRequest, request: Request = None,
-                         user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+                         user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     """Marca una revisión como hecha y programa la siguiente con el intervalo."""
     if not (tiene_permiso(user, "editar") or tiene_permiso(user, "stock_operar")):
         raise HTTPException(403, "Sin permiso")
@@ -9278,7 +9402,7 @@ def api_calendario_hecho(payload: CalendarioHechoRequest, request: Request = Non
 
 @app.post("/api/calendario/programar")
 def api_calendario_programar(payload: CalendarioProgramarRequest, request: Request = None,
-                             user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+                             user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     """Programa la próxima revisión de una herramienta (con intervalo) o máquina."""
     if not (tiene_permiso(user, "editar") or tiene_permiso(user, "stock_operar")):
         raise HTTPException(403, "Sin permiso")
@@ -9534,7 +9658,7 @@ def nave_3d_page(request: Request, user: Usuario = Depends(requiere_login), db: 
 
 
 @app.get("/api/nave/3d")
-def api_nave_3d(request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+def api_nave_3d(request: Request = None, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     if not _nave_permitido(user):
         raise HTTPException(403, "Sin permiso")
     warehouse = _operation_warehouse(request, user, db)
@@ -9580,7 +9704,7 @@ def _nave_zona_de(db: Session, warehouse: Almacen, zona_id: int) -> NaveZona:
 
 @app.post("/api/nave/zonas")
 def api_nave_zona_guardar(payload: NaveZonaRequest, request: Request = None,
-                          user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+                          user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     if not _nave_editor(user):
         raise HTTPException(403, "Sin permiso para editar la nave")
     warehouse = _operation_warehouse(request, user, db)
@@ -9608,7 +9732,7 @@ def api_nave_zona_guardar(payload: NaveZonaRequest, request: Request = None,
 
 
 @app.get("/api/nave/zonas/{zid}/impacto")
-def api_nave_zona_impacto(zid: int, request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+def api_nave_zona_impacto(zid: int, request: Request = None, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     if not _nave_permitido(user):
         raise HTTPException(403, "Sin permiso")
     z = _nave_zona_de(db, _operation_warehouse(request, user, db), zid)
@@ -9619,7 +9743,7 @@ def api_nave_zona_impacto(zid: int, request: Request = None, user: Usuario = Dep
 
 
 @app.post("/api/nave/zonas/{zid}/eliminar")
-def api_nave_zona_eliminar(zid: int, request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+def api_nave_zona_eliminar(zid: int, request: Request = None, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     """Borra la zona, sus elementos y sus huecos. Lo que había dentro se queda sin hueco, no se borra."""
     if not _nave_editor(user):
         raise HTTPException(403, "Sin permiso para editar la nave")
@@ -9637,7 +9761,7 @@ def api_nave_zona_eliminar(zid: int, request: Request = None, user: Usuario = De
 
 @app.post("/api/nave/elementos")
 def api_nave_elemento_guardar(payload: NaveElementoRequest, request: Request = None,
-                              user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+                              user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     if not _nave_editor(user):
         raise HTTPException(403, "Sin permiso para editar la nave")
     warehouse = _operation_warehouse(request, user, db)
@@ -9673,7 +9797,7 @@ def api_nave_elemento_guardar(payload: NaveElementoRequest, request: Request = N
 
 
 @app.get("/api/nave/elementos/{eid}/impacto")
-def api_nave_elemento_impacto(eid: int, request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+def api_nave_elemento_impacto(eid: int, request: Request = None, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     if not _nave_permitido(user):
         raise HTTPException(403, "Sin permiso")
     warehouse = _operation_warehouse(request, user, db)
@@ -9684,7 +9808,7 @@ def api_nave_elemento_impacto(eid: int, request: Request = None, user: Usuario =
 
 
 @app.post("/api/nave/elementos/{eid}/eliminar")
-def api_nave_elemento_eliminar(eid: int, request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+def api_nave_elemento_eliminar(eid: int, request: Request = None, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     if not _nave_editor(user):
         raise HTTPException(403, "Sin permiso para editar la nave")
     warehouse = _operation_warehouse(request, user, db)
@@ -9709,7 +9833,7 @@ class NaveMoverRequest(BaseModel):
 
 @app.post("/api/nave/zonas/{zid}/mover")
 def api_nave_zona_mover(zid: int, payload: NaveMoverRequest, request: Request = None,
-                        user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+                        user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     """Arrastrar una zona en la vista general (2.7.56): guarda su sitio en la nave."""
     if not _nave_editor(user):
         raise HTTPException(403, "Sin permiso para editar la nave")
@@ -9723,7 +9847,7 @@ def api_nave_zona_mover(zid: int, payload: NaveMoverRequest, request: Request = 
 
 @app.post("/api/nave/elementos/{eid}/mover")
 def api_nave_elemento_mover(eid: int, payload: NaveMoverRequest, request: Request = None,
-                            user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+                            user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     """Arrastrar un elemento dentro de su zona (2.7.56): x desde el fondo, z desde
     la izquierda; se traduce a la pared y distancias que ya usa el elemento."""
     if not _nave_editor(user):
@@ -9753,7 +9877,7 @@ def api_nave_elemento_mover(eid: int, payload: NaveMoverRequest, request: Reques
 
 
 @app.get("/api/nave/huecos-prueba/impacto")
-def api_nave_huecos_prueba_impacto(request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+def api_nave_huecos_prueba_impacto(request: Request = None, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     if not _nave_permitido(user):
         raise HTTPException(403, "Sin permiso")
     warehouse = _operation_warehouse(request, user, db)
@@ -9762,7 +9886,7 @@ def api_nave_huecos_prueba_impacto(request: Request = None, user: Usuario = Depe
 
 
 @app.post("/api/nave/huecos-prueba/eliminar")
-def api_nave_huecos_prueba_eliminar(request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+def api_nave_huecos_prueba_eliminar(request: Request = None, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     """Quita los huecos antiguos (los que no salen de ningún elemento 3D). Las cosas se quedan sin hueco."""
     if not _nave_editor(user):
         raise HTTPException(403, "Sin permiso para editar la nave")
@@ -9812,7 +9936,7 @@ def nave_recuento_page(request: Request, ubicacion: int | None = None,
 
 
 @app.get("/api/nave/recuento/{uid}")
-def api_nave_recuento(uid: int, request: Request = None, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+def api_nave_recuento(uid: int, request: Request = None, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     if not _nave_permitido(user):
         raise HTTPException(403, "Sin permiso")
     u = _recuento_hueco_de(db, _active_warehouse(db, user, request), uid)
@@ -9830,7 +9954,7 @@ class RecuentoCerrarRequest(BaseModel):
 
 @app.post("/api/nave/recuento/{uid}/cerrar")
 def api_nave_recuento_cerrar(uid: int, payload: RecuentoCerrarRequest, request: Request = None,
-                             user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+                             user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
     """Cierra el recuento: lo esperado que no se ha escaneado falta. Se guarda en el
     hueco y en la auditoría, y si falta algo se crea un aviso con enlaces."""
     if not (_nave_editor(user) or tiene_permiso(user, "stock_operar")):
