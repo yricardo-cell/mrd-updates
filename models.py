@@ -2729,3 +2729,22 @@ class ComunicadoLectura(Base):
     leido_en = Column(DateTime, nullable=False, server_default=func.now())
 
     comunicado = relationship("ComunicadoEmpresa", back_populates="lecturas")
+
+
+class TraspasoPortal(Base):
+    """Traspaso de una herramienta entre compañeros desde el móvil (mejora 2): queda pendiente hasta que el
+    compañero lo acepta; entonces la herramienta pasa a su nombre."""
+    __tablename__ = "traspasos_portal"
+
+    id = Column(Integer, primary_key=True)
+    herramienta_id = Column(Integer, ForeignKey("herramientas.id"), nullable=False, index=True)
+    de_trabajador_id = Column(Integer, ForeignKey("trabajadores.id"), nullable=False, index=True)
+    a_trabajador_id = Column(Integer, ForeignKey("trabajadores.id"), nullable=False, index=True)
+    estado = Column(String(20), nullable=False, default="pendiente", index=True)   # pendiente | aceptado | rechazado | cancelado
+    nota = Column(String(300), nullable=True)
+    creado_en = Column(DateTime, nullable=False, server_default=func.now(), index=True)
+    resuelto_en = Column(DateTime, nullable=True)
+
+    herramienta = relationship("Herramienta", foreign_keys=[herramienta_id])
+    de_trabajador = relationship("Trabajador", foreign_keys=[de_trabajador_id])
+    a_trabajador = relationship("Trabajador", foreign_keys=[a_trabajador_id])

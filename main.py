@@ -63,7 +63,7 @@ from config import (
 from database import engine, get_db, Base, apply_migrations, SessionLocal
 import mantenimiento as mant_engine
 from models import (
-    ComunicadoEmpresa, ComunicadoLectura,
+    ComunicadoEmpresa, ComunicadoLectura, TraspasoPortal,
     Ubicacion, NaveZona, NaveElemento,
     Usuario, Trabajador, Almacen, Obra, Vehiculo, Herramienta, Movimiento,
     Incidencia, Reparacion, Material, Documento, Proveedor, Categoria, AuditoriaLog,
@@ -18082,12 +18082,18 @@ def portal_trabajador(token: str, request: Request, db: Session = Depends(get_db
     if _por_leer:
         hoy_items.insert(0, {"icono": "bi-megaphone", "nivel": "danger", "enlace": "#comunicados",
                              "texto": (f"{len(_por_leer)} avisos de la empresa por leer" if len(_por_leer) > 1 else f"Aviso de la empresa por leer: {_por_leer[0]['titulo']}")})
+    traspasos_portal = _traspasos_portal(db, t)   # mejora 2
+    if traspasos_portal["recibidos"]:
+        _r = traspasos_portal["recibidos"]
+        hoy_items.insert(0, {"icono": "bi-arrow-left-right", "nivel": "warn", "enlace": "#traspasos",
+                             "texto": (f"{len(_r)} compañeros te pasan herramientas: acepta o rechaza" if len(_r) > 1 else f"{_r[0]['de']} te pasa {_r[0]['herramienta']}: acepta o rechaza")})
     _sin_leer = sum(1 for item in notificaciones if not item.leida_en)
     if _sin_leer:
         hoy_items.append({"icono": "bi-bell", "nivel": "info", "enlace": "#notificaciones", "texto": f"{_sin_leer} avisos sin leer"})
     response = templates.TemplateResponse(request, "portal_trabajador.html", {
         "request": request, "trabajador": t, "epis": epis, "hoy_items": hoy_items, "comunicados_portal": comunicados_portal,
         "cuidado": _cuidado_material(db, t),
+        "traspasos_portal": traspasos_portal, "companeros": _companeros_portal(db, t),
         "kit_estado": kit_estado_portal, "catalogo_kit": catalogo_kit_portal,
         "formaciones": formaciones, "reconocimientos": reconocs,
         "herramientas": herramientas, "maquinaria": maquinaria,
@@ -18296,7 +18302,7 @@ def trabajadores_cuidado(request: Request, user: Usuario = Depends(requiere_logi
 
 PORTAL_IDIOMAS = {"es": "Español", "ro": "Română"}
 
-PORTAL_TEXTOS: dict[str, dict[str, str]] = {"ro": {'Lo que tengo': 'Ce am la mine', 'Mi historial': 'Istoricul meu', 'Escanear': 'Scanează', 'Solicitar': 'Cere material', 'Seguimiento': 'Urmărire', 'Devolver': 'Returnează', 'Incidencias': 'Incidente', 'Albaranes': 'Avize de livrare', 'Buzón': 'Sugestii', 'Mi cuenta': 'Contul meu', 'Instalar': 'Instalează', 'Salir': 'Ieșire', 'MI ESPACIO MRD': 'SPAȚIUL MEU MRD', 'CARNET DIGITAL MRD': 'LEGITIMAȚIE DIGITALĂ MRD', 'Trabajador': 'Muncitor', 'AVISOS': 'ANUNȚURI', 'Notificaciones': 'Notificări', 'TU INVENTARIO PERSONAL': 'INVENTARUL TĂU PERSONAL', 'PROTECCIÓN': 'PROTECȚIE', 'Tu EPI': 'Echipamentul tău de protecție', 'ESCÁNER': 'SCANER', 'Escanear una herramienta': 'Scanează o sculă', 'TU ACTIVIDAD': 'ACTIVITATEA TA', 'PEDIDO AL ALMACÉN': 'COMANDĂ LA DEPOZIT', '¿Qué necesitas?': 'De ce ai nevoie?', 'SEGUIMIENTO': 'URMĂRIRE', 'Mis solicitudes': 'Cererile mele', 'DOCUMENTOS': 'DOCUMENTE', 'Mis albaranes': 'Avizele mele', 'ESCUCHA ACTIVA': 'ASCULTARE ACTIVĂ', 'Quejas y sugerencias': 'Reclamații și sugestii', 'DEVOLUCIONES': 'RETURURI', 'Solicitar una devolución': 'Cere o returnare', 'AYUDA RÁPIDA': 'AJUTOR RAPID', 'Comunicar una incidencia': 'Raportează un incident', 'IDENTIDAD Y SEGURIDAD': 'IDENTITATE ȘI SECURITATE', 'SEGURIDAD': 'SIGURANȚĂ', 'Documentación personal': 'Documente personale', 'Mis datos de contacto': 'Datele mele de contact', 'Teléfono': 'Telefon', 'Correo': 'E-mail', 'PIN actual para confirmar': 'PIN-ul actual pentru confirmare', 'Guardar datos': 'Salvează datele', 'Cambiar mi PIN': 'Schimbă PIN-ul', 'PIN actual': 'PIN-ul actual', 'PIN nuevo': 'PIN nou', 'Repite el PIN': 'Repetă PIN-ul', 'Cambiar PIN': 'Schimbă PIN-ul', 'Dispositivos conectados': 'Dispozitive conectate', 'Cerrar las demás sesiones': 'Închide celelalte sesiuni', 'Idioma': 'Limba', 'Elige el idioma en el que quieres ver tu portal.': 'Alege limba în care vrei să vezi portalul tău.', 'Confirmar recogida': 'Confirmă ridicarea', 'Borrar firma': 'Șterge semnătura', 'Firma con el dedo para confirmar que lo has recogido:': 'Semnează cu degetul pentru a confirma că ai ridicat materialul:', 'Enviar': 'Trimite', 'Enviar al almacén': 'Trimite la depozit', 'Cancelar solicitud': 'Anulează cererea', 'Marcar leídas': 'Marchează ca citite', 'Comunicar incidencia': 'Raportează incidentul', 'Enviar devolución': 'Trimite returnarea', 'Repetir mi último pedido': 'Repetă ultima mea comandă', 'Lo que sueles pedir:': 'Ce ceri de obicei:', 'Tipo': 'Tip', 'Fotos (hasta 5, opcional)': 'Poze (până la 5, opțional)', '¿Qué ha pasado?': 'Ce s-a întâmplat?', 'Tipo de activo': 'Tip de bun', 'Qué ha ocurrido': 'Ce s-a întâmplat', 'Privacidad': 'Confidențialitate', 'Prioridad': 'Prioritate', 'Obra o destino': 'Șantier sau destinație', 'Obra (opcional)': 'Șantier (opțional)', 'Nombre del activo': 'Numele bunului', 'Motivo': 'Motiv', 'Mensaje': 'Mesaj', 'Estado': 'Stare', 'Detalle (opcional)': 'Detalii (opțional)', 'Código': 'Cod', 'Código o QR': 'Cod sau QR', 'Categoría': 'Categorie', 'Cantidad': 'Cantitate', 'Asunto': 'Subiect', 'Artículo': 'Articol', '¿Para cuándo?': 'Pentru când?', 'Cuando se pueda': 'Când se poate', 'Hoy': 'Azi', 'Mañana': 'Mâine', 'Elegir fecha': 'Alege data', 'Fecha': 'Data', 'Hora (opcional)': 'Ora (opțional)', '¿Cuántos días lo necesitas?': 'Câte zile ai nevoie de el?', 'Lo recojo en el almacén': 'Îl ridic de la depozit', 'Que lo lleven a la obra': 'Să fie adus la șantier', 'Avísame cuando quede libre': 'Anunță-mă când se eliberează', 'Ver qué hay': 'Vezi ce există', 'libres': 'libere', 'ninguna libre ahora': 'niciuna liberă acum', 'Nada que mostrar': 'Nimic de arătat', 'Motivo o comentario': 'Motiv sau comentariu', 'Añadir otra cosa': 'Adaugă altceva', 'Enviar solicitud': 'Trimite cererea', 'Lo necesito': 'Am nevoie', 'días': 'zile', 'En espera de que quede libre': 'În așteptare să se elibereze', 'La dejo en su hueco': 'O las la locul ei', 'Ver ficha': 'Vezi fișa', 'Mi cuidado del material': 'Grija mea pentru materiale', 'puntos': 'puncte', 'Suma puntos devolviendo a tiempo, comunicando incidencias, revisando tu EPI, confirmando lo que tienes y firmando las recogidas.': 'Aduni puncte returnând la timp, raportând incidente, verificându-ți EPI-ul, confirmând ce ai și semnând ridicările.', 'AVISOS DE LA EMPRESA': 'ANUNȚURILE FIRMEI', 'Avisos de la empresa': 'Anunțurile firmei', 'Leído': 'Citit', 'Ya lo leíste': 'L-ai citit deja', 'Marcar como leído': 'Marchează ca citit', 'Aviso marcado como leído': 'Anunț marcat ca citit', 'No hay avisos de la empresa.': 'Nu există anunțuri ale firmei.', '¿La sigues necesitando?': 'Mai ai nevoie de ea?', 'Sí, la sigo necesitando': 'Da, mai am nevoie', 'No, devolverla': 'Nu, o returnez', 'días con ella': 'zile cu ea', 'Foto de lo que necesitas (opcional, hasta 3)': 'Poză cu ce ai nevoie (opțional, până la 3)', 'Ver foto (opcional)': 'Vezi poza (opțional)', 'Si no sabes cómo se llama, haz una foto y el almacén lo identifica.': 'Dacă nu știi cum se numește, fă o poză și depozitul îl identifică.', 'Grabar mensaje de voz': 'Înregistrează mesaj vocal', 'Parar': 'Oprește', 'Grabando…': 'Se înregistrează…', 'Quitar el audio': 'Șterge audio', 'Mensaje de voz listo': 'Mesaj vocal gata', 'HOY': 'AZI', 'Lo que tienes pendiente': 'Ce ai de făcut', 'Todo al día. Nada pendiente por tu parte.': 'Totul la zi. Nimic în așteptare din partea ta.', 'Revisa tu EPI este mes (un toque por pieza)': 'Verifică-ți EPI-ul luna aceasta (o atingere pe piesă)', 'Bienvenido a tu portal MRD': 'Bun venit în portalul tău MRD', 'Tres cosas que puedes hacer desde el móvil:': 'Trei lucruri pe care le poți face de pe telefon:', '1. Escanear': '1. Scanează', 'Apunta con la cámara al QR de una herramienta o de un hueco: te dice qué es y quién la tiene, y puedes decir «la tengo yo», devolverla o dejarla en su hueco.': 'Îndreaptă camera spre codul QR al unei scule sau al unui loc: îți spune ce este și cine o are, și poți spune «o am eu», o poți returna sau o poți lăsa la locul ei.', '2. Pedir': '2. Cere', 'Escribe lo que necesitas (por ejemplo «taladro»), di para cuándo y si lo recoges o te lo llevan. Con «Repetir mi último pedido» tardas dos toques.': 'Scrie ce ai nevoie (de exemplu «bormașină»), spune pentru când și dacă îl ridici sau ți-l aduc. Cu «Repetă ultima comandă» durează două atingeri.', '3. Confirmar': '3. Confirmă', 'Cuando recojas material, firma con el dedo en «Mis solicitudes» y confirma en «Lo que tengo» que lo tienes. Así el almacén sabe que está en buenas manos.': 'Când ridici material, semnează cu degetul în «Cererile mele» și confirmă în «Ce am la mine» că îl ai. Așa depozitul știe că este pe mâini bune.', 'Siguiente': 'Următorul', 'Entendido': 'Am înțeles', 'Ver el tutorial otra vez': 'Vezi tutorialul din nou', 'Tutorial': 'Tutorial', 'Revisión de tu EPI': 'Verificarea EPI-ului tău', 'Bien': 'Bine', 'Mal o me falta': 'Rău sau îmi lipsește', 'Marca cada pieza. Lo que esté mal se comunica y lo que falte se pide solo.': 'Marchează fiecare piesă. Ce este rău se raportează și ce lipsește se comandă automat.', 'Guardar revisión': 'Salvează verificarea', 'Última revisión': 'Ultima verificare', 'Todavía no has revisado tu EPI': 'Încă nu ți-ai verificat EPI-ul', 'Revisión de EPI anotada': 'Verificarea EPI a fost notată', 'Kit básico': 'Kit de bază', 'Voy a recogerlo': 'Vin să îl ridic', 'Listo para recoger en el Mostrador de': 'Gata de ridicat la ghișeul din', 'Avisaste que vas a recogerlo a las': 'Ai anunțat că vii să îl ridici la', 'Avisado: el almacén sabe que vas a recogerlo': 'Anunțat: depozitul știe că vii să îl ridici', 'Llevarla al almacén': 'Du-o la depozit', 'Revisión el': 'Revizie pe', 'Revisión vencida el': 'Revizie expirată pe', 'Ficha de la herramienta': 'Fișa sculei', 'Volver a mi portal': 'Înapoi la portalul meu', 'Documentos y manuales': 'Documente și manuale', 'Últimos movimientos': 'Ultimele mișcări', 'Próxima revisión': 'Următoarea revizie', 'Mantenimiento pendiente': 'Întreținere în așteptare', 'Dónde se guarda': 'Unde se păstrează', 'Quiero devolverla': 'Vreau să o returnez', 'Devuelta y colocada en su hueco': 'Returnată și pusă la locul ei', 'Ahora escanea el QR del hueco donde la dejas': 'Acum scanează codul QR al locului unde o lași', 'Solicitud registrada': 'Cerere înregistrată', 'Mensaje recibido': 'Mesaj primit', 'Incidencia registrada': 'Incident înregistrat', 'Devolución registrada': 'Returnare înregistrată', 'Datos guardados': 'Date salvate', 'PIN cambiado': 'PIN schimbat', 'Sesiones cerradas': 'Sesiuni închise', 'Solicitud cancelada': 'Cerere anulată', 'Comentario enviado': 'Comentariu trimis', 'Recogida confirmada': 'Ridicare confirmată', 'Idioma cambiado': 'Limba a fost schimbată', 'Operación completada': 'Operațiune finalizată', 'Gracias, queda anotado que tienes todo lo de tu lista': 'Mulțumim, am notat că ai tot ce este pe lista ta', 'Anotado: el almacén lo revisará': 'Notat: depozitul va verifica', 'Anotado: el almacén revisará que esa herramienta está contigo y la pondrá a tu nombre': 'Notat: depozitul va verifica că scula este la tine și o va trece pe numele tău'}}
+PORTAL_TEXTOS: dict[str, dict[str, str]] = {"ro": {'Lo que tengo': 'Ce am la mine', 'Mi historial': 'Istoricul meu', 'Escanear': 'Scanează', 'Solicitar': 'Cere material', 'Seguimiento': 'Urmărire', 'Devolver': 'Returnează', 'Incidencias': 'Incidente', 'Albaranes': 'Avize de livrare', 'Buzón': 'Sugestii', 'Mi cuenta': 'Contul meu', 'Instalar': 'Instalează', 'Salir': 'Ieșire', 'MI ESPACIO MRD': 'SPAȚIUL MEU MRD', 'CARNET DIGITAL MRD': 'LEGITIMAȚIE DIGITALĂ MRD', 'Trabajador': 'Muncitor', 'AVISOS': 'ANUNȚURI', 'Notificaciones': 'Notificări', 'TU INVENTARIO PERSONAL': 'INVENTARUL TĂU PERSONAL', 'PROTECCIÓN': 'PROTECȚIE', 'Tu EPI': 'Echipamentul tău de protecție', 'ESCÁNER': 'SCANER', 'Escanear una herramienta': 'Scanează o sculă', 'TU ACTIVIDAD': 'ACTIVITATEA TA', 'PEDIDO AL ALMACÉN': 'COMANDĂ LA DEPOZIT', '¿Qué necesitas?': 'De ce ai nevoie?', 'SEGUIMIENTO': 'URMĂRIRE', 'Mis solicitudes': 'Cererile mele', 'DOCUMENTOS': 'DOCUMENTE', 'Mis albaranes': 'Avizele mele', 'ESCUCHA ACTIVA': 'ASCULTARE ACTIVĂ', 'Quejas y sugerencias': 'Reclamații și sugestii', 'DEVOLUCIONES': 'RETURURI', 'Solicitar una devolución': 'Cere o returnare', 'AYUDA RÁPIDA': 'AJUTOR RAPID', 'Comunicar una incidencia': 'Raportează un incident', 'IDENTIDAD Y SEGURIDAD': 'IDENTITATE ȘI SECURITATE', 'SEGURIDAD': 'SIGURANȚĂ', 'Documentación personal': 'Documente personale', 'Mis datos de contacto': 'Datele mele de contact', 'Teléfono': 'Telefon', 'Correo': 'E-mail', 'PIN actual para confirmar': 'PIN-ul actual pentru confirmare', 'Guardar datos': 'Salvează datele', 'Cambiar mi PIN': 'Schimbă PIN-ul', 'PIN actual': 'PIN-ul actual', 'PIN nuevo': 'PIN nou', 'Repite el PIN': 'Repetă PIN-ul', 'Cambiar PIN': 'Schimbă PIN-ul', 'Dispositivos conectados': 'Dispozitive conectate', 'Cerrar las demás sesiones': 'Închide celelalte sesiuni', 'Idioma': 'Limba', 'Elige el idioma en el que quieres ver tu portal.': 'Alege limba în care vrei să vezi portalul tău.', 'Confirmar recogida': 'Confirmă ridicarea', 'Borrar firma': 'Șterge semnătura', 'Firma con el dedo para confirmar que lo has recogido:': 'Semnează cu degetul pentru a confirma că ai ridicat materialul:', 'Enviar': 'Trimite', 'Enviar al almacén': 'Trimite la depozit', 'Cancelar solicitud': 'Anulează cererea', 'Marcar leídas': 'Marchează ca citite', 'Comunicar incidencia': 'Raportează incidentul', 'Enviar devolución': 'Trimite returnarea', 'Repetir mi último pedido': 'Repetă ultima mea comandă', 'Lo que sueles pedir:': 'Ce ceri de obicei:', 'Tipo': 'Tip', 'Fotos (hasta 5, opcional)': 'Poze (până la 5, opțional)', '¿Qué ha pasado?': 'Ce s-a întâmplat?', 'Tipo de activo': 'Tip de bun', 'Qué ha ocurrido': 'Ce s-a întâmplat', 'Privacidad': 'Confidențialitate', 'Prioridad': 'Prioritate', 'Obra o destino': 'Șantier sau destinație', 'Obra (opcional)': 'Șantier (opțional)', 'Nombre del activo': 'Numele bunului', 'Motivo': 'Motiv', 'Mensaje': 'Mesaj', 'Estado': 'Stare', 'Detalle (opcional)': 'Detalii (opțional)', 'Código': 'Cod', 'Código o QR': 'Cod sau QR', 'Categoría': 'Categorie', 'Cantidad': 'Cantitate', 'Asunto': 'Subiect', 'Artículo': 'Articol', '¿Para cuándo?': 'Pentru când?', 'Cuando se pueda': 'Când se poate', 'Hoy': 'Azi', 'Mañana': 'Mâine', 'Elegir fecha': 'Alege data', 'Fecha': 'Data', 'Hora (opcional)': 'Ora (opțional)', '¿Cuántos días lo necesitas?': 'Câte zile ai nevoie de el?', 'Lo recojo en el almacén': 'Îl ridic de la depozit', 'Que lo lleven a la obra': 'Să fie adus la șantier', 'Avísame cuando quede libre': 'Anunță-mă când se eliberează', 'Ver qué hay': 'Vezi ce există', 'libres': 'libere', 'ninguna libre ahora': 'niciuna liberă acum', 'Nada que mostrar': 'Nimic de arătat', 'Motivo o comentario': 'Motiv sau comentariu', 'Añadir otra cosa': 'Adaugă altceva', 'Enviar solicitud': 'Trimite cererea', 'Lo necesito': 'Am nevoie', 'días': 'zile', 'En espera de que quede libre': 'În așteptare să se elibereze', 'La dejo en su hueco': 'O las la locul ei', 'Ver ficha': 'Vezi fișa', 'Se la paso a un compañero': 'O dau unui coleg', 'Elige al compañero': 'Alege colegul', 'Nota (opcional)': 'Notă (opțional)', 'Pasar': 'Dă-o', 'TRASPASOS': 'TRANSFERURI', 'Traspasos entre compañeros': 'Transferuri între colegi', 'te pasa': 'îți dă', 'Aceptar': 'Acceptă', 'Rechazar': 'Refuză', 'Cancelar': 'Anulează', 'Enviados': 'Trimise', 'No tienes traspasos.': 'Nu ai transferuri.', 'Traspaso enviado: el compañero tiene que aceptarlo en su móvil': 'Transfer trimis: colegul trebuie să îl accepte pe telefon', 'Traspaso aceptado: la herramienta ya consta a tu nombre': 'Transfer acceptat: scula este acum pe numele tău', 'Traspaso rechazado': 'Transfer refuzat', 'Mi cuidado del material': 'Grija mea pentru materiale', 'puntos': 'puncte', 'Suma puntos devolviendo a tiempo, comunicando incidencias, revisando tu EPI, confirmando lo que tienes y firmando las recogidas.': 'Aduni puncte returnând la timp, raportând incidente, verificându-ți EPI-ul, confirmând ce ai și semnând ridicările.', 'AVISOS DE LA EMPRESA': 'ANUNȚURILE FIRMEI', 'Avisos de la empresa': 'Anunțurile firmei', 'Leído': 'Citit', 'Ya lo leíste': 'L-ai citit deja', 'Marcar como leído': 'Marchează ca citit', 'Aviso marcado como leído': 'Anunț marcat ca citit', 'No hay avisos de la empresa.': 'Nu există anunțuri ale firmei.', '¿La sigues necesitando?': 'Mai ai nevoie de ea?', 'Sí, la sigo necesitando': 'Da, mai am nevoie', 'No, devolverla': 'Nu, o returnez', 'días con ella': 'zile cu ea', 'Foto de lo que necesitas (opcional, hasta 3)': 'Poză cu ce ai nevoie (opțional, până la 3)', 'Ver foto (opcional)': 'Vezi poza (opțional)', 'Si no sabes cómo se llama, haz una foto y el almacén lo identifica.': 'Dacă nu știi cum se numește, fă o poză și depozitul îl identifică.', 'Grabar mensaje de voz': 'Înregistrează mesaj vocal', 'Parar': 'Oprește', 'Grabando…': 'Se înregistrează…', 'Quitar el audio': 'Șterge audio', 'Mensaje de voz listo': 'Mesaj vocal gata', 'HOY': 'AZI', 'Lo que tienes pendiente': 'Ce ai de făcut', 'Todo al día. Nada pendiente por tu parte.': 'Totul la zi. Nimic în așteptare din partea ta.', 'Revisa tu EPI este mes (un toque por pieza)': 'Verifică-ți EPI-ul luna aceasta (o atingere pe piesă)', 'Bienvenido a tu portal MRD': 'Bun venit în portalul tău MRD', 'Tres cosas que puedes hacer desde el móvil:': 'Trei lucruri pe care le poți face de pe telefon:', '1. Escanear': '1. Scanează', 'Apunta con la cámara al QR de una herramienta o de un hueco: te dice qué es y quién la tiene, y puedes decir «la tengo yo», devolverla o dejarla en su hueco.': 'Îndreaptă camera spre codul QR al unei scule sau al unui loc: îți spune ce este și cine o are, și poți spune «o am eu», o poți returna sau o poți lăsa la locul ei.', '2. Pedir': '2. Cere', 'Escribe lo que necesitas (por ejemplo «taladro»), di para cuándo y si lo recoges o te lo llevan. Con «Repetir mi último pedido» tardas dos toques.': 'Scrie ce ai nevoie (de exemplu «bormașină»), spune pentru când și dacă îl ridici sau ți-l aduc. Cu «Repetă ultima comandă» durează două atingeri.', '3. Confirmar': '3. Confirmă', 'Cuando recojas material, firma con el dedo en «Mis solicitudes» y confirma en «Lo que tengo» que lo tienes. Así el almacén sabe que está en buenas manos.': 'Când ridici material, semnează cu degetul în «Cererile mele» și confirmă în «Ce am la mine» că îl ai. Așa depozitul știe că este pe mâini bune.', 'Siguiente': 'Următorul', 'Entendido': 'Am înțeles', 'Ver el tutorial otra vez': 'Vezi tutorialul din nou', 'Tutorial': 'Tutorial', 'Revisión de tu EPI': 'Verificarea EPI-ului tău', 'Bien': 'Bine', 'Mal o me falta': 'Rău sau îmi lipsește', 'Marca cada pieza. Lo que esté mal se comunica y lo que falte se pide solo.': 'Marchează fiecare piesă. Ce este rău se raportează și ce lipsește se comandă automat.', 'Guardar revisión': 'Salvează verificarea', 'Última revisión': 'Ultima verificare', 'Todavía no has revisado tu EPI': 'Încă nu ți-ai verificat EPI-ul', 'Revisión de EPI anotada': 'Verificarea EPI a fost notată', 'Kit básico': 'Kit de bază', 'Voy a recogerlo': 'Vin să îl ridic', 'Listo para recoger en el Mostrador de': 'Gata de ridicat la ghișeul din', 'Avisaste que vas a recogerlo a las': 'Ai anunțat că vii să îl ridici la', 'Avisado: el almacén sabe que vas a recogerlo': 'Anunțat: depozitul știe că vii să îl ridici', 'Llevarla al almacén': 'Du-o la depozit', 'Revisión el': 'Revizie pe', 'Revisión vencida el': 'Revizie expirată pe', 'Ficha de la herramienta': 'Fișa sculei', 'Volver a mi portal': 'Înapoi la portalul meu', 'Documentos y manuales': 'Documente și manuale', 'Últimos movimientos': 'Ultimele mișcări', 'Próxima revisión': 'Următoarea revizie', 'Mantenimiento pendiente': 'Întreținere în așteptare', 'Dónde se guarda': 'Unde se păstrează', 'Quiero devolverla': 'Vreau să o returnez', 'Devuelta y colocada en su hueco': 'Returnată și pusă la locul ei', 'Ahora escanea el QR del hueco donde la dejas': 'Acum scanează codul QR al locului unde o lași', 'Solicitud registrada': 'Cerere înregistrată', 'Mensaje recibido': 'Mesaj primit', 'Incidencia registrada': 'Incident înregistrat', 'Devolución registrada': 'Returnare înregistrată', 'Datos guardados': 'Date salvate', 'PIN cambiado': 'PIN schimbat', 'Sesiones cerradas': 'Sesiuni închise', 'Solicitud cancelada': 'Cerere anulată', 'Comentario enviado': 'Comentariu trimis', 'Recogida confirmada': 'Ridicare confirmată', 'Idioma cambiado': 'Limba a fost schimbată', 'Operación completada': 'Operațiune finalizată', 'Gracias, queda anotado que tienes todo lo de tu lista': 'Mulțumim, am notat că ai tot ce este pe lista ta', 'Anotado: el almacén lo revisará': 'Notat: depozitul va verifica', 'Anotado: el almacén revisará que esa herramienta está contigo y la pondrá a tu nombre': 'Notat: depozitul va verifica că scula este la tine și o va trece pe numele tău'}}
 
 
 def _portal_traductor(idioma: str | None):
@@ -18773,6 +18779,126 @@ async def portal_cambiar_idioma(token: str, request: Request, db: Session = Depe
     worker.idioma = idioma
     db.commit()
     return RedirectResponse(f"/portal/{token}?ok=idioma#cuenta", status_code=303)
+
+
+# ─── Traspaso a un compañero desde el móvil (mejora 2) ───────────────────────
+
+def _companeros_portal(db: Session, t: Trabajador) -> list[Trabajador]:
+    q = db.query(Trabajador).filter(Trabajador.activo == True, Trabajador.id != t.id)
+    if t.almacen_id:
+        q = q.filter(or_(Trabajador.almacen_id == t.almacen_id, Trabajador.almacen_id.is_(None)))
+    return q.order_by(Trabajador.nombre, Trabajador.apellidos).limit(300).all()
+
+
+def _traspasos_portal(db: Session, t: Trabajador) -> dict:
+    """Traspasos pendientes que recibe y los que ha enviado (últimos 20)."""
+    recibidos = db.query(TraspasoPortal).filter(TraspasoPortal.a_trabajador_id == t.id, TraspasoPortal.estado == "pendiente").order_by(TraspasoPortal.creado_en.desc()).all()
+    enviados = db.query(TraspasoPortal).filter(TraspasoPortal.de_trabajador_id == t.id).order_by(TraspasoPortal.creado_en.desc()).limit(20).all()
+    def _d(x):
+        h = db.get(Herramienta, x.herramienta_id)
+        return {"id": x.id, "estado": x.estado, "nota": x.nota or "", "fecha": _utc_a_local(x.creado_en).strftime("%d/%m %H:%M") if x.creado_en else "",
+                "herramienta": h.nombre if h else "", "codigo": (h.codigo if h else "") or "",
+                "de": x.de_trabajador.nombre_completo if x.de_trabajador else "", "a": x.a_trabajador.nombre_completo if x.a_trabajador else ""}
+    return {"recibidos": [_d(x) for x in recibidos], "enviados": [_d(x) for x in enviados]}
+
+
+@app.post("/portal/{token}/escanear/pasar", response_class=RedirectResponse)
+async def portal_escanear_pasar(token: str, request: Request, db: Session = Depends(get_db)):
+    """'Se la paso a un compañero' (mejora 2). Form: codigo (herramienta suya), a_trabajador_id, nota."""
+    worker = _portal_worker_required(token, request, db)
+    form = await request.form()
+    codigo = str(form.get("codigo") or "").strip()[:128]
+    try:
+        a_id = int(str(form.get("a_trabajador_id") or "0"))
+    except ValueError:
+        a_id = 0
+    nota = " ".join(str(form.get("nota") or "").split())[:300]
+    if not codigo or a_id <= 0:
+        raise HTTPException(400, "Falta la herramienta o el compañero")
+    item = _portal_escaneo(db, worker, codigo)
+    if item.get("tipo") != "herramienta" or not item.get("es_mia"):
+        raise HTTPException(409, "Solo puedes pasar una herramienta que conste a tu nombre")
+    h = db.get(Herramienta, int(item["id"]))
+    companero = db.get(Trabajador, a_id)
+    if h is None or not h.activa:
+        raise HTTPException(404, "Herramienta no encontrada")
+    if companero is None or not companero.activo or companero.id == worker.id:
+        raise HTTPException(404, "Compañero no válido")
+    if db.query(TraspasoPortal).filter(TraspasoPortal.herramienta_id == h.id, TraspasoPortal.estado == "pendiente").first():
+        raise HTTPException(409, "Esa herramienta ya tiene un traspaso pendiente")
+    tr = TraspasoPortal(herramienta_id=h.id, de_trabajador_id=worker.id, a_trabajador_id=companero.id, nota=nota or None)
+    db.add(tr)
+    db.flush()
+    create_worker_notification(
+        db, companero.id, title=f"{worker.nombre_completo} te pasa {h.nombre}",
+        message=f"Acepta el traspaso en tu portal (sección Traspasos) para que {h.nombre} ({h.codigo}) pase a tu nombre." + (f" Nota: {nota}" if nota else ""),
+        kind="traspaso", link="#traspasos", event_key=f"traspaso:{tr.id}:pendiente",
+    )
+    db.add(AuditoriaLog(tabla="herramientas", registro_id=h.id, accion="traspaso_portal_pedido",
+                        resumen=f"{worker.nombre_completo} quiere pasar {h.nombre} ({h.codigo}) a {companero.nombre_completo}", usuario_id=None))
+    db.commit()
+    return RedirectResponse(f"/portal/{token}?ok=pasada#traspasos", status_code=303)
+
+
+def _resolver_traspaso(db: Session, worker: Trabajador, tid: int, aceptar: bool) -> TraspasoPortal:
+    tr = db.get(TraspasoPortal, tid)
+    if tr is None or tr.a_trabajador_id != worker.id or tr.estado != "pendiente":
+        raise HTTPException(404, "Traspaso no encontrado o ya resuelto")
+    h = db.get(Herramienta, tr.herramienta_id)
+    de = db.get(Trabajador, tr.de_trabajador_id)
+    tr.resuelto_en = datetime.now()
+    if aceptar:
+        if h is None or not h.activa:
+            raise HTTPException(409, "La herramienta ya no está activa")
+        tr.estado = "aceptado"
+        anterior = h.estado or ""
+        h.responsable_id = worker.id
+        if h.estado in ("disponible", None, ""):
+            h.estado = "entregada"
+        db.add(Movimiento(tipo="traslado", estado_anterior=anterior, estado_nuevo=h.estado,
+                          origen=f"{de.nombre_completo if de else ''} (traspaso desde el móvil)"[:200],
+                          destino=worker.nombre_completo[:200], motivo=(tr.nota or "Traspaso entre compañeros")[:200],
+                          herramienta_id=h.id, trabajador_id=worker.id))
+        db.add(AuditoriaLog(tabla="herramientas", registro_id=h.id, accion="traspaso_portal",
+                            resumen=f"{h.nombre} ({h.codigo}) pasa de {de.nombre_completo if de else '?'} a {worker.nombre_completo} (aceptado en el móvil)", usuario_id=None))
+        db.add(Aviso(titulo=f"Traspaso: {h.nombre} ahora la tiene {worker.nombre_completo}",
+                     mensaje=f"{de.nombre_completo if de else 'Un compañero'} se la pasó y {worker.nombre_completo} lo aceptó desde su móvil.",
+                     prioridad="baja", tipo="sistema", enlace=f"/herramientas/{h.id}"))
+        if de is not None:
+            create_worker_notification(db, de.id, title=f"{worker.nombre_completo} aceptó {h.nombre if h else ''}",
+                                       message="La herramienta ya consta a su nombre; sale de tu lista.", kind="traspaso", link="#traspasos", event_key=f"traspaso:{tr.id}:aceptado")
+    else:
+        tr.estado = "rechazado"
+        if de is not None:
+            create_worker_notification(db, de.id, title=f"{worker.nombre_completo} no aceptó {h.nombre if h else 'el traspaso'}",
+                                       message="La herramienta sigue a tu nombre.", kind="traspaso", link="#traspasos", event_key=f"traspaso:{tr.id}:rechazado")
+    db.commit()
+    return tr
+
+
+@app.post("/portal/{token}/traspasos/{tid}/aceptar", response_class=RedirectResponse)
+def portal_traspaso_aceptar(token: str, tid: int, request: Request, db: Session = Depends(get_db)):
+    worker = _portal_worker_required(token, request, db)
+    _resolver_traspaso(db, worker, tid, True)
+    return RedirectResponse(f"/portal/{token}?ok=traspaso_aceptado#asignado", status_code=303)
+
+
+@app.post("/portal/{token}/traspasos/{tid}/rechazar", response_class=RedirectResponse)
+def portal_traspaso_rechazar(token: str, tid: int, request: Request, db: Session = Depends(get_db)):
+    worker = _portal_worker_required(token, request, db)
+    _resolver_traspaso(db, worker, tid, False)
+    return RedirectResponse(f"/portal/{token}?ok=traspaso_rechazado#traspasos", status_code=303)
+
+
+@app.post("/portal/{token}/traspasos/{tid}/cancelar", response_class=RedirectResponse)
+def portal_traspaso_cancelar(token: str, tid: int, request: Request, db: Session = Depends(get_db)):
+    worker = _portal_worker_required(token, request, db)
+    tr = db.get(TraspasoPortal, tid)
+    if tr is None or tr.de_trabajador_id != worker.id or tr.estado != "pendiente":
+        raise HTTPException(404, "Traspaso no encontrado o ya resuelto")
+    tr.estado, tr.resuelto_en = "cancelado", datetime.now()
+    db.commit()
+    return RedirectResponse(f"/portal/{token}#traspasos", status_code=303)
 
 
 # ─── Avisos de la empresa con "Leído" (mejora 17) ────────────────────────────

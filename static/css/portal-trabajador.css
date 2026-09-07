@@ -89,3 +89,6 @@ input,select,textarea{transition:border-color .16s ease,box-shadow .16s ease}
 
 /* Cuidado del material (mejora 18) */
 .cuidado-card{background:linear-gradient(115deg,#0e7490,#0891b2);color:#fff;border-radius:16px;padding:14px 16px;margin-bottom:12px}.cuidado-card .portal-eyebrow{color:#e0f7fa}.cuidado-estrellas{font-size:1.4rem;color:#fde68a;margin:2px 0}.cuidado-card small{color:#e0f7fa}.cuidado-detalle{list-style:none;margin:10px 0 0;padding:0;font-size:.85rem}.cuidado-detalle li{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-top:1px solid #ffffff33}.cuidado-detalle b.ok{color:#bbf7d0}.cuidado-detalle b.mal{color:#fecaca}
+
+/* Traspasos entre compañeros (mejora 2) */
+.traspaso{background:#fff4e5;border-radius:14px;padding:12px 14px;margin-bottom:10px}.esc-pasar summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px}.esc-pasar summary::-webkit-details-marker{display:none}.esc-pasar form label{display:block;margin-top:6px;font-weight:700;font-size:.9rem}.esc-pasar form select,.esc-pasar form input{width:100%;padding:10px;border:1px solid #cedae7;border-radius:10px;margin-top:4px}
