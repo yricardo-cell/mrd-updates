@@ -241,6 +241,83 @@ from security import (
 
 
 # ─── Inicialización ───────────────────────────────────────────────────────────
+_RESTAURACION_AUTO = BASE_DIR / "config" / "restauracion_auto.json"
+
+
+def _bd_quick_check(db_path: Path) -> str:
+    import sqlite3 as _sq
+    con = _sq.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True, timeout=5)
+    try:
+        return str(con.execute("PRAGMA quick_check").fetchone()[0])
+    finally:
+        con.close()
+
+
+def _bd_autorestaurar(db_path: Path, leer_copia, quick_check=None, ahora: datetime | None = None) -> dict:
+    """Mejora 33: si la base de datos está corrupta, se aparta y se restaura la última copia verificada.
+
+    `leer_copia()` devuelve (nombre, bytes) de la copia; se llama ANTES de mover nada, así una base
+    corrupta sin copia disponible se deja donde está (mejor un fichero dañado que ninguno)."""
+    quick_check = quick_check or _bd_quick_check
+    ahora = ahora or datetime.now()
+    if not db_path.is_file():
+        return {"accion": "ninguna", "motivo": "no existe"}
+    try:
+        resultado = quick_check(db_path)
+    except Exception as exc:
+        resultado = f"error: {exc}"
+    if resultado == "ok":
+        return {"accion": "ninguna", "motivo": "ok"}
+    try:
+        nombre, raw = leer_copia()
+    except Exception as exc:
+        return {"accion": "sin_copia", "motivo": resultado, "error": str(exc)[:300]}
+    if not raw or raw[:15] != b"SQLite format 3":
+        return {"accion": "sin_copia", "motivo": resultado, "error": "la copia no es una base SQLite"}
+    carpeta = db_path.parent / "danadas"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    marca = ahora.strftime("%Y%m%d_%H%M%S")
+    apartados = []
+    for sufijo in ("", "-wal", "-shm"):
+        origen = Path(str(db_path) + sufijo)
+        if origen.exists():
+            destino = carpeta / f"{db_path.stem}_{marca}{db_path.suffix}{sufijo}"
+            shutil.move(str(origen), str(destino))
+            apartados.append(str(destino))
+    db_path.write_bytes(raw)
+    return {"accion": "restaurada", "motivo": resultado, "copia": nombre, "apartados": apartados, "fecha": ahora.isoformat(timespec="seconds")}
+
+
+def _bd_autorestaurar_arranque() -> None:
+    try:
+        from config import DATABASE_URL as _DBU
+        if not str(_DBU).startswith("sqlite") or os.getenv("MRD_ENV") == "test":
+            return
+        ruta = Path(str(_DBU).replace("sqlite:///", "").replace("sqlite://", ""))
+        if not ruta.is_absolute():
+            ruta = BASE_DIR / ruta
+        if not ruta.is_file():
+            return
+
+        def _leer():
+            import backup_manager as _bm
+            p = _bm._ultimo_backup_path()
+            if p is None:
+                raise RuntimeError("no hay ninguna copia de seguridad")
+            return p.name, _bm._leer_backup_sqlite(p)
+
+        res = _bd_autorestaurar(ruta, _leer)
+        if res.get("accion") == "restaurada":
+            res["notificado"] = False
+            _RESTAURACION_AUTO.write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
+            mrd_logging.log_app(f"Base de datos restaurada automáticamente desde {res.get('copia')}")
+        elif res.get("accion") == "sin_copia":
+            mrd_logging.log_error(f"Base de datos corrupta ({res.get('motivo')}) y sin copia utilizable: {res.get('error')}")
+    except Exception as exc:
+        mrd_logging.log_error(f"Comprobación de la base de datos al arrancar: {exc}")
+
+
+_bd_autorestaurar_arranque()
 Base.metadata.create_all(bind=engine)
 
 def _sembrar_catalogo_epi():
@@ -1032,6 +1109,14 @@ def startup_event():
                 except Exception as _e:
                     mrd_logging.log_error(f"Prueba de humo: {_e}")
             _thr.Thread(target=_run_humo, daemon=True, name="prueba_humo_bg").start()
+            try:
+                _ra = json.loads(_RESTAURACION_AUTO.read_text(encoding="utf-8")) if _RESTAURACION_AUTO.is_file() else {}
+                if _ra and not _ra.get("notificado"):
+                    _notificar_sistema("Base de datos restaurada sola", f"Al arrancar, la base de datos estaba dañada ({_ra.get('motivo')}). Se apartó en data/danadas y se restauró la copia {_ra.get('copia')}. Lo registrado entre esa copia y el fallo hay que meterlo a mano.")
+                    _ra["notificado"] = True
+                    _RESTAURACION_AUTO.write_text(json.dumps(_ra, ensure_ascii=False), encoding="utf-8")
+            except Exception as _e:
+                mrd_logging.log_error(f"Aviso de restauración: {_e}")
             if IS_PRODUCTION:
                 _thr.Thread(target=_reparacion_bg, daemon=True, name="reparacion_bg").start()   # mejora 32
             try:
