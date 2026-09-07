@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Recuento de zona{% endblock %}
+{% block breadcrumb %}
+<a href="/">Inicio</a>
+<span class="sep">/</span>
+<a href="/nave">Vista de la nave</a>
+<span class="sep">/</span>
+<span class="current">Recuento de zona</span>
+{% endblock %}
+{% block content %}
+<style>
+.rc-hueco{border:2px dashed rgba(148,163,184,.6);border-radius:14px;padding:14px;text-align:center}
+.rc-hueco.activo{border-style:solid;border-color:#0891b2;background:rgba(8,145,178,.06)}
+.rc-hueco h2{margin:0;font-size:1.3rem}
+.rc-kpis{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}.rc-kpis span{border:1px solid rgba(148,163,184,.4);border-radius:999px;padding:4px 10px;font-size:.85rem}
+.rz-h{border-bottom:1px solid rgba(148,163,184,.25)}
+.rz-h .rz-cab{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;flex-wrap:wrap}
+.rz-h.actual .rz-cab{background:rgba(8,145,178,.08);border-left:4px solid #0891b2}
+.rz-h.hecho .rz-cab{border-left:4px solid #16a34a}
+.rz-h.hecho.mal .rz-cab{border-left-color:#dc2626}
+.rz-items .list-group-item{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;padding-left:22px}
+.rc-presente{background:rgba(22,163,74,.12)}.rc-fuera{opacity:.6}.rc-nuevo{background:rgba(8,145,178,.10)}.rc-reco{background:rgba(234,179,8,.14)}
+.rz-prog{height:8px;border-radius:999px;background:rgba(148,163,184,.25);overflow:hidden;margin-top:8px}.rz-prog i{display:block;height:100%;background:#16a34a;transition:width .3s}
+</style>
+<div class="page-header-row mb-3">
+  <div>
+    <h1 class="page-title"><i class="bi bi-clipboard2-check"></i> Recuento de zona completa</h1>
+    <p class="page-subtitle">{{ almacen.nombre }} · Elige la zona, escanea el QR de cada hueco y lo que hay dentro. Lo que aparezca en otro hueco de la zona se recoloca solo. Al cerrar, un único aviso con todo lo que falta.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap"><a class="btn btn-outline-secondary" href="/nave"><i class="bi bi-grid-3x3-gap-fill"></i> Vista de la nave</a><a class="btn btn-outline-secondary" href="/nave/recuento"><i class="bi bi-clipboard-check"></i> Recuento por hueco</a></div>
+</div>
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card"><div class="card-body">
+      <label class="form-label mb-1" for="rz-zona">Zona</label>
+      <select id="rz-zona" class="form-select form-select-lg"><option value="">— elige la zona —</option>{% for z in zonas %}<option value="{{ z.nombre }}" {% if z.nombre == zona_actual %}selected{% endif %}>{{ z.nombre }} · {{ z.huecos }} huecos</option>{% endfor %}</select>
+      {% if not zonas %}<div class="small text-muted mt-2">No hay huecos con zona en este almacén. Créalos en <a href="/nave/3d">Zonas en 3D</a>.</div>{% endif %}
+      <div id="rz-box" class="rc-hueco mt-3">
+        <div class="small text-muted">Recontando</div>
+        <h2 id="rz-nombre">Elige la zona</h2>
+        <div class="small text-muted" id="rz-sub"></div>
+      </div>
+      <div class="input-group input-group-lg mt-3"><input id="rz-scan" class="form-control" placeholder="Escanea el hueco o lo que hay dentro…" autocomplete="off" autofocus><button id="rz-scan-btn" class="btn btn-primary" type="button"><i class="bi bi-check-lg"></i></button></div>
+      <div id="rz-estado" class="scan-state small mt-2"></div>
+      <div class="rz-prog"><i id="rz-barra" style="width:0"></i></div>
+      <div class="rc-kpis"><span id="k-huecos">0/0 huecos</span><span id="k-pres" class="text-success">0 vistas</span><span id="k-falt" class="text-danger">0 sin ver</span><span id="k-reco" class="text-warning">0 recolocadas</span></div>
+      <div class="d-grid gap-2">
+        <button id="rz-siguiente" class="btn btn-outline-primary" type="button" disabled><i class="bi bi-arrow-right-circle"></i> Hueco hecho, pasar al siguiente</button>
+        {% if puede_cerrar %}<button id="rz-cerrar" class="btn btn-success btn-lg" type="button" disabled><i class="bi bi-check2-all"></i> Cerrar recuento de la zona</button>{% endif %}
+      </div>
+      <div class="small text-muted mt-2">Se guarda el recuento de cada hueco recorrido (los que no recorras no se tocan). Lo no escaneado en un hueco recorrido queda como que falta. Puedes cerrar el navegador: el progreso se recuerda en este dispositivo.</div>
+    </div></div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i class="bi bi-list-check"></i> Huecos de la zona</div><span class="table-meta" id="rz-meta"></span></div>
+      <div class="card-body p-0"><div id="rz-lista"><div class="text-muted small p-3">Elige la zona.</div></div></div>
+    </div>
+  </div>
+</div>
+<script>
+(()=>{
+  const selZona=document.getElementById('rz-zona'),box=document.getElementById('rz-box'),nombre=document.getElementById('rz-nombre'),subt=document.getElementById('rz-sub');
+  const scan=document.getElementById('rz-scan'),estado=document.getElementById('rz-estado'),lista=document.getElementById('rz-lista'),meta=document.getElementById('rz-meta'),cerrar=document.getElementById('rz-cerrar'),sig=document.getElementById('rz-siguiente'),barra=document.getElementById('rz-barra');
+  const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const TIPOS={herramienta:'Herramienta',material:'Material',stock_epi:'EPI de stock',epi_individual:'EPI individual'};
+  const clave=i=>i.tipo+':'+i.id;
+  let zona='',huecos=[],actual=null,vistos={},hechos=new Set(),nuevos={},reco=0,busy=false;
+  const KEY=()=>'mrd_rz:'+zona;
+  function guardar(){try{if(!zona)return;localStorage.setItem(KEY(),JSON.stringify({actual,vistos:Object.fromEntries(Object.entries(vistos).map(([k,v])=>[k,[...v]])),hechos:[...hechos],nuevos,reco}))}catch(e){}}
+  function restaurar(){try{const d=JSON.parse(localStorage.getItem(KEY())||'null');if(!d)return false;actual=d.actual&&huecos.some(h=>h.id===d.actual)?d.actual:null;vistos={};Object.entries(d.vistos||{}).forEach(([k,v])=>vistos[k]=new Set(v));hechos=new Set((d.hechos||[]).filter(id=>huecos.some(h=>h.id===id)));nuevos=d.nuevos||{};reco=d.reco||0;return true}catch(e){return false}}
+  const hueco=id=>huecos.find(h=>h.id===id);
+  const vis=id=>vistos[id]||(vistos[id]=new Set());
+  function estadoHueco(h){const esp=h.esperados.filter(i=>i.esperado),v=vis(h.id);const pres=esp.filter(i=>v.has(clave(i))).length;return {esp:esp.length,pres,falt:esp.length-pres,fuera:h.esperados.length-esp.length}}
+  function render(){
+    const recorridos=new Set([...hechos]);if(actual)recorridos.add(actual);
+    let pres=0,falt=0,esp=0;huecos.forEach(h=>{const e=estadoHueco(h);if(recorridos.has(h.id)){pres+=e.pres;falt+=e.falt}esp+=e.esp});
+    document.getElementById('k-huecos').textContent=`${hechos.size}/${huecos.length} huecos`;document.getElementById('k-pres').textContent=pres+' vistas';document.getElementById('k-falt').textContent=falt+' sin ver';document.getElementById('k-reco').textContent=reco+' recolocadas';
+    barra.style.width=huecos.length?Math.round(100*hechos.size/huecos.length)+'%':'0';meta.textContent=zona?`${huecos.length} huecos · ${esp} cosas`:'';
+    if(cerrar)cerrar.disabled=!recorridos.size;sig.disabled=!actual;
+    const a=hueco(actual);nombre.textContent=a?a.nombre:(zona?'Escanea el primer hueco':'Elige la zona');box.classList.toggle('activo',!!a);
+    subt.textContent=a?((a.ruta||'')+(a.ultimo_recuento?` · último recuento ${a.ultimo_recuento}`+(a.ultimo_recuento_faltan?` (faltaban ${a.ultimo_recuento_faltan})`:' (todo bien)'):' · nunca recontado')):'';
+    if(!zona){lista.innerHTML='<div class="text-muted small p-3">Elige la zona.</div>';return}
+    const fila=(i,cls,badge)=>`<div class="list-group-item ${cls}"><span><strong>${esc(i.nombre)}</strong><br><small class="text-muted">${esc(TIPOS[i.tipo]||i.tipo)}${i.codigo?' · '+esc(i.codigo):''}${i.cantidad&&i.tipo!=='herramienta'&&i.tipo!=='epi_individual'?' · '+esc(i.cantidad)+' '+esc(i.unidad||'ud'):''}</small></span>${badge}</div>`;
+    let html='';
+    huecos.forEach(h=>{const e=estadoHueco(h),v=vis(h.id),esA=h.id===actual,hecho=hechos.has(h.id);
+      const badge=esA?'<span class="badge badge-info">en curso</span>':hecho?(e.falt?`<span class="badge badge-danger">faltan ${e.falt}</span>`:'<span class="badge badge-success">todo visto</span>'):'<span class="badge badge-secondary">pendiente</span>';
+      html+=`<div class="rz-h ${esA?'actual':''} ${hecho?'hecho':''} ${hecho&&e.falt?'mal':''}" data-id="${h.id}"><div class="rz-cab"><span><strong>${esc(h.nombre)}</strong> <small class="text-muted">${e.esp} cosas${e.fuera?' · '+e.fuera+' fuera':''}${(esA||hecho)?' · '+e.pres+' vistas':''}</small></span>${badge}</div>`;
+      if(esA||hecho){html+='<div class="rz-items list-group list-group-flush">';(nuevos[h.id]||[]).forEach(i=>html+=fila(i,i.reco?'rc-reco':'rc-nuevo',i.reco?`<span class="badge badge-warning">recolocado desde ${esc(i.reco)}</span>`:'<span class="badge badge-info">colocado aquí ahora</span>'));
+        h.esperados.filter(i=>i.esperado&&!v.has(clave(i))).forEach(i=>html+=fila(i,'',hecho?'<span class="badge badge-danger">falta</span>':'<span class="badge badge-secondary">sin escanear</span>'));
+        h.esperados.filter(i=>i.esperado&&v.has(clave(i))&&!(nuevos[h.id]||[]).some(n=>clave(n)===clave(i))).forEach(i=>html+=fila(i,'rc-presente','<span class="badge badge-success">visto</span>'));
+        h.esperados.filter(i=>!i.esperado).forEach(i=>html+=fila(i,'rc-fuera',`<span class="badge badge-info">${i.quien?'la tiene '+esc(i.quien):esc(i.estado||'fuera')}</span>`));
+        if(!h.esperados.length&&!(nuevos[h.id]||[]).length)html+='<div class="text-muted small p-2 ps-4">Nada asignado. Escanea lo que haya y se colocará aquí.</div>';html+='</div>'}
+      html+='</div>'});
+    lista.innerHTML=html;lista.querySelectorAll('.rz-cab').forEach(c=>c.onclick=()=>irA(Number(c.parentElement.dataset.id)));
+    const act=lista.querySelector('.rz-h.actual');if(act&&act.scrollIntoView)act.scrollIntoView({block:'nearest'})}
+  function irA(id){if(!hueco(id))return;if(actual&&actual!==id)hechos.add(actual);actual=id;guardar();render();scan.focus()}
+  async function cargar(z){zona=z;huecos=[];actual=null;vistos={};hechos=new Set();nuevos={};reco=0;if(!z){render();return}
+    estado.className='scan-state';estado.textContent='Cargando la zona…';
+    try{const r=await fetch('/api/nave/recuento-zona?zona='+encodeURIComponent(z),{headers:{Accept:'application/json'}});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo cargar');huecos=d.huecos;
+      const hab=restaurar();estado.className='scan-state ok';estado.textContent=hab&&(hechos.size||actual)?'Recuento recuperado donde lo dejaste. Sigue escaneando.':`Zona cargada: ${huecos.length} huecos. Escanea el QR del primer hueco.`;
+      const u=new URL(location.href);u.searchParams.set('zona',z);history.replaceState(null,'',u)}catch(e){estado.className='scan-state err';estado.textContent=e.message}
+    render();scan.focus()}
+  selZona.onchange=()=>{if(zona&&(hechos.size||actual)&&!confirm('¿Cambiar de zona? El progreso de esta zona se queda guardado en este dispositivo.')){selZona.value=zona;return}cargar(selZona.value)};
+  async function colocar(code,it,desde){const rc=await fetchCsrf('/api/nave/colocar',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({codigo:code,ubicacion_id:actual})});const dc=await rc.json();if(!rc.ok)throw new Error(dc.detail||'No se pudo colocar');
+    const item={tipo:dc.tipo,id:dc.id,nombre:dc.nombre,codigo:dc.codigo,esperado:true,cantidad:it.cantidad,unidad:it.unidad,reco:desde||''};
+    huecos.forEach(h=>{h.esperados=h.esperados.filter(i=>clave(i)!==clave(item));vis(h.id).delete(clave(item))});
+    const a=hueco(actual);a.esperados.push(item);(nuevos[actual]||(nuevos[actual]=[])).unshift(item);vis(actual).add(clave(item));if(desde)reco++;return dc}
+  async function procesar(raw){const code=String(raw||scan.value).trim();if(!code||busy)return;busy=true;scan.value='';estado.className='scan-state';estado.textContent='Identificando '+code+'…';
+    try{if(!zona){estado.className='scan-state err';estado.textContent='Elige primero la zona.';return}
+      const r=await fetch('/api/mostrador/resolver?codigo='+encodeURIComponent(code),{headers:{Accept:'application/json'}});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No reconocido');const it=d.item;
+      if(it.tipo==='ubicacion'){if(!hueco(it.id)){estado.className='scan-state err';estado.textContent=`${it.nombre} no es de la zona ${zona}.`;return}irA(it.id);estado.className='scan-state ok';estado.textContent=`Hueco ${it.nombre}. Escanea lo que haya dentro.`;return}
+      if(!actual){estado.className='scan-state err';estado.textContent='Escanea primero el hueco.';return}
+      if(!['herramienta','material','stock_epi','epi_individual'].includes(it.tipo)){estado.className='scan-state err';estado.textContent='Este tipo no se cuenta en huecos.';return}
+      const k=it.tipo+':'+it.id;const a=hueco(actual);const esp=a.esperados.find(i=>clave(i)===k);
+      if(esp){vis(actual).add(k);estado.className='scan-state ok';estado.textContent=`${esp.nombre}: visto`+(esp.esperado?'':' (constaba como fuera)');if(navigator.vibrate)navigator.vibrate(40);guardar();render();return}
+      const dueno=huecos.find(h=>h.esperados.some(i=>clave(i)===k));
+      if(dueno){await colocar(code,it,dueno.nombre);estado.className='scan-state ok';estado.textContent=`${it.nombre} estaba en ${dueno.nombre}: recolocado en ${a.nombre}.`;guardar();render();return}
+      if(!confirm(`${it.nombre} no es de esta zona${it.ubicacion_nombre&&it.ubicacion_nombre!=='Sin ubicación exacta'?' (está en '+it.ubicacion_nombre+')':''}. ¿Colocarlo en ${a.nombre}?`))return;
+      const dc=await colocar(code,it,'');estado.className='scan-state ok';estado.textContent=`${dc.nombre} colocado en ${a.nombre}${dc.anterior?' (antes en '+dc.anterior+')':''}`;guardar();render()}
+    catch(e){estado.className='scan-state err';estado.textContent=e.message}finally{busy=false;scan.focus()}}
+  scan.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();procesar()}});document.getElementById('rz-scan-btn').onclick=()=>procesar();
+  document.addEventListener('mrd:scanner-code',e=>{e.preventDefault();procesar(e.detail.code)});
+  sig.onclick=()=>{if(!actual)return;hechos.add(actual);const i=huecos.findIndex(h=>h.id===actual);const next=huecos.slice(i+1).concat(huecos.slice(0,i)).find(h=>!hechos.has(h.id));actual=next?next.id:null;guardar();render();estado.className='scan-state ok';estado.textContent=next?`Siguiente: ${next.nombre}. Escanea su QR o lo que haya dentro.`:'Todos los huecos recorridos. Ya puedes cerrar el recuento.';scan.focus()};
+  if(cerrar)cerrar.onclick=async()=>{const ids=[...hechos];if(actual&&!hechos.has(actual))ids.push(actual);if(!ids.length)return;
+    let falt=0;ids.forEach(id=>falt+=estadoHueco(hueco(id)).falt);const pend=huecos.length-ids.length;
+    if(!confirm(`Cerrar el recuento de ${ids.length} de ${huecos.length} huecos${pend?` (${pend} sin recorrer, no se tocan)`:''}. ${falt?falt+' cosas sin escanear quedarán como que faltan.':'Todo visto.'} ¿Seguro?`))return;cerrar.disabled=true;
+    try{const r=await fetchCsrf('/api/nave/recuento-zona/cerrar',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({zona,huecos:ids.map(id=>({id,presentes:[...vis(id)].map(k=>{const [tipo,i]=k.split(':');return {tipo,id:Number(i)}})}))})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo cerrar');
+      try{localStorage.removeItem(KEY())}catch(e){}
+      estado.className='scan-state ok';estado.textContent=`Recuento de ${d.zona} cerrado ${d.hecho}: ${d.huecos} huecos, ${d.presentes} vistas, ${d.faltan_total} faltan.`+(d.faltan_total?' Se ha creado un aviso con la lista por hueco.':'')+(d.sin_recontar.length>5?` ${d.sin_recontar.length} huecos sin recontar.`:d.sin_recontar.length?` Sin recontar: ${d.sin_recontar.join(', ')}.`:'');
+      await cargar(zona)}
+    catch(e){estado.className='scan-state err';estado.textContent=e.message;cerrar.disabled=false}};
+  if(selZona.value)cargar(selZona.value);else render();
+})();
+</script>
+{% endblock %}

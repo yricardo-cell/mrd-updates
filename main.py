@@ -9918,6 +9918,29 @@ def _recuento_esperados(db: Session, u: Ubicacion) -> list[dict]:
     return items
 
 
+def _recuento_vistos(presentes: list) -> set:
+    return {(str(p.get("tipo")), int(p.get("id") or 0)) for p in (presentes or []) if isinstance(p, dict)}
+
+
+def _recuento_resumen(lista: list) -> list[dict]:
+    return [{"tipo": i["tipo"], "id": i["id"], "nombre": i["nombre"], "codigo": i.get("codigo", "")} for i in lista]
+
+
+def _recuento_cerrar_hueco(db: Session, u: Ubicacion, vistos: set, user: Usuario) -> dict:
+    """Cierra el recuento de un hueco (sin commit): lo esperado que no se ha
+    escaneado falta; se guarda en el hueco y en la auditoría."""
+    esperados = _recuento_esperados(db, u)
+    presentes = [i for i in esperados if (i["tipo"], int(i["id"])) in vistos]
+    faltan = [i for i in esperados if i["esperado"] and (i["tipo"], int(i["id"])) not in vistos]
+    fuera = [i for i in esperados if not i["esperado"]]
+    u.ultimo_recuento = datetime.now()
+    u.ultimo_recuento_faltan = len(faltan)
+    registrar_auditoria(db, "ubicaciones", u.id, "recuento", user.id, None,
+                        {"hueco": u.nombre, "presentes": _recuento_resumen(presentes), "faltan": _recuento_resumen(faltan), "fuera": _recuento_resumen(fuera)},
+                        resumen=f"Recuento de {u.nombre}: {len(presentes)} presentes, {len(faltan)} faltan")
+    return {"presentes": presentes, "faltan": faltan, "fuera": fuera}
+
+
 @app.get("/nave/recuento", response_class=HTMLResponse)
 def nave_recuento_page(request: Request, ubicacion: int | None = None,
                        user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
@@ -9960,17 +9983,8 @@ def api_nave_recuento_cerrar(uid: int, payload: RecuentoCerrarRequest, request: 
     if not (_nave_editor(user) or tiene_permiso(user, "stock_operar")):
         raise HTTPException(403, "Sin permiso para cerrar recuentos")
     u = _recuento_hueco_de(db, _active_warehouse(db, user, request), uid)
-    vistos = {(str(p.get("tipo")), int(p.get("id") or 0)) for p in payload.presentes}
-    esperados = _recuento_esperados(db, u)
-    presentes = [i for i in esperados if (i["tipo"], int(i["id"])) in vistos]
-    faltan = [i for i in esperados if i["esperado"] and (i["tipo"], int(i["id"])) not in vistos]
-    fuera = [i for i in esperados if not i["esperado"]]
-    u.ultimo_recuento = datetime.now()
-    u.ultimo_recuento_faltan = len(faltan)
-    resumen = lambda lista: [{"tipo": i["tipo"], "id": i["id"], "nombre": i["nombre"], "codigo": i.get("codigo", "")} for i in lista]
-    registrar_auditoria(db, "ubicaciones", u.id, "recuento", user.id, None,
-                        {"hueco": u.nombre, "presentes": resumen(presentes), "faltan": resumen(faltan), "fuera": resumen(fuera)},
-                        resumen=f"Recuento de {u.nombre}: {len(presentes)} presentes, {len(faltan)} faltan")
+    res = _recuento_cerrar_hueco(db, u, _recuento_vistos(payload.presentes), user)
+    presentes, faltan, fuera, resumen = res["presentes"], res["faltan"], res["fuera"], _recuento_resumen
     if faltan:
         lineas = [f"  - {i['nombre']}" + (f" ({i['codigo']})" if i.get("codigo") else "") for i in faltan]
         db.add(Aviso(titulo=f"Recuento {u.nombre}: faltan {len(faltan)}", tipo="alerta", prioridad="media",
@@ -9979,6 +9993,124 @@ def api_nave_recuento_cerrar(uid: int, payload: RecuentoCerrarRequest, request: 
     db.commit()
     return JSONResponse({"ok": True, "presentes": len(presentes), "faltan": resumen(faltan), "fuera": len(fuera),
                          "hecho": u.ultimo_recuento.strftime("%d/%m/%Y %H:%M")})
+
+
+# ─── Recuento de zona completa (2.7.63) ──────────────────────────────────────
+
+def _recuento_zona_huecos(db: Session, warehouse, zona: str) -> list[Ubicacion]:
+    huecos = db.query(Ubicacion).filter(Ubicacion.almacen_id == warehouse.id, Ubicacion.activo == True, Ubicacion.zona == zona).all()
+    huecos.sort(key=lambda u: (_nave_clave_natural(u.estanteria), _nave_clave_natural(u.balda), _nave_clave_natural(u.posicion), _nave_clave_natural(u.nombre)))
+    return huecos
+
+
+def _recuento_zonas(db: Session, wid: int) -> list[dict]:
+    filas = db.query(Ubicacion.zona, func.count(Ubicacion.id)).filter(
+        Ubicacion.almacen_id == wid, Ubicacion.activo == True, Ubicacion.zona.isnot(None), Ubicacion.zona != "",
+    ).group_by(Ubicacion.zona).all()
+    zonas = [{"nombre": z, "huecos": n} for z, n in filas]
+    zonas.sort(key=lambda z: _nave_clave_natural(z["nombre"]))
+    return zonas
+
+
+@app.get("/nave/recuento-zona", response_class=HTMLResponse)
+def nave_recuento_zona_page(request: Request, zona: str = "",
+                            user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Recuento de zona completa (2.7.63): eliges la zona y recorres sus huecos
+    escaneando cada hueco y lo que hay dentro; lo que aparece en otro hueco de
+    la zona se recoloca solo. Al cerrar, un único aviso con todo lo que falta."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _operation_warehouse(request, user, db)
+    zonas = _recuento_zonas(db, warehouse.id)
+    zona = (zona or "").strip()[:120]
+    if zona not in {z["nombre"] for z in zonas}:
+        zona = ""
+    return templates.TemplateResponse(request, "nave_recuento_zona.html", ctx_base(
+        request, user, db, almacen=warehouse, zonas=zonas, zona_actual=zona,
+        puede_cerrar=_nave_editor(user) or tiene_permiso(user, "stock_operar"),
+    ))
+
+
+@app.get("/api/nave/recuento-zona")
+def api_nave_recuento_zona(zona: str = Query(..., min_length=1, max_length=120), request: Request = None,
+                           user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Todos los huecos de la zona con lo que debería haber en cada uno."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _operation_warehouse(request, user, db)
+    huecos = _recuento_zona_huecos(db, warehouse, zona.strip())
+    if not huecos:
+        raise HTTPException(404, "Esa zona no tiene huecos")
+    contenido = _nave_contenido(db, huecos)
+    salida = []
+    for u in huecos:
+        items = contenido[u.id]
+        for i in items:
+            i["esperado"] = not i.get("fuera")
+        salida.append({"id": u.id, "nombre": u.nombre, "ruta": u.ruta_completa, "codigo": u.codigo or "",
+                       "ultimo_recuento": u.ultimo_recuento.strftime("%d/%m/%Y %H:%M") if u.ultimo_recuento else "",
+                       "ultimo_recuento_faltan": u.ultimo_recuento_faltan, "esperados": items})
+    return JSONResponse({"ok": True, "zona": zona.strip(), "huecos": salida})
+
+
+class RecuentoZonaHueco(BaseModel):
+    id: int = Field(..., gt=0)
+    presentes: list[dict] = Field(default_factory=list)
+
+
+class RecuentoZonaCerrarRequest(BaseModel):
+    zona: str = Field(..., min_length=1, max_length=120)
+    huecos: list[RecuentoZonaHueco] = Field(default_factory=list, max_length=300)
+
+
+@app.post("/api/nave/recuento-zona/cerrar")
+def api_nave_recuento_zona_cerrar(payload: RecuentoZonaCerrarRequest, request: Request = None,
+                                  user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Cierra el recuento de los huecos recorridos de la zona: cada hueco guarda
+    su recuento y su auditoría; los no recorridos no se tocan. Un solo aviso
+    con lo que falta agrupado por hueco."""
+    if not (_nave_editor(user) or tiene_permiso(user, "stock_operar")):
+        raise HTTPException(403, "Sin permiso para cerrar recuentos")
+    from urllib.parse import quote as _quote
+    warehouse = _operation_warehouse(request, user, db)
+    zona = payload.zona.strip()
+    huecos = _recuento_zona_huecos(db, warehouse, zona)
+    if not huecos:
+        raise HTTPException(404, "Esa zona no tiene huecos")
+    por_id = {u.id: u for u in huecos}
+    recontados, vistos_ids = [], set()
+    for h in payload.huecos:
+        if h.id in por_id and h.id not in vistos_ids:
+            vistos_ids.add(h.id)
+            recontados.append(h)
+    if not recontados:
+        raise HTTPException(400, "No has recorrido ningún hueco de esta zona")
+    ahora = datetime.now()
+    total_presentes, faltan_por_hueco, faltan_total = 0, [], 0
+    for h in recontados:
+        u = por_id[h.id]
+        res = _recuento_cerrar_hueco(db, u, _recuento_vistos(h.presentes), user)
+        total_presentes += len(res["presentes"])
+        if res["faltan"]:
+            faltan_por_hueco.append({"hueco": u.nombre, "id": u.id, "faltan": _recuento_resumen(res["faltan"])})
+            faltan_total += len(res["faltan"])
+    sin_recontar = [u.nombre for u in huecos if u.id not in vistos_ids]
+    registrar_auditoria(db, "ubicaciones", recontados[0].id, "recuento_zona", user.id, None,
+                        {"zona": zona, "huecos": len(recontados), "presentes": total_presentes, "faltan": faltan_total, "sin_recontar": sin_recontar},
+                        resumen=f"Recuento de la zona {zona}: {len(recontados)} de {len(huecos)} huecos, {total_presentes} presentes, {faltan_total} faltan")
+    if faltan_total:
+        lineas = []
+        for bloque in faltan_por_hueco:
+            lineas.append(f"{bloque['hueco']}:")
+            lineas += [f"  - {i['nombre']}" + (f" ({i['codigo']})" if i.get("codigo") else "") for i in bloque["faltan"]]
+        db.add(Aviso(titulo=f"Recuento zona {zona}: faltan {faltan_total} en {len(faltan_por_hueco)} huecos", tipo="alerta", prioridad="media",
+                     enlace=f"/nave/recuento-zona?zona={_quote(zona)}",
+                     mensaje=f"Al recontar la zona {zona} el {ahora.strftime('%d/%m/%Y %H:%M')} ({len(recontados)} de {len(huecos)} huecos) no se ha encontrado:\n"
+                             + "\n".join(lineas) + (f"\nSin recontar: {', '.join(sin_recontar[:15])}" + (f" y {len(sin_recontar) - 15} más" if len(sin_recontar) > 15 else "") if sin_recontar else "")))
+    db.commit()
+    return JSONResponse({"ok": True, "zona": zona, "huecos": len(recontados), "total_huecos": len(huecos), "presentes": total_presentes,
+                         "faltan": faltan_por_hueco, "faltan_total": faltan_total, "sin_recontar": sin_recontar,
+                         "hecho": ahora.strftime("%d/%m/%Y %H:%M")})
 
 
 @app.get("/nave/colocar", response_class=HTMLResponse)
