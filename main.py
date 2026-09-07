@@ -1086,6 +1086,7 @@ def startup_event():
                     _limpieza_automatica_bg()
                     _alertas_consumo_obras_bg()
                     _pedidos_sin_fecha_bg()
+                    _recursos_tick()
                     _planes_mantenimiento_bg()
                     _punto_pedido_bg()
                     _reservas_conflictos_bg()
@@ -11950,6 +11951,48 @@ def _tunel_bg():
         except Exception as exc:
             mrd_logging.log_error(f"Túnel: {exc}")
         _t.sleep(300)
+
+
+# ─── 36: disco y recursos ────────────────────────────────────────────────────
+_RECURSOS_ESTADO = BASE_DIR / "config" / "recursos_estado.json"
+
+
+def _recursos_decidir(libre_gb, avisado_hoy: bool) -> list[str]:
+    acciones = []
+    if libre_gb is not None and libre_gb < 5:
+        acciones.append("limpiar")
+        if not avisado_hoy:
+            acciones.append("avisar")
+    return acciones
+
+
+def _recursos_tick(db_externa=None) -> dict:
+    """Cada 6 h: si queda menos de 5 GB, limpieza automática y aviso (una vez al día)."""
+    try:
+        libre = shutil.disk_usage(str(BASE_DIR)).free / 1024 ** 3
+    except OSError:
+        libre = None
+    estado = _estado_json_leer(_RECURSOS_ESTADO)
+    hoy = date.today().isoformat()
+    acciones = _recursos_decidir(libre, estado.get("aviso_disco") == hoy)
+    res = {"libre_gb": round(libre, 1) if libre is not None else None, "acciones": acciones}
+    if "limpiar" in acciones:
+        from database import SessionLocal as _SLr
+        db = db_externa or _SLr()
+        try:
+            res["limpieza"] = _limpieza_automatica(db, True, date.today())
+            db.commit()
+        except Exception as exc:
+            mrd_logging.log_error(f"Limpieza por disco lleno: {exc}")
+        finally:
+            if db_externa is None:
+                db.close()
+    if "avisar" in acciones:
+        estado["aviso_disco"] = hoy
+        _estado_json_escribir(_RECURSOS_ESTADO, estado)
+        liberado = (res.get("limpieza") or {}).get("bytes", 0) / 1024 ** 2
+        _notificar_sistema("Poco espacio en el disco del PC de MRD", f"Quedan {libre:.1f} GB. Se ha ejecutado la limpieza automática ({liberado:.0f} MB liberados). Si sigue bajo, hay que hacer sitio en el disco.")
+    return res
 
 
 def _alertas_consumo_obras_bg():
