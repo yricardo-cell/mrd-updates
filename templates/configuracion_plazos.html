@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block title %}Plazos de devolución{% endblock %}{% block content %}
+<div class="page-header"><div><p class="eyebrow">MOSTRADOR</p><h1><i class="bi bi-calendar-check"></i> Plazos de devolución por tipo</h1><p>Cuando una salida del Mostrador no lleva fecha de devolución, se pone sola según el tipo de herramienta. El almacén puede cambiarla en cada salida.</p></div><a class="btn btn-outline-primary btn-sm" href="/configuracion">Configuración</a></div>
+{% if guardado %}<div class="alert alert-success">Plazos guardados.</div>{% endif %}
+<div class="card shadow-sm border-0" style="max-width:720px"><div class="card-body"><form method="post" action="/configuracion/plazos"><input type="hidden" name="_csrf_token">
+<div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="activo" value="1" id="pl-activo" {{ 'checked' if cfg.activo }}><label class="form-check-label" for="pl-activo">Poner plazo automático en las salidas sin fecha</label></div>
+<div class="mb-3"><label class="form-label">Días por defecto (tipos sin plazo propio)</label><input type="number" min="1" max="365" class="form-control" style="max-width:160px" name="por_defecto_dias" value="{{ cfg.por_defecto_dias }}"></div>
+<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Tipo (categoría)</th><th style="width:160px">Días</th></tr></thead><tbody>
+{% for c in categorias %}<tr><td>{{ c }}</td><td><input type="number" min="1" max="365" class="form-control form-control-sm" name="cat:{{ c }}" value="{{ cfg.por_categoria.get(c, '') }}" placeholder="{{ cfg.por_defecto_dias }}"></td></tr>{% endfor %}
+{% if not categorias %}<tr><td colspan="2" class="text-muted">No hay categorías de herramientas todavía.</td></tr>{% endif %}
+</tbody></table></div>
+<button class="btn btn-primary">Guardar</button></form></div></div>
+{% endblock %}

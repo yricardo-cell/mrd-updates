@@ -8340,6 +8340,10 @@ def mostrador_operar(
                 dias = [x.dias_uso for x in db.query(SolicitudTrabajador).filter(SolicitudTrabajador.id.in_(ids_prev)).all() if x.dias_uso]
                 if dias:
                     expected_return = datetime.now() + timedelta(days=max(dias))  # mejora 21: "lo necesito N días"
+        if payload.accion == "salida" and expected_return is None:
+            dias_tipo = _plazo_sugerido(db, [line.model_dump() for line in payload.lineas])  # mejora 10: plazo por tipo
+            if dias_tipo:
+                expected_return = (datetime.now() + timedelta(days=dias_tipo)).replace(hour=18, minute=0, second=0, microsecond=0)
         result = operate_counter(
             db, user, operation_id=payload.operacion_id, action=payload.accion,
             lines=[line.model_dump() for line in payload.lineas],
@@ -10257,6 +10261,78 @@ async def configuracion_salud_pendiente(clave: str, request: Request, user: Usua
     db.commit()
     return RedirectResponse("/configuracion/salud#card-seguridad", status_code=303)
 
+
+
+_PLAZOS_DEFECTO = {"activo": True, "por_defecto_dias": 7, "por_categoria": {}}
+
+
+def _plazos_config(db: Session) -> dict:
+    cfg = dict(_PLAZOS_DEFECTO)
+    cfg["por_categoria"] = {}
+    cfg.update(_ajuste_get(db, "plazos_devolucion", {}) or {})
+    return cfg
+
+
+def _plazo_sugerido(db: Session, lineas: list[dict]) -> int | None:
+    """Mejora 10: días de plazo según el tipo de herramienta o maquinaria del carrito (el menor); None si no aplica."""
+    cfg = _plazos_config(db)
+    if not cfg.get("activo"):
+        return None
+    dias: list[int] = []
+    for l in lineas or []:
+        tipo, oid = str(l.get("tipo") or ""), int(l.get("id") or 0)
+        if tipo not in ("herramienta", "maquinaria") or oid <= 0:
+            continue
+        obj = db.get(Herramienta, oid) if tipo == "herramienta" else db.get(Maquinaria, oid)
+        if obj is None:
+            continue
+        cat = (getattr(obj, "categoria", None) or getattr(obj, "tipo", None) or "").strip()
+        d = (cfg.get("por_categoria") or {}).get(cat)
+        try:
+            d = int(d) if d not in (None, "") else int(cfg.get("por_defecto_dias") or 0)
+        except (TypeError, ValueError):
+            d = 0
+        if d > 0:
+            dias.append(d)
+    return min(dias) if dias else None
+
+
+@app.post("/api/mostrador/plazo-sugerido")
+async def api_mostrador_plazo_sugerido(request: Request, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    dias = _plazo_sugerido(db, list(body.get("lineas") or [])[:200])
+    if not dias:
+        return {"dias": None, "fecha": None}
+    fecha = (datetime.now() + timedelta(days=dias)).replace(hour=18, minute=0, second=0, microsecond=0)
+    return {"dias": dias, "fecha": fecha.strftime("%Y-%m-%dT%H:%M")}
+
+
+@app.get("/configuracion/plazos", response_class=HTMLResponse)
+def configuracion_plazos(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    cfg = _plazos_config(db)
+    cats = sorted({(c or "").strip() for (c,) in db.query(Herramienta.categoria).filter(Herramienta.activa == True).distinct() if c})
+    return templates.TemplateResponse(request, "configuracion_plazos.html", ctx_base(request, user, db, cfg=cfg, categorias=cats, guardado=request.query_params.get("ok")))
+
+
+@app.post("/configuracion/plazos", response_class=RedirectResponse)
+async def configuracion_plazos_guardar(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    form = await request.form()
+    por_cat = {}
+    for k, v in form.multi_items():
+        if k.startswith("cat:") and str(v).strip().isdigit() and int(v) > 0:
+            por_cat[k[4:]] = int(v)
+    defecto = str(form.get("por_defecto_dias") or "").strip()
+    cfg = {"activo": form.get("activo") == "1", "por_defecto_dias": int(defecto) if defecto.isdigit() else 7, "por_categoria": por_cat}
+    _ajuste_set(db, "plazos_devolucion", cfg)
+    db.commit()
+    return RedirectResponse("/configuracion/plazos?ok=1", status_code=303)
 
 
 def _alertas_consumo_obras_bg():
