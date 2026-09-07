@@ -9606,6 +9606,29 @@ LOCAL_ENV_PATH = BASE_DIR / "config" / "local.env"
 _RESUMEN_DIARIO_ESTADO = BASE_DIR / "config" / "resumen_diario_estado.json"
 
 
+def _ajuste_get(db: Session, clave: str, default=None):
+    """Lee un ajuste JSON de la tabla `ajustes` (2.7.76)."""
+    from models import Ajuste as _Aj
+    row = db.get(_Aj, clave)
+    if row is None or row.valor in (None, ""):
+        return default
+    try:
+        return json.loads(row.valor)
+    except ValueError:
+        return default
+
+
+def _ajuste_set(db: Session, clave: str, valor) -> None:
+    from models import Ajuste as _Aj
+    row = db.get(_Aj, clave)
+    if row is None:
+        row = _Aj(clave=clave)
+        db.add(row)
+    row.valor = json.dumps(valor, ensure_ascii=False)
+    row.actualizado_en = datetime.now()
+    db.flush()
+
+
 def _telegram_config() -> dict:
     return {"bot_token": os.getenv("MRD_TELEGRAM_BOT_TOKEN", "") or "", "chat_id": os.getenv("MRD_TELEGRAM_CHAT_ID", "") or "",
             "activo": (os.getenv("MRD_RESUMEN_DIARIO", "0") or "0") in ("1", "true", "si", "sí"),
@@ -10106,6 +10129,106 @@ def _consumo_obras_tabla(db: Session, hoy: date | None = None, semanas: int = 4)
 
 def _consumo_obras_anomalo(db: Session, hoy: date | None = None) -> list[dict]:
     return [f for f in _consumo_obras_tabla(db, hoy) if f["anomalo"]]
+
+
+_SALUD_LINEA = re.compile(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) \[ERROR\] (?:HTTP (\d{3}) en (\S+) — (.*)|Error no controlado en (\S+) — (.*))$")
+_SALUD_RUIDO = ("/favicon.ico", "/robots.txt", "/apple-touch-icon", "/.well-known/")
+_APP_INICIO = datetime.now()
+
+
+def _salud_ruta(path: str) -> str:
+    p = (path or "").split("?", 1)[0]
+    p = re.sub(r"/[0-9A-Fa-f]{20,}", "/{codigo}", p)
+    p = re.sub(r"/\d+", "/{id}", p)
+    return p[:120]
+
+
+def _salud_sugerencia(tipo: str, codigo: str) -> str:
+    if tipo == "excepcion":
+        return "Fallo de programación: se avisa por Telegram con el botón Arreglar; si no llega, avísame con la pantalla y la hora."
+    return {
+        "404": "Pantalla o enlace que ya no existe, o dirección escrita a mano. Si se repite mucho, hay un enlace roto en alguna pantalla.",
+        "403": "Sin permiso o sesión caducada: normal si alguien intenta entrar donde no debe; anómalo si es un usuario de la oficina.",
+        "401": "Sesión caducada: el navegador vuelve al acceso.",
+        "400": "Datos mal enviados por la pantalla (por ejemplo un código vacío o un formulario incompleto).",
+        "422": "Datos con formato inválido: el formulario manda algo que la ruta no admite.",
+        "409": "Conflicto de estado (stock insuficiente, pedido en otro estado): comportamiento correcto, no un fallo.",
+        "429": "Demasiados intentos seguidos (protección contra fuerza bruta).",
+        "500": "Fallo de programación: pide el arreglo desde Telegram o avísame.",
+    }.get(str(codigo), "Revisar si se repite.")
+
+
+def _salud_errores(dias: int = 7, ruta_log: Path | None = None) -> list[dict]:
+    """Errores del log agrupados por pantalla (mejora 9): tipo, código, ruta normalizada, veces, última vez, último detalle."""
+    ruta = Path(ruta_log) if ruta_log else (BASE_DIR / "logs" / "errores.log")
+    if not ruta.is_file():
+        return []
+    desde = (date.today() - timedelta(days=max(0, dias))).isoformat()
+    grupos: dict[tuple, dict] = {}
+    try:
+        with ruta.open("r", encoding="utf-8", errors="replace") as fh:
+            for linea in fh:
+                m = _SALUD_LINEA.match(linea.rstrip("\n"))
+                if not m:
+                    continue
+                fecha, hora, cod, ruta_http, det_http, ruta_exc, det_exc = m.groups()
+                if fecha < desde:
+                    continue
+                if cod:
+                    tipo, codigo, ruta_raw, detalle = "http", cod, ruta_http, det_http
+                else:
+                    tipo, codigo, ruta_raw, detalle = "excepcion", "500", ruta_exc, det_exc
+                if any(ruta_raw.startswith(x) for x in _SALUD_RUIDO):
+                    continue
+                clave = (tipo, codigo, _salud_ruta(ruta_raw))
+                g = grupos.get(clave)
+                if g is None:
+                    g = grupos[clave] = {"tipo": tipo, "codigo": codigo, "ruta": clave[2], "veces": 0, "primera": f"{fecha} {hora}", "ultima": "", "detalle": "", "ejemplo": ruta_raw}
+                g["veces"] += 1
+                g["ultima"] = f"{fecha} {hora}"
+                g["detalle"] = (detalle or "")[:200]
+    except OSError:
+        return []
+    salida = sorted(grupos.values(), key=lambda g: (g["tipo"] != "excepcion", -g["veces"]))
+    for g in salida:
+        g["sugerencia"] = _salud_sugerencia(g["tipo"], g["codigo"])
+        g["grave"] = g["tipo"] == "excepcion" or g["codigo"] in ("500",)
+    return salida
+
+
+@app.get("/configuracion/salud", response_class=HTMLResponse)
+def configuracion_salud(request: Request, dias: int = 7, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    dias = max(1, min(int(dias or 7), 90))
+    errores = _salud_errores(dias)
+    try:
+        humo = json.loads(_HUMO_ESTADO.read_text(encoding="utf-8")) if _HUMO_ESTADO.is_file() else {}
+    except ValueError:
+        humo = {}
+    try:
+        from backup_manager import get_backup_status as _gbs
+        copias = _gbs()
+    except Exception as exc:
+        copias = {"error": str(exc)}
+    try:
+        libre_gb = round(shutil.disk_usage(str(BASE_DIR)).free / 1024 ** 3, 1)
+    except OSError:
+        libre_gb = None
+    import threading as _thr
+    hilos = sorted(t.name for t in _thr.enumerate() if t.name.endswith("_bg"))
+    uptime = datetime.now() - _APP_INICIO
+    horas = int(uptime.total_seconds() // 3600)
+    pendientes = _ajuste_get(db, "seguridad_pendientes", {}) or {}
+    return templates.TemplateResponse(request, "salud_sistema.html", ctx_base(
+        request, user, db, errores=errores, dias=dias, humo=humo, copias=copias, libre_gb=libre_gb, hilos=hilos,
+        uptime_txt=(f"{horas // 24} días y {horas % 24} h" if horas >= 24 else f"{horas} h {int(uptime.total_seconds() // 60) % 60} min"),
+        inicio=_APP_INICIO, version_txt=leer_version_actual().get("version_actual", VERSION),
+        graves=sum(1 for e in errores if e["grave"]), pendientes_seguridad=_PENDIENTES_SEGURIDAD, pendientes_estado=pendientes,
+    ))
+
+
+_PENDIENTES_SEGURIDAD: list[dict] = []
 
 
 def _alertas_consumo_obras_bg():

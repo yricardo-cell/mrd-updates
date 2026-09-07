@@ -2792,3 +2792,11 @@ class KitTrabajoLinea(Base):
     cantidad = Column(Integer, nullable=False, default=1)
 
     kit = relationship("KitTrabajo", back_populates="lineas")
+
+
+class Ajuste(Base):
+    """Ajustes de la instalación en clave/valor JSON (2.7.76): plazos de devolución por tipo, planes, pendientes…"""
+    __tablename__ = "ajustes"
+    clave = Column(String(80), primary_key=True)
+    valor = Column(Text, nullable=True)
+    actualizado_en = Column(DateTime, nullable=True)
