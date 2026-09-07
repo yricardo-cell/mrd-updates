@@ -17978,10 +17978,27 @@ def portal_trabajador(token: str, request: Request, db: Session = Depends(get_db
         "dotacion_lineas": dotacion_lineas,
         "historial_portal": historial_portal,
         "ultimo_pedido": ultimo_pedido, "frecuentes": frecuentes,
+        "t": _portal_traductor(t.idioma), "idioma": (t.idioma or "es"), "idiomas": PORTAL_IDIOMAS,
     })
     response.headers["Cache-Control"] = "no-store, private"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
+
+
+# ─── Idioma del portal del trabajador (P5): castellano o rumano ──────────────
+
+PORTAL_IDIOMAS = {"es": "Español", "ro": "Română"}
+
+PORTAL_TEXTOS: dict[str, dict[str, str]] = {"ro": {'Lo que tengo': 'Ce am la mine', 'Mi historial': 'Istoricul meu', 'Escanear': 'Scanează', 'Solicitar': 'Cere material', 'Seguimiento': 'Urmărire', 'Devolver': 'Returnează', 'Incidencias': 'Incidente', 'Albaranes': 'Avize de livrare', 'Buzón': 'Sugestii', 'Mi cuenta': 'Contul meu', 'Instalar': 'Instalează', 'Salir': 'Ieșire', 'MI ESPACIO MRD': 'SPAȚIUL MEU MRD', 'CARNET DIGITAL MRD': 'LEGITIMAȚIE DIGITALĂ MRD', 'Trabajador': 'Muncitor', 'AVISOS': 'ANUNȚURI', 'Notificaciones': 'Notificări', 'TU INVENTARIO PERSONAL': 'INVENTARUL TĂU PERSONAL', 'PROTECCIÓN': 'PROTECȚIE', 'Tu EPI': 'Echipamentul tău de protecție', 'ESCÁNER': 'SCANER', 'Escanear una herramienta': 'Scanează o sculă', 'TU ACTIVIDAD': 'ACTIVITATEA TA', 'PEDIDO AL ALMACÉN': 'COMANDĂ LA DEPOZIT', '¿Qué necesitas?': 'De ce ai nevoie?', 'SEGUIMIENTO': 'URMĂRIRE', 'Mis solicitudes': 'Cererile mele', 'DOCUMENTOS': 'DOCUMENTE', 'Mis albaranes': 'Avizele mele', 'ESCUCHA ACTIVA': 'ASCULTARE ACTIVĂ', 'Quejas y sugerencias': 'Reclamații și sugestii', 'DEVOLUCIONES': 'RETURURI', 'Solicitar una devolución': 'Cere o returnare', 'AYUDA RÁPIDA': 'AJUTOR RAPID', 'Comunicar una incidencia': 'Raportează un incident', 'IDENTIDAD Y SEGURIDAD': 'IDENTITATE ȘI SECURITATE', 'SEGURIDAD': 'SIGURANȚĂ', 'Documentación personal': 'Documente personale', 'Mis datos de contacto': 'Datele mele de contact', 'Teléfono': 'Telefon', 'Correo': 'E-mail', 'PIN actual para confirmar': 'PIN-ul actual pentru confirmare', 'Guardar datos': 'Salvează datele', 'Cambiar mi PIN': 'Schimbă PIN-ul', 'PIN actual': 'PIN-ul actual', 'PIN nuevo': 'PIN nou', 'Repite el PIN': 'Repetă PIN-ul', 'Cambiar PIN': 'Schimbă PIN-ul', 'Dispositivos conectados': 'Dispozitive conectate', 'Cerrar las demás sesiones': 'Închide celelalte sesiuni', 'Idioma': 'Limba', 'Elige el idioma en el que quieres ver tu portal.': 'Alege limba în care vrei să vezi portalul tău.', 'Confirmar recogida': 'Confirmă ridicarea', 'Borrar firma': 'Șterge semnătura', 'Firma con el dedo para confirmar que lo has recogido:': 'Semnează cu degetul pentru a confirma că ai ridicat materialul:', 'Enviar': 'Trimite', 'Enviar al almacén': 'Trimite la depozit', 'Cancelar solicitud': 'Anulează cererea', 'Marcar leídas': 'Marchează ca citite', 'Comunicar incidencia': 'Raportează incidentul', 'Enviar devolución': 'Trimite returnarea', 'Repetir mi último pedido': 'Repetă ultima mea comandă', 'Lo que sueles pedir:': 'Ce ceri de obicei:', 'Tipo': 'Tip', 'Fotos (hasta 5, opcional)': 'Poze (până la 5, opțional)', '¿Qué ha pasado?': 'Ce s-a întâmplat?', 'Tipo de activo': 'Tip de bun', 'Qué ha ocurrido': 'Ce s-a întâmplat', 'Privacidad': 'Confidențialitate', 'Prioridad': 'Prioritate', 'Obra o destino': 'Șantier sau destinație', 'Obra (opcional)': 'Șantier (opțional)', 'Nombre del activo': 'Numele bunului', 'Motivo': 'Motiv', 'Mensaje': 'Mesaj', 'Estado': 'Stare', 'Detalle (opcional)': 'Detalii (opțional)', 'Código': 'Cod', 'Código o QR': 'Cod sau QR', 'Categoría': 'Categorie', 'Cantidad': 'Cantitate', 'Asunto': 'Subiect', 'Artículo': 'Articol', 'Solicitud registrada': 'Cerere înregistrată', 'Mensaje recibido': 'Mesaj primit', 'Incidencia registrada': 'Incident înregistrat', 'Devolución registrada': 'Returnare înregistrată', 'Datos guardados': 'Date salvate', 'PIN cambiado': 'PIN schimbat', 'Sesiones cerradas': 'Sesiuni închise', 'Solicitud cancelada': 'Cerere anulată', 'Comentario enviado': 'Comentariu trimis', 'Recogida confirmada': 'Ridicare confirmată', 'Idioma cambiado': 'Limba a fost schimbată', 'Operación completada': 'Operațiune finalizată', 'Gracias, queda anotado que tienes todo lo de tu lista': 'Mulțumim, am notat că ai tot ce este pe lista ta', 'Anotado: el almacén lo revisará': 'Notat: depozitul va verifica', 'Anotado: el almacén revisará que esa herramienta está contigo y la pondrá a tu nombre': 'Notat: depozitul va verifica că scula este la tine și o va trece pe numele tău'}}
+
+
+def _portal_traductor(idioma: str | None):
+    """Devuelve t(texto): el texto traducido si hay traducción para ese idioma, o el mismo texto."""
+    tabla = PORTAL_TEXTOS.get((idioma or "es").lower(), {})
+
+    def t(texto):
+        return tabla.get(texto, texto)
+    return t
 
 
 def _portal_lo_que_tengo(db: Session, t: Trabajador) -> list[dict]:
@@ -18410,6 +18427,19 @@ async def portal_actualizar_perfil(token: str, request: Request, db: Session = D
     ))
     db.commit()
     return RedirectResponse(f"/portal/{token}?ok=perfil#cuenta", status_code=303)
+
+
+@app.post("/portal/{token}/idioma", response_class=RedirectResponse)
+async def portal_cambiar_idioma(token: str, request: Request, db: Session = Depends(get_db)):
+    """El trabajador elige el idioma de su portal (P5)."""
+    worker = _portal_worker_required(token, request, db)
+    form = await request.form()
+    idioma = str(form.get("idioma") or "es").strip().lower()
+    if idioma not in PORTAL_IDIOMAS:
+        raise HTTPException(422, "Idioma no disponible")
+    worker.idioma = idioma
+    db.commit()
+    return RedirectResponse(f"/portal/{token}?ok=idioma#cuenta", status_code=303)
 
 
 @app.post("/portal/{token}/solicitudes/{request_id}/cancelar", response_class=RedirectResponse)
