@@ -220,6 +220,7 @@ def leer_historial() -> list:
     return []
 import remote_access
 import mrd_logging
+import security_events
 import automatizaciones as auto_engine
 import notificaciones as notif_engine
 import push_service
@@ -533,6 +534,7 @@ _CSRF_EXENTOS = {
 }
 
 def _csrf_403(request: Request, detalle: str = "") -> Response:
+    security_events.emitir("csrf_invalido", request)
     msg = detalle or "Token de seguridad inválido. Recarga la página e inténtalo de nuevo."
     accept = request.headers.get("accept", "")
     if "application/json" in accept:
@@ -713,6 +715,8 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException):
         return RedirectResponse("/login", status_code=303)
     detail = str(exc.detail) if exc.detail else ""
     mrd_logging.log_error(f"HTTP {exc.status_code} en {request.url.path} — {detail}")
+    if exc.status_code in (403, 404):
+        security_events.emitir(f"http_{exc.status_code}", request)
     if request.url.path == "/admin/reiniciar":
         return JSONResponse({"detail": detail}, status_code=exc.status_code)
     if json_api:
@@ -1240,6 +1244,7 @@ def login_post(
 
     if not _puede_intentar_login(clave_rl):
         segundos = _segundos_bloqueo(clave_rl)
+        security_events.emitir("login_fallido", request, usuario=username, detalle="rechazado por limite de intentos")
         return templates.TemplateResponse(request,
             "login.html",
             {"request": request, "app_name": APP_NAME,
@@ -1253,6 +1258,7 @@ def login_post(
     if not user or not verificar_password(password, user.password_hash):
         _registrar_fallo_login(clave_rl)
         mrd_logging.log_security(f"Login fallido: usuario='{username}' ip={ip}")
+        security_events.emitir("login_fallido", request, usuario=username)
         return templates.TemplateResponse(request,
             "login.html",
             {"request": request, "app_name": APP_NAME, "error": "Usuario o contraseña incorrectos"},
@@ -1281,6 +1287,7 @@ def _emitir_sesion(request: Request, db: Session, user: Usuario, ip: str) -> Red
     """Registra el login y emite las cookies de sesión (mrd_token + CSRF).
     Punto único usado tanto por /login directo como tras completar el 2FA."""
     mrd_logging.log_security(f"Login exitoso: usuario='{user.username}' ip={ip}", level="info")
+    security_events.emitir("login_ok", request, usuario=user.username)
     user.last_login = datetime.utcnow()
     registrar_auditoria(
         db, "sesiones", user.id, "login", user.id, None,
@@ -1377,6 +1384,7 @@ def login_2fa_post(
     clave_rl = f"2fa:{ip}:{user.username}"
     if not _puede_intentar_login(clave_rl):
         segundos = _segundos_bloqueo(clave_rl)
+        security_events.emitir("fa2_fallido", request, usuario=user.username, detalle="rechazado por limite de intentos")
         return templates.TemplateResponse(request,
             "login_2fa.html",
             {"request": request, "app_name": APP_NAME,
@@ -1389,6 +1397,7 @@ def login_2fa_post(
     if not user.totp_secret or not totp.verify(codigo.strip(), valid_window=1):
         _registrar_fallo_login(clave_rl)
         mrd_logging.log_security(f"Código 2FA incorrecto: usuario='{user.username}' ip={ip}")
+        security_events.emitir("fa2_fallido", request, usuario=user.username)
         return templates.TemplateResponse(request,
             "login_2fa.html",
             {"request": request, "app_name": APP_NAME, "error": "Código incorrecto"},
@@ -17580,6 +17589,7 @@ def portal_trabajador_acceso(
     ip = request.client.host if request.client else "unknown"
     rate_key = f"worker:{ip}:{identifier.upper()}"
     if not _puede_intentar_login(rate_key):
+        security_events.emitir("portal_login_fallido", request, usuario=identifier.upper(), detalle="rechazado por limite de intentos")
         return templates.TemplateResponse(request, "portal_trabajador_login.html", {
             "request": request, "codigo": identifier,
             "error": "Demasiados intentos. Espera unos minutos.",
@@ -17594,6 +17604,7 @@ def portal_trabajador_acceso(
     ).first()
     if not worker or not worker.portal_pin_hash or not verificar_password(clean_pin, worker.portal_pin_hash):
         _registrar_fallo_login(rate_key)
+        security_events.emitir("portal_login_fallido", request, usuario=identifier.upper())
         time.sleep(0.2)
         return templates.TemplateResponse(request, "portal_trabajador_login.html", {
             "request": request, "codigo": identifier,

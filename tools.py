@@ -174,6 +174,13 @@ def registrar_auditoria(
         # No hace commit aquí — lo hace el caller junto con el resto de cambios
     except Exception as exc:
         logger.error("registrar_auditoria error: %s", exc)
+    # Guardián (MRD Sentinel): los cambios en tablas sensibles (usuarios,
+    # configuración) se anotan también como evento de seguridad. Nunca rompe el flujo.
+    try:
+        import security_events
+        security_events.emitir_auditoria_sensible(tabla, accion, usuario_id, resumen, ip)
+    except Exception as exc:
+        logger.error("security_events desde auditoria: %s", exc)
 
 
 def snapshot_herramienta(h) -> dict:

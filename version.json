@@ -1,11 +1,12 @@
 {
-    "version_actual":  "2.7.68",
+    "version_actual":  "2.7.69",
     "nombre":  "MRD TOOL CONTROL",
     "edicion":  "Centro operativo avanzado de almacenes",
-    "version_anterior":  "2.7.67",
+    "version_anterior":  "2.7.68",
     "fecha":  "2026-09-07",
     "estado":  "estable",
     "cambios":  [
+                    "Guardián Fase 2 (MRD Sentinel 1.9.0): MRD anota eventos de seguridad estructurados en logs/eventos_seguridad.jsonl (login fallido y correcto, intentos rechazados por el límite, código 2FA erróneo, CSRF inválido, respuestas 403/404, login fallido del portal del trabajador y cambios en usuarios o configuración) con IP real y país de Cloudflare, nunca contraseñas ni tokens; Sentinel los lee y aplica sus reglas de detección (ráfaga de contraseñas, ataque masivo, país desconocido, rastreo, cambios fuera de horario). Vigilancia mutua: MRD comprueba cada minuto que Sentinel responde y, tras tres fallos seguidos, avisa por Telegram y con un aviso interno, y avisa también al recuperarse. Nuevo security_events.py. Prueba: tests/test_security_events.py.",
                     "Localizador visual puesto al día con la Vista de la nave: al buscar o escanear te dice en qué hueco está (zona, contenedor o balda) con la foto del hueco, y botones «Ver en la nave», «Recontar» y «Colocar / Cambiar de hueco». Accesos directos a la Vista de la nave, Zonas en 3D, Colocar por escáner y Recuento por hueco."
                 ],
     "notas":  "Mostrador Único transaccional, QR universal, pistola global, plano real y continuidad 24x7.",

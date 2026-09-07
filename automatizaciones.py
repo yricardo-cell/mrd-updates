@@ -874,6 +874,12 @@ def _scheduler_loop():
                             logger.error(f"Backup automático fallido: {res_backup.get('error')}")
                     except Exception as _be:
                         logger.debug(f"Backup automático: {_be}")
+                    # Vigilancia mutua: MRD comprueba que el guardián (Sentinel) responde
+                    try:
+                        import security_events as _sec
+                        _sec.vigilar_sentinel(db)
+                    except Exception as _se:
+                        logger.debug(f"Vigilancia de Sentinel: {_se}")
                     # Recargar listeners
                     recargar_listeners_desde_db(db)
                 finally:
