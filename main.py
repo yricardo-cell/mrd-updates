@@ -10094,6 +10094,138 @@ def informe_consumo_obras(request: Request, user: Usuario = Depends(requiere_log
     ))
 
 
+# ─── Coste por herramienta y por obra (mejora 29) ────────────────────────────
+
+COSTES_VIDA_UTIL_DEFECTO = 5   # años, si la herramienta no tiene vida útil
+
+
+def _costes_periodos_fuera(db: Session, desde: datetime, hasta: datetime) -> list[dict]:
+    """Periodos (herramienta, obra, trabajador, días) entre cada entrega/traslado y la siguiente devolución, recortados al intervalo."""
+    movs = db.query(Movimiento).filter(Movimiento.herramienta_id.isnot(None), Movimiento.tipo.in_(["entrega", "traslado", "devolucion", "devolucion_reparacion"])).order_by(Movimiento.herramienta_id, Movimiento.id).all()
+    abiertos: dict[int, Movimiento] = {}
+    periodos = []
+
+    def _cerrar(ini, fin_dt):
+        ini_dt = _utc_a_local(ini.fecha) if ini.fecha else desde
+        a, b = max(ini_dt, desde), min(fin_dt, hasta)
+        dias = max(0.0, (b - a).total_seconds() / 86400.0)
+        if dias > 0:
+            periodos.append({"herramienta_id": ini.herramienta_id, "obra_id": ini.obra_id, "trabajador_id": ini.trabajador_id, "dias": dias})
+
+    for m in movs:
+        if m.tipo in ("entrega", "traslado"):
+            if m.herramienta_id in abiertos:
+                _cerrar(abiertos[m.herramienta_id], _utc_a_local(m.fecha) if m.fecha else hasta)
+            abiertos[m.herramienta_id] = m
+        else:
+            ini = abiertos.pop(m.herramienta_id, None)
+            if ini is not None:
+                _cerrar(ini, _utc_a_local(m.fecha) if m.fecha else hasta)
+    for ini in abiertos.values():
+        _cerrar(ini, hasta)
+    return periodos
+
+
+def _costes_herramientas(db: Session, dias: int = 365, warehouse_id: int | None = None) -> list[dict]:
+    hasta = datetime.now()
+    desde = hasta - timedelta(days=dias)
+    dias_por_h: dict[int, float] = {}
+    for p in _costes_periodos_fuera(db, desde, hasta):
+        dias_por_h[p["herramienta_id"]] = dias_por_h.get(p["herramienta_id"], 0.0) + p["dias"]
+    rep: dict[int, float] = {}
+    for r in db.query(Reparacion).filter(Reparacion.fecha_entrada >= desde).all():
+        rep[r.herramienta_id] = rep.get(r.herramienta_id, 0.0) + float(r.coste_final if r.coste_final is not None else (r.coste_estimado or 0))
+    mant: dict[int, float] = {}
+    for mp in db.query(MantenimientoProgramado).filter(MantenimientoProgramado.tipo_activo == "herramienta", MantenimientoProgramado.fecha_programada >= desde).all():
+        mant[mp.activo_id] = mant.get(mp.activo_id, 0.0) + float(mp.coste_real if mp.coste_real is not None else (mp.coste_estimado or 0))
+    q = db.query(Herramienta).filter(Herramienta.activa == True)
+    if warehouse_id:
+        q = q.filter(Herramienta.almacen_id == warehouse_id)
+    filas = []
+    for h in q.all():
+        precio = float(h.precio_compra or 0)
+        vida = int(h.vida_util_anos or 0) or COSTES_VIDA_UTIL_DEFECTO
+        amort_dia = precio / (vida * 365.0) if precio else 0.0
+        r_, m_ = rep.get(h.id, 0.0), mant.get(h.id, 0.0)
+        coste_dia = amort_dia + (r_ + m_) / 365.0
+        d_fuera = round(dias_por_h.get(h.id, 0.0), 1)
+        filas.append({"id": h.id, "codigo": h.codigo or "", "nombre": h.nombre, "precio_compra": round(precio, 2), "vida_util": vida,
+                      "reparaciones": round(r_, 2), "mantenimiento": round(m_, 2), "coste_dia": round(coste_dia, 2), "dias_fuera": d_fuera,
+                      "coste_uso": round(coste_dia * d_fuera, 2), "estado": h.estado or ""})
+    filas.sort(key=lambda f: (-f["coste_uso"], -f["reparaciones"], f["nombre"]))
+    return filas
+
+
+def _costes_obras(db: Session, dias: int = 365) -> list[dict]:
+    hasta = datetime.now()
+    desde = hasta - timedelta(days=dias)
+    herr = _costes_herramientas(db, dias)
+    coste_dia = {f["id"]: f["coste_dia"] for f in herr}
+    nombres = {f["id"]: f["nombre"] for f in herr}
+    obras: dict[int, dict] = {}
+
+    def _o(oid):
+        if oid not in obras:
+            ob = db.get(Obra, oid)
+            obras[oid] = {"obra_id": oid, "obra": ob.nombre if ob else f"Obra {oid}", "numero": (ob.numero if ob else "") or "", "herramientas": {}, "dias": 0.0, "coste_herramientas": 0.0, "materiales": {}, "coste_materiales": 0.0}
+        return obras[oid]
+
+    for p in _costes_periodos_fuera(db, desde, hasta):
+        if not p["obra_id"]:
+            continue
+        o = _o(p["obra_id"])
+        o["dias"] += p["dias"]
+        o["coste_herramientas"] += p["dias"] * coste_dia.get(p["herramienta_id"], 0.0)
+        hn = nombres.get(p["herramienta_id"], f"Herramienta {p['herramienta_id']}")
+        o["herramientas"][hn] = o["herramientas"].get(hn, 0.0) + p["dias"]
+    for mm in db.query(MovimientoMaterial).filter(MovimientoMaterial.obra_id.isnot(None), MovimientoMaterial.tipo.in_(CONSUMO_TIPOS), MovimientoMaterial.fecha >= desde).all():
+        o = _o(mm.obra_id)
+        mat = db.get(Material, mm.material_id)
+        qty = abs(float(mm.cantidad or 0))
+        o["coste_materiales"] += qty * float((mat.precio_unidad if mat else 0) or 0)
+        mn = mat.nombre if mat else f"Material {mm.material_id}"
+        o["materiales"][mn] = o["materiales"].get(mn, 0.0) + qty
+    filas = []
+    for o in obras.values():
+        filas.append({**o, "dias": round(o["dias"], 1), "coste_herramientas": round(o["coste_herramientas"], 2), "coste_materiales": round(o["coste_materiales"], 2),
+                      "total": round(o["coste_herramientas"] + o["coste_materiales"], 2),
+                      "herramientas_txt": ", ".join(f"{k} ({v:.0f} d)" for k, v in sorted(o["herramientas"].items(), key=lambda x: -x[1])[:8]),
+                      "materiales_txt": ", ".join(f"{k} ({v:g})" for k, v in sorted(o["materiales"].items(), key=lambda x: -x[1])[:8])})
+    filas.sort(key=lambda f: -f["total"])
+    return filas
+
+
+@app.get("/informes/costes", response_class=HTMLResponse)
+def informe_costes(request: Request, dias: int = 365, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    dias = max(30, min(int(dias or 365), 1095))
+    warehouse = _active_warehouse(db, user, request)
+    herr = _costes_herramientas(db, dias, warehouse.id if warehouse else None)
+    return templates.TemplateResponse(request, "informe_costes.html", ctx_base(
+        request, user, db, herramientas=herr[:200], obras=_costes_obras(db, dias), dias=dias,
+        total_uso=round(sum(f["coste_uso"] for f in herr), 2), total_rep=round(sum(f["reparaciones"] + f["mantenimiento"] for f in herr), 2),
+    ))
+
+
+@app.get("/informes/costes/excel")
+def informe_costes_excel(request: Request, dias: int = 365, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    from openpyxl import Workbook
+    import io as _io
+    dias = max(30, min(int(dias or 365), 1095))
+    wb = Workbook()
+    ws = wb.active; ws.title = "Herramientas"
+    ws.append(["Código", "Herramienta", "Precio compra (€)", "Vida útil (años)", "Reparaciones (€)", "Mantenimiento (€)", "Coste por día (€)", "Días fuera", "Coste de uso (€)", "Estado"])
+    for f in _costes_herramientas(db, dias):
+        ws.append([f["codigo"], f["nombre"], f["precio_compra"], f["vida_util"], f["reparaciones"], f["mantenimiento"], f["coste_dia"], f["dias_fuera"], f["coste_uso"], f["estado"]])
+    ws2 = wb.create_sheet("Obras")
+    ws2.append(["Obra", "Número", "Días de herramienta", "Coste herramientas (€)", "Coste materiales (€)", "Total (€)", "Herramientas", "Materiales"])
+    for o in _costes_obras(db, dias):
+        ws2.append([o["obra"], o["numero"], o["dias"], o["coste_herramientas"], o["coste_materiales"], o["total"], o["herramientas_txt"], o["materiales_txt"]])
+    buf = _io.BytesIO(); wb.save(buf); buf.seek(0)
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=costes_{date.today().isoformat()}.xlsx"})
+
+
 def _ensayo_restauracion_bg():
     """Ensayo de restauración semanal automático (2.7.69)."""
     try:
