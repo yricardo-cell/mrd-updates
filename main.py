@@ -28,6 +28,7 @@ from typing import Optional, Dict, Any, Literal
 import json
 import io
 import hashlib
+import math
 import base64
 import secrets
 from collections import OrderedDict
@@ -1007,6 +1008,7 @@ def startup_event():
                     _limpieza_automatica_bg()
                     _alertas_consumo_obras_bg()
                     _pedidos_sin_fecha_bg()
+                    _punto_pedido_bg()
                     _reservas_conflictos_bg()
                     _tm.sleep(6*3600)  # cada 6 horas
             _thr.Thread(target=_run_alerts, daemon=True, name="alertas_bg").start()
@@ -10848,6 +10850,161 @@ def informe_tiempos_pedidos_excel(semanas: int = 8, user: Usuario = Depends(requ
     datos = _xl("Tiempo de respuesta del almacén", ["Semana", "Pedidos", "Horas pedido→listo", "Horas listo→recogido", "Listos sin recoger"],
                 [[g["semana"], g["pedidos"], g["media_h_listo"] if g["media_h_listo"] is not None else "", g["media_h_recogido"] if g["media_h_recogido"] is not None else "", g["sin_recoger"]] for g in d["semanas"]], [14, 10, 20, 22, 18])
     return Response(content=datos, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=tiempos_pedidos.xlsx"})
+
+
+# ─── Punto de pedido automático (mejora 22) ──────────────────────────────────
+_PUNTO_PEDIDO_DEFECTO = {"activo": False, "dias_cobertura": 14, "dias_historial": 90, "auto_borrador": True}
+_PUNTO_PEDIDO_ESTADO = BASE_DIR / "config" / "punto_pedido_estado.json"
+
+
+def _punto_pedido_config(db: Session) -> dict:
+    cfg = dict(_PUNTO_PEDIDO_DEFECTO)
+    cfg.update(_ajuste_get(db, "punto_pedido", {}) or {})
+    return cfg
+
+
+def _consumo_diario(db: Session, material_id: int, dias: int = 90) -> float:
+    desde = datetime.now() - timedelta(days=dias)
+    total = db.query(func.coalesce(func.sum(MovimientoMaterial.cantidad), 0.0)).filter(
+        MovimientoMaterial.material_id == material_id, MovimientoMaterial.tipo.in_(("salida", "consumo", "entrega")),
+        MovimientoMaterial.fecha >= desde).scalar() or 0.0
+    return float(total) / max(1, dias)
+
+
+def _punto_pedido_sugerido(db: Session, m, cfg: dict | None = None) -> dict:
+    cfg = cfg or _punto_pedido_config(db)
+    consumo = _consumo_diario(db, m.id, int(cfg.get("dias_historial") or 90))
+    sugerido = int(math.ceil(consumo * int(cfg.get("dias_cobertura") or 14))) if consumo > 0 else 0
+    paquete = int(m.unidades_por_paquete or 1)
+    if sugerido and paquete > 1:
+        sugerido = int(math.ceil(sugerido / paquete) * paquete)
+    return {"material": m, "consumo_dia": round(consumo, 2), "sugerido": sugerido, "actual": float(m.stock_minimo or 0), "stock": float(m.stock_actual or 0),
+            "cambia": sugerido > 0 and abs(sugerido - float(m.stock_minimo or 0)) >= 1}
+
+
+def _punto_pedido_tabla(db: Session, warehouse_id: int | None = None) -> list[dict]:
+    cfg = _punto_pedido_config(db)
+    q = db.query(Material).filter(Material.activo == True)
+    if warehouse_id:
+        q = q.filter(or_(Material.almacen_id == warehouse_id, Material.almacen_id.is_(None)))
+    filas = [_punto_pedido_sugerido(db, m, cfg) for m in q.order_by(Material.nombre).all()]
+    filas.sort(key=lambda f: (-(f["consumo_dia"] > 0), -f["consumo_dia"]))
+    return filas
+
+
+def _punto_pedido_aplicar(db: Session, ids: list[int] | None, usuario_id: int | None) -> int:
+    """Pone el mínimo sugerido en los materiales indicados (o en todos los que tienen consumo)."""
+    cfg = _punto_pedido_config(db)
+    n = 0
+    q = db.query(Material).filter(Material.activo == True)
+    if ids:
+        q = q.filter(Material.id.in_(ids))
+    for m in q.all():
+        f = _punto_pedido_sugerido(db, m, cfg)
+        if f["sugerido"] > 0 and f["cambia"]:
+            m.stock_minimo = float(f["sugerido"])
+            n += 1
+    if n:
+        db.add(AuditoriaLog(tabla="materiales", registro_id=0, accion="punto_pedido", resumen=f"Mínimos recalculados por consumo: {n} materiales", usuario_id=usuario_id))
+    return n
+
+
+def _punto_pedido_borrador(db: Session, usuario_id: int | None) -> int:
+    """Crea un pedido a proveedor en borrador con lo que está por debajo del mínimo y no está ya en un pedido abierto."""
+    abiertos = db.query(PedidoProveedor).filter(PedidoProveedor.estado.in_(("borrador", "enviado", "parcial"))).all()
+    ya = {(l.tipo, l.objeto_id) for p in abiertos for l in p.lineas}
+    faltan = [m for m in db.query(Material).filter(Material.activo == True).all() if (m.stock_minimo or 0) > 0 and float(m.stock_actual or 0) < float(m.stock_minimo) and ("material", m.id) not in ya]
+    if not faltan:
+        return 0
+    por_almacen: dict = {}
+    for m in faltan:
+        por_almacen.setdefault(m.almacen_id, []).append(m)
+    if usuario_id is None:
+        admin = db.query(Usuario).filter(Usuario.rol == "admin", Usuario.activo == True).order_by(Usuario.id).first()
+        usuario_id = admin.id if admin else None
+    creados = 0
+    for alm_id, mats in por_almacen.items():
+        if alm_id is None:
+            alm = db.query(Almacen).filter(Almacen.activo == True).order_by(Almacen.id).first()
+            alm_id = alm.id if alm else None
+        if alm_id is None or usuario_id is None:
+            continue
+        pedido = PedidoProveedor(numero=f"PED-{datetime.now():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}", almacen_id=alm_id, estado="borrador",
+                                 creado_por_id=usuario_id, notas="Borrador automático por punto de pedido (mejora 22): revisa cantidades y proveedor antes de enviar.")
+        db.add(pedido)
+        db.flush()
+        for m in mats:
+            cant = _cantidad_sugerida(float(m.stock_actual or 0), float(m.stock_minimo or 0), int(m.unidades_por_paquete or 1))
+            db.add(LineaPedidoProveedor(pedido_id=pedido.id, tipo="material", objeto_id=m.id, referencia=m.codigo or "", descripcion=m.nombre, cantidad_pedida=cant, cantidad_recibida=0, precio_anterior=m.precio_unidad))
+        db.add(Aviso(titulo=f"Pedido a proveedor en borrador: {len(mats)} materiales bajo mínimo", mensaje="Creado automáticamente por el punto de pedido. Revísalo y envíalo desde Pedidos a proveedor.",
+                     prioridad="media", tipo="stock", enlace="/pedidos-proveedor"))
+        creados += 1
+    return creados
+
+
+def _punto_pedido_bg(db_externa=None, ahora: datetime | None = None):
+    """Semanal: recalcula mínimos por consumo y, si está activado, deja el borrador de pedido con lo que falta."""
+    from database import SessionLocal as _SL
+    ahora = ahora or datetime.now()
+    try:
+        estado = json.loads(_PUNTO_PEDIDO_ESTADO.read_text(encoding="utf-8")) if _PUNTO_PEDIDO_ESTADO.is_file() else {}
+    except ValueError:
+        estado = {}
+    if db_externa is None and estado.get("semana") == ahora.strftime("%G-%V"):
+        return None
+    db = db_externa or _SL()
+    try:
+        cfg = _punto_pedido_config(db)
+        if not cfg.get("activo"):
+            return {"activo": False}
+        n = _punto_pedido_aplicar(db, None, None)
+        pedidos = _punto_pedido_borrador(db, None) if cfg.get("auto_borrador") else 0
+        db.commit()
+        res = {"minimos": n, "pedidos": pedidos}
+        if db_externa is None:
+            _PUNTO_PEDIDO_ESTADO.write_text(json.dumps({"semana": ahora.strftime("%G-%V"), **res}), encoding="utf-8")
+        return res
+    except Exception as exc:
+        db.rollback()
+        mrd_logging.log_error(f"Punto de pedido: {exc}")
+        return None
+    finally:
+        if db_externa is None:
+            db.close()
+
+
+@app.get("/materiales/punto-pedido", response_class=HTMLResponse)
+def materiales_punto_pedido(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if not (tiene_permiso(user, "editar") or tiene_permiso(user, "stock_operar")):
+        raise HTTPException(403, "Sin permiso")
+    return templates.TemplateResponse(request, "materiales_punto_pedido.html", ctx_base(request, user, db, filas=_punto_pedido_tabla(db), cfg=_punto_pedido_config(db), ok=request.query_params.get("ok")))
+
+
+@app.post("/materiales/punto-pedido", response_class=RedirectResponse)
+async def materiales_punto_pedido_post(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if not (tiene_permiso(user, "editar") or tiene_permiso(user, "stock_operar")):
+        raise HTTPException(403, "Sin permiso")
+    form = await request.form()
+    accion = str(form.get("accion") or "")
+    if accion == "config":
+        if user.rol != "admin":
+            raise HTTPException(403, "Solo administración")
+        cfg = {"activo": form.get("activo") == "1", "auto_borrador": form.get("auto_borrador") == "1",
+               "dias_cobertura": int(form.get("dias_cobertura")) if str(form.get("dias_cobertura") or "").isdigit() else 14,
+               "dias_historial": int(form.get("dias_historial")) if str(form.get("dias_historial") or "").isdigit() else 90}
+        _ajuste_set(db, "punto_pedido", cfg)
+        db.commit()
+        return RedirectResponse("/materiales/punto-pedido?ok=config", status_code=303)
+    if accion == "aplicar":
+        ids = [int(x) for x in form.getlist("material_id") if str(x).isdigit()]
+        n = _punto_pedido_aplicar(db, ids or None, user.id)
+        db.commit()
+        return RedirectResponse(f"/materiales/punto-pedido?ok={n}", status_code=303)
+    if accion == "borrador":
+        n = _punto_pedido_borrador(db, user.id)
+        db.commit()
+        return RedirectResponse(f"/materiales/punto-pedido?ok=pedido{n}", status_code=303)
+    raise HTTPException(400, "Acción desconocida")
 
 
 def _alertas_consumo_obras_bg():
