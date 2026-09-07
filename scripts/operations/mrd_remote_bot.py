@@ -21,7 +21,7 @@ CONFIG_PATH = ROOT / "config.json"
 STATE_PATH = ROOT / "state.json"
 LOG_PATH = ROOT / "logs" / "bot.log"
 TASK_LOG_DIR = ROOT / "logs" / "tasks"
-INSTANCE_LOCK_PATH = ROOT / "bot.lock"
+INSTANCE_LOCK_PATH = ROOT / "bot_remote.lock"   # bot.lock lo retiene un proceso del sistema tras el reinicio del 08/09/2026
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 INSTANCE_LOCK = None
 
