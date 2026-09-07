@@ -2702,3 +2702,30 @@ def _normalize_scannable_identifiers(_mapper, _connection, target):
 for _scannable_model in _SCANNABLE_FIELDS:
     sqlalchemy_event.listen(_scannable_model, "before_insert", _normalize_scannable_identifiers)
     sqlalchemy_event.listen(_scannable_model, "before_update", _normalize_scannable_identifiers)
+
+
+class ComunicadoEmpresa(Base):
+    """Aviso de la empresa a los trabajadores (mejora 17): norma nueva, EPI obligatorio en una obra..."""
+    __tablename__ = "comunicados_empresa"
+
+    id = Column(Integer, primary_key=True)
+    titulo = Column(String(200), nullable=False)
+    texto = Column(Text, nullable=False)
+    obligatorio = Column(Boolean, nullable=False, default=True)   # exige marcar "Leído"
+    activo = Column(Boolean, nullable=False, default=True, index=True)
+    creado_por_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    creado_en = Column(DateTime, nullable=False, server_default=func.now(), index=True)
+
+    lecturas = relationship("ComunicadoLectura", back_populates="comunicado", cascade="all, delete-orphan")
+
+
+class ComunicadoLectura(Base):
+    __tablename__ = "comunicados_lecturas"
+    __table_args__ = (UniqueConstraint("comunicado_id", "trabajador_id", name="uq_comunicado_lectura"),)
+
+    id = Column(Integer, primary_key=True)
+    comunicado_id = Column(Integer, ForeignKey("comunicados_empresa.id"), nullable=False, index=True)
+    trabajador_id = Column(Integer, ForeignKey("trabajadores.id"), nullable=False, index=True)
+    leido_en = Column(DateTime, nullable=False, server_default=func.now())
+
+    comunicado = relationship("ComunicadoEmpresa", back_populates="lecturas")

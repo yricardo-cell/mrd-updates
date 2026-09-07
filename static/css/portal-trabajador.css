@@ -83,3 +83,6 @@ input,select,textarea{transition:border-color .16s ease,box-shadow .16s ease}
 
 /* ¿La sigues necesitando? (mejora 15) */
 .tengo-sigues{background:#fff8e1;border-radius:12px;padding:8px 10px;margin-top:6px;font-size:.9rem}
+
+/* Avisos de la empresa (mejora 17) */
+.comunicado{background:#f4f7fb;border-radius:14px;padding:12px 14px;margin-bottom:10px}.comunicado.obligatorio{background:#fde8e8;border-left:4px solid #991b1b}.comunicado.leido{opacity:.75}.comunicado p{white-space:pre-line;margin:6px 0}

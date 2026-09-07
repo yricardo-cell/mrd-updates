@@ -357,6 +357,7 @@
         {% endif %}
         {% if nav_user and nav_user.rol == 'admin' %}
         <li class="nav-item"><a href="/buzon-trabajadores" class="{% if '/buzon-trabajadores' in request.url.path %}active{% endif %}"><i class="bi bi-chat-heart-fill"></i><span class="nav-label"><strong>Buzón privado</strong></span></a></li>
+        <li class="nav-item"><a href="/comunicados" class="{% if '/comunicados' in request.url.path %}active{% endif %}"><i class="bi bi-megaphone-fill"></i><span class="nav-label"><strong>Avisos a trabajadores</strong></span></a></li>
         {% endif %}
 <li class="nav-item">
           <a href="/trabajadores" class="{% if '/trabajadores' in request.url.path and '/epis' not in request.url.path %}active{% endif %}">
