@@ -8959,7 +8959,7 @@ def visual_locator(
 ):
     warehouse = _operation_warehouse(request, user, db)
     return templates.TemplateResponse(request, "localizador.html", ctx_base(
-        request, user, db, almacen=warehouse,
+        request, user, db, almacen=warehouse, nave_ok=_nave_permitido(user),
     ))
 
 
@@ -10411,8 +10411,10 @@ def api_nave_donde(
     for item in encontrados:
         tipo = item.get("tipo")
         if tipo == "ubicacion":
+            loc_u = db.get(Ubicacion, int(item["id"]))
             resultados.append({"tipo": tipo, "id": item["id"], "codigo": item.get("codigo") or "", "nombre": item.get("nombre") or "",
-                               "ubicacion_id": item["id"], "ubicacion": item.get("nombre") or "", "ruta": item.get("ruta") or ""})
+                               "ubicacion_id": item["id"], "ubicacion": item.get("nombre") or "", "ruta": item.get("ruta") or "",
+                               "foto": _nave_foto_url(loc_u) if loc_u else ""})
             continue
         obj = _nave_objeto(db, tipo, int(item.get("id") or 0))
         loc = db.get(Ubicacion, obj.ubicacion_id) if obj is not None and getattr(obj, "ubicacion_id", None) else None
@@ -10420,7 +10422,7 @@ def api_nave_donde(
             "tipo": tipo, "id": item.get("id"), "codigo": item.get("codigo") or "", "nombre": item.get("nombre") or "",
             "estado": item.get("estado") or "", "ubicacion_id": loc.id if loc else None,
             "ubicacion": loc.nombre if loc else "", "ruta": loc.ruta_completa if loc else "",
-            "colocable": obj is not None,
+            "foto": _nave_foto_url(loc) if loc else "", "colocable": obj is not None,
         })
     if not resultados:
         # También se puede preguntar por el propio hueco ("A2", "CONTENEDOR B1").
@@ -10429,7 +10431,7 @@ def api_nave_donde(
             q_hueco = q_hueco.filter(Ubicacion.almacen_id == wid)
         for u in q_hueco.order_by(Ubicacion.nombre).limit(8).all():
             resultados.append({"tipo": "ubicacion", "id": u.id, "codigo": u.codigo or "", "nombre": u.nombre,
-                               "ubicacion_id": u.id, "ubicacion": u.nombre, "ruta": u.ruta_completa})
+                               "ubicacion_id": u.id, "ubicacion": u.nombre, "ruta": u.ruta_completa, "foto": _nave_foto_url(u)})
     return JSONResponse({"ok": True, "resultados": resultados})
 
 
