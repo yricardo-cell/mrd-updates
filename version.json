@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.69",
-    "nombre":  "MRD TOOL CONTROL -- Guardian Fase 2 (MRD Sentinel 1.9.0): eventos de seguridad para las reglas de deteccion de Sentinel y vigilancia mutua (MRD avisa si Sentinel deja de responder)",
+    "version_actual":  "2.7.70",
+    "nombre":  "MRD TOOL CONTROL -- Ensayo de restauración de la última copia y tareas semanales de fondo activadas",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Guardian Fase 2 (MRD Sentinel 1.9.0): eventos de seguridad para las reglas de deteccion de Sentinel y vigilancia mutua (MRD avisa si Sentinel deja de responder)"
+                    "Ensayo de restauración de la última copia y tareas semanales de fondo activadas"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.69.zip",
-    "sha256":  "3c0b446fc37688c80e1a4009e288b7df631b44cf3b44f81fdfad0c349906462a"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.70.zip",
+    "sha256":  "1bb22cc27d9f4af469161af07f2e0645936b92fd6c13cc81971f3136561a9ac4"
 }
