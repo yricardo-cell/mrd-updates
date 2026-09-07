@@ -62,3 +62,6 @@ input,select,textarea{transition:border-color .16s ease,box-shadow .16s ease}
 .request-line .disp-hint{grid-column:1/-1;width:100%;font-size:.82rem;border-radius:10px;padding:6px 10px}.disp-hint.ok{background:#e6f7ec;color:#166534}.disp-hint.warn{background:#fff4e5;color:#9a3412}
 .disp-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:10px 0}.disp-item{display:flex;align-items:center;gap:8px;border:1px solid #cedae7;background:#fff;border-radius:12px;padding:8px;text-align:left;font-weight:700;color:#0e7490}.disp-item img{width:38px;height:38px;object-fit:cover;border-radius:8px}.disp-item span{flex:1;font-size:.85rem}.disp-item b.ok{color:#166534}.disp-item b.warn{color:#9a3412}
 .entrega-modo{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.chip-radio{border:1px solid #cedae7;border-radius:999px;padding:8px 12px;background:#fff;font-weight:700;display:flex;align-items:center;gap:6px}.chip-radio:has(input:checked){background:#e0f7fa;border-color:#0e7490;color:#0e7490}
+
+/* Fotos y fichas en Lo que tengo (mejora 8) */
+.asset-foto{width:56px;height:56px;object-fit:cover;border-radius:12px;flex:none;background:#fff}.asset-link{color:#0e7490;font-weight:700;text-decoration:none}
