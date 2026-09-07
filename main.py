@@ -21279,6 +21279,101 @@ async def material_detalle(mid: int, request: Request, db: Session = Depends(get
     })
 
 
+# ─── Recepción de compras por foto del albarán (mejora 24) ───────────────────
+
+@app.get("/compras/recepcion-foto", response_class=HTMLResponse)
+def compras_recepcion_foto(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    try:
+        require_stock_permission(user)
+    except StockError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+    import ocr_windows as _ocr
+    mats = db.query(Material).filter(Material.activo == True).order_by(Material.nombre).all()
+    return templates.TemplateResponse(request, "compras_recepcion_foto.html", ctx_base(
+        request, user, db, materiales=mats, ocr_ok=_ocr.ocr_disponible(), obras=db.query(Obra).filter(Obra.activa == True).order_by(Obra.nombre).all(),
+    ))
+
+
+@app.post("/api/compras/ocr")
+async def api_compras_ocr(request: Request, foto: UploadFile = File(...), user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Lee la foto del albarán con el OCR de Windows y propone líneas emparejadas con los materiales."""
+    try:
+        require_stock_permission(user)
+    except StockError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+    import ocr_windows as _ocr
+    try:
+        _, ext = validar_nombre_archivo(foto.filename or "foto.jpg", {"jpg", "jpeg", "png", "webp", "bmp"})
+    except ErrorArchivo as exc:
+        raise HTTPException(400, str(exc))
+    data = await foto.read()
+    if not data or len(data) > 12 * 1024 * 1024:
+        raise HTTPException(400, "La foto está vacía o pesa más de 12 MB")
+    carpeta = UPLOADS_DIR / "ocr"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    ruta = carpeta / f"albaran_{uuid.uuid4().hex}.{ext}"
+    ruta.write_bytes(data)
+    try:
+        lineas = await run_in_threadpool(_ocr.ocr_imagen, ruta)
+    except Exception as exc:
+        raise HTTPException(502, f"No se pudo leer la foto: {exc}")
+    finally:
+        try:
+            ruta.unlink()
+        except OSError:
+            pass
+    mats = [(m.id, m.nombre, m.referencia_proveedor) for m in db.query(Material).filter(Material.activo == True).all()]
+    propuestas = []
+    for p in _ocr.parsear_lineas_albaran(lineas):
+        mid, nombre, score = _ocr.emparejar_material(p["descripcion"], mats)
+        propuestas.append({**p, "material_id": mid, "material_nombre": nombre if mid else "", "score": score})
+    return JSONResponse({"ok": True, "texto": lineas, "lineas": propuestas})
+
+
+@app.post("/compras/recepcion-foto/confirmar", response_class=RedirectResponse)
+async def compras_recepcion_confirmar(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Da la entrada de stock de las líneas confirmadas (material + cantidad)."""
+    try:
+        require_stock_permission(user)
+    except StockError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+    form = await request.form()
+    ids, cants = form.getlist("material_id"), form.getlist("cantidad")
+    referencia = " ".join(str(form.get("referencia") or "").split())[:120] or None
+    obra_txt = str(form.get("obra_id") or "").strip()
+    obra_id = int(obra_txt) if obra_txt.isdigit() else None
+    n = 0
+    start_stock_transaction(db)
+    try:
+        for i, mid_txt in enumerate(ids):
+            if not str(mid_txt).strip().isdigit():
+                continue
+            try:
+                cant = float(str(cants[i] if i < len(cants) else "0").replace(",", "."))
+            except ValueError:
+                cant = 0
+            if cant <= 0:
+                continue
+            mid = int(mid_txt)
+            mat = db.get(Material, mid)
+            if mat is None:
+                continue
+            _require_warehouse_access(user, mat.almacen_id)
+            move_material(db, user, mid, cant, tipo="entrada", event_id=f"material-{uuid.uuid4()}",
+                          motivo=f"Recepción por foto de albarán{(' ' + referencia) if referencia else ''}", obra_id=obra_id)
+            db.add(MovimientoMaterial(material_id=mid, tipo="entrada", cantidad=cant, obra_id=obra_id, referencia=referencia,
+                                      notas="Recepción por foto del albarán del proveedor", usuario_id=user.id))
+            n += 1
+        if not n:
+            raise StockError(400, "No hay ninguna línea con material y cantidad")
+        db.add(AuditoriaLog(tabla="materiales", registro_id=0, accion="recepcion_foto", resumen=f"Recepción por foto: {n} líneas{(' · ' + referencia) if referencia else ''}", usuario_id=user.id))
+        db.commit()
+    except StockError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.detail)
+    return RedirectResponse(f"/compras/recepcion-foto?ok={n}", status_code=303)
+
+
 @app.post("/materiales/{mid}/movimiento", response_class=RedirectResponse)
 async def material_movimiento(mid: int, request: Request, db: Session = Depends(get_db),
                                usuario=Depends(requiere_login)):
