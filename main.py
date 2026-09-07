@@ -13024,6 +13024,32 @@ def _herramienta_devolucion_json(herramienta: Herramienta) -> dict:
     }
 
 
+# ─── Ciclo de reparación al volver dañada (mejora 26) ────────────────────────
+
+def _abrir_reparacion_si_danada(db: Session, h, origen: str, usuario_id: int | None):
+    """Abre una orden de reparación para la herramienta si no tiene ninguna abierta; la deja en 'en_reparacion'
+    y avisa. Devuelve la orden (nueva o la ya abierta) o None si no hay herramienta."""
+    if h is None:
+        return None
+    abierta = db.query(Reparacion).filter(Reparacion.herramienta_id == h.id, Reparacion.estado.notin_(["finalizada", "sin_reparacion"])).order_by(Reparacion.id.desc()).first()
+    if abierta is not None:
+        return abierta
+    año = datetime.now().year
+    n = db.query(Reparacion).filter(Reparacion.numero.like(f"REP-{año}-%")).count()
+    rep = Reparacion(numero=f"REP-{año}-{(n + 1):04d}", herramienta_id=h.id, descripcion=(origen or "Devuelta dañada")[:2000],
+                     estado="recibida", prioridad="media", proveedor_id=getattr(h, "proveedor_id", None), fecha_entrada=datetime.utcnow(),
+                     creado_por_id=usuario_id, almacen_id=getattr(h, "almacen_id", None))
+    db.add(rep)
+    if (h.estado or "") not in ("en_reparacion", "baja", "archivada"):
+        h.estado = "en_reparacion"
+    db.flush()
+    db.add(AuditoriaLog(tabla="reparaciones", registro_id=rep.id, accion="abrir_auto", resumen=f"{rep.numero} abierta automáticamente para {h.nombre} ({h.codigo}): {origen[:120]}", usuario_id=usuario_id))
+    db.add(Aviso(titulo=f"{h.nombre} vuelve dañada: reparación {rep.numero} abierta",
+                 mensaje=f"{origen[:300]} La herramienta queda fuera de disponible hasta que vuelva. Abre la orden para avisar al proveedor con un botón.",
+                 prioridad="media", tipo="sistema", enlace=f"/reparaciones/{rep.id}"))
+    return rep
+
+
 @app.post("/movimientos/devolver")
 def movimiento_devolver_post(
     user: Usuario = Depends(requiere_login),
@@ -13048,6 +13074,8 @@ def movimiento_devolver_post(
     start_movement_transaction(db)
     try:
         result = return_tool(db, actor, h_id, a_id, condicion, observaciones)
+        if condicion == "danada":
+            _abrir_reparacion_si_danada(db, db.get(Herramienta, h_id), f"Devuelta dañada en el almacén. {observaciones or ''}".strip(), user.id)   # mejora 26
         db.commit()
     except MovementError as exc:
         db.rollback()
@@ -13091,6 +13119,8 @@ def movimiento_devolver_lote(
     try:
         for hid in ids:
             return_tool(db, actor, hid, a_id, condicion, observaciones)
+            if condicion == "danada":
+                _abrir_reparacion_si_danada(db, db.get(Herramienta, hid), f"Devuelta dañada en el almacén. {observaciones or ''}".strip(), user.id)   # mejora 26
         db.commit()
     except MovementError as exc:
         db.rollback()
@@ -20598,6 +20628,10 @@ async def gestionar_devolucion_portal(
     status = str(form.get("estado") or "")
     if status not in {"solicitada", "aceptada", "cita", "recibida", "rechazada", "cancelada"}:
         raise HTTPException(422, "Estado no válido")
+    if status == "recibida" and (row.estado_material or "") in ("danado", "incompleto") and (row.activo_tipo or "") == "herramienta" and row.activo_codigo:   # mejora 26
+        _h_dev = db.query(Herramienta).filter(Herramienta.codigo == row.activo_codigo).first()
+        if _h_dev is not None:
+            _abrir_reparacion_si_danada(db, _h_dev, f"Devolución {row.numero} desde el portal: {row.estado_material}. {row.motivo or ''}".strip(), user.id)
     row.estado = status
     row.notas_gestion = str(form.get("notas") or "").strip()[:3000] or row.notas_gestion
     row.actualizado_en = datetime.now()
