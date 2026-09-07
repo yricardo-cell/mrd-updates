@@ -7948,6 +7948,81 @@ def _entregar_solicitud_por_mostrador(db, user, solicitud_id: int, trabajador_id
     return {"id": solicitud.id, "numero": solicitud.numero, "estado": solicitud.estado}
 
 
+# ─── Cola de pedidos del Mostrador (mejora 22) ───────────────────────────────
+
+_COLA_ESTADOS = ("pendiente", "revision", "aprobada", "preparando", "lista")
+
+
+def _cola_mostrador(db: Session, warehouse_id: int | None) -> list[dict]:
+    """Pedidos activos ordenados por urgencia: 'voy a recogerlo' y urgentes arriba, luego 'para cuándo', luego antigüedad."""
+    q = db.query(SolicitudTrabajador).options(joinedload(SolicitudTrabajador.lineas)).filter(SolicitudTrabajador.estado.in_(_COLA_ESTADOS))
+    if warehouse_id:
+        q = q.filter(or_(SolicitudTrabajador.almacen_id == warehouse_id, SolicitudTrabajador.almacen_id.is_(None)))
+    ahora = datetime.now()
+    filas = []
+    for s in q.all():
+        t = db.get(Trabajador, s.trabajador_id)
+        nec = s.necesario_para
+        urgencia = 0 if s.voy_a_recoger_en else (1 if (nec and nec <= ahora) else (2 if nec else 3))
+        if s.prioridad == "urgente" and urgencia > 1:
+            urgencia = 1
+        filas.append({
+            "id": s.id, "numero": s.numero, "estado": s.estado, "prioridad": s.prioridad, "trabajador_id": s.trabajador_id,
+            "quien": t.nombre_completo if t else "", "creado": _utc_a_local(s.creado_en).strftime("%d/%m %H:%M") if s.creado_en else "",
+            "necesario": _portal_necesario_texto(nec), "necesario_dt": nec, "vencido": bool(nec and nec <= ahora and s.estado != "lista"),
+            "entrega": s.entrega_modo or "recoger", "dias_uso": s.dias_uso or 0, "obra": s.obra_destino or "",
+            "voy": s.voy_a_recoger_en.strftime("%H:%M") if s.voy_a_recoger_en else "", "urgencia": urgencia,
+            "lineas": [f"{l.cantidad_aprobada or l.cantidad} × {l.observaciones or l.descripcion}" + (f" T.{l.talla}" if l.talla and not l.observaciones else "") + (" (espera libre)" if l.espera_disponible and not l.avisado_disponible_en else "") for l in s.lineas],
+            "fotos": [f"/uploads/{f}" for f in s.fotos_lista], "motivo": (s.motivo or "")[:160],
+        })
+    filas.sort(key=lambda f: (f["urgencia"], f["necesario_dt"] or datetime.max, f["id"]))
+    return filas
+
+
+@app.get("/mostrador/cola", response_class=HTMLResponse)
+def mostrador_cola(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if not (tiene_permiso(user, "entregar") or tiene_permiso(user, "devolver") or user.rol == "admin"):
+        raise HTTPException(403, "Sin permiso para operar el mostrador")
+    warehouse = _active_warehouse(db, user, request)
+    filas = _cola_mostrador(db, warehouse.id if warehouse else None)
+    return templates.TemplateResponse(request, "mostrador_cola.html", ctx_base(request, user, db, filas=filas, almacen=warehouse))
+
+
+@app.get("/api/mostrador/cola")
+def api_mostrador_cola(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if not (tiene_permiso(user, "entregar") or tiene_permiso(user, "devolver") or user.rol == "admin"):
+        raise HTTPException(403, "Sin permiso")
+    warehouse = _active_warehouse(db, user, request)
+    filas = _cola_mostrador(db, warehouse.id if warehouse else None)
+    for f in filas:
+        f.pop("necesario_dt", None)
+    return JSONResponse({"ok": True, "pedidos": filas, "hora": datetime.now().strftime("%H:%M")})
+
+
+@app.post("/mostrador/cola/{sid}/estado", response_class=RedirectResponse)
+async def mostrador_cola_estado(sid: int, request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Preparando / Lista desde la cola (avisa al trabajador con dónde recogerlo y quién lo preparó)."""
+    if not (tiene_permiso(user, "entregar") or tiene_permiso(user, "devolver") or user.rol == "admin"):
+        raise HTTPException(403, "Sin permiso")
+    form = await request.form()
+    nuevo = str(form.get("estado") or "").strip()
+    if nuevo not in ("preparando", "lista"):
+        raise HTTPException(400, "Estado no válido")
+    s = db.get(SolicitudTrabajador, sid)
+    if s is None:
+        raise HTTPException(404, "Pedido no encontrado")
+    warehouse = _active_warehouse(db, user, request)
+    camino = {"pendiente": "aprobada", "revision": "aprobada", "aprobada": "preparando", "preparando": "lista"}
+    orden = ["pendiente", "revision", "aprobada", "preparando", "lista"]
+    try:
+        while s.estado in camino and orden.index(s.estado) < orden.index(nuevo):
+            transition_worker_request(db, user, s, new_status=camino[s.estado], notes=str(form.get("nota") or ""), access_warehouse_id=warehouse.id if warehouse else None)
+    except WorkerPortalError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+    db.commit()
+    return RedirectResponse("/mostrador/cola", status_code=303)
+
+
 @app.get("/api/mostrador/solicitudes-activas")
 def mostrador_solicitudes_activas(trabajador_id: int, request: Request,
                                   user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):

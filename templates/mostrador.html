@@ -15,7 +15,7 @@
 </style>
 
 <section class="counter-hero">
-  <div><div class="counter-kicker">Operación unificada de patio</div><h1><i class="bi bi-upc-scan"></i> Mostrador Único</h1><p>Un trabajador, un carrito y una sola confirmación para todo lo que entra o sale.</p></div>
+  <div><div class="counter-kicker">Operación unificada de patio</div><h1><i class="bi bi-upc-scan"></i> Mostrador Único <a class="btn btn-sm btn-outline-primary align-middle ms-2" href="/mostrador/cola"><i class="bi bi-list-ol"></i> Cola de pedidos</a></h1><p>Un trabajador, un carrito y una sola confirmación para todo lo que entra o sale.</p></div>
   <div class="counter-mode" role="group">{% if puede_salida %}<button id="mode-out" class="{% if modo_inicial == 'salida' %}active{% endif %}" type="button" data-mode="salida"><i class="bi bi-box-arrow-up-right"></i> SALIDA</button>{% endif %}{% if puede_entrada %}<button id="mode-in" class="{% if modo_inicial == 'entrada' %}active{% endif %}" type="button" data-mode="entrada"><i class="bi bi-box-arrow-in-down-left"></i> ENTRADA</button>{% endif %}</div>
 </section>
 
