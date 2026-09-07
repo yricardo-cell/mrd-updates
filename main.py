@@ -689,6 +689,26 @@ def _render_error(request: Request, code: int, detail: str = "") -> HTMLResponse
     return HTMLResponse(content=html, status_code=code)
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon_ico():
+    """Los navegadores lo piden solos: 166 respuestas 404 en un día ensuciaban el log."""
+    from starlette.responses import FileResponse as _FR
+    return _FR(str(BASE_DIR / "static" / "icons" / "icon-192.png"), media_type="image/png", headers={"Cache-Control": "public, max-age=604800"})
+
+
+@app.get("/apple-touch-icon.png", include_in_schema=False)
+@app.get("/apple-touch-icon-precomposed.png", include_in_schema=False)
+def apple_touch_icon():
+    from starlette.responses import FileResponse as _FR
+    return _FR(str(BASE_DIR / "static" / "icons" / "icon-180.png"), media_type="image/png", headers={"Cache-Control": "public, max-age=604800"})
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots_txt():
+    from starlette.responses import PlainTextResponse as _PTR
+    return _PTR("User-agent: *" + chr(10) + "Disallow: /" + chr(10), headers={"Cache-Control": "public, max-age=86400"})
+
+
 _RUTAS_CONOCIDAS = (
     "/portal-trabajador", "/login", "/mostrador", "/scan", "/nave", "/herramientas", "/materiales",
     "/trabajadores", "/calendario", "/informes", "/configuracion", "/comunicados", "/kits-trabajo", "/localizador",
