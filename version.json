@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.75",
-    "nombre":  "MRD TOOL CONTROL -- Correccion: 403 Token de seguridad invalido al guardar en Telegram del almacen, Kits de trabajo, Avisos de la empresa, Recepcion por foto y Mi cuadrilla",
-    "fecha":  "2026-09-07",
+    "version_actual":  "2.7.76",
+    "nombre":  "MRD TOOL CONTROL -- 44 mejoras: arreglos, Salud del sistema, plazos y foto en Mostrador, reservas, kiosco, pantalla TV, punto de pedido, planes de mantenimiento, informes nuevos, bot Telegram, Google Drive, autocuracion y arreglos de errores desde Telegram",
+    "fecha":  "2026-09-08",
     "cambios":  [
-                    "Correccion: 403 Token de seguridad invalido al guardar en Telegram del almacen, Kits de trabajo, Avisos de la empresa, Recepcion por foto y Mi cuadrilla"
+                    "44 mejoras: arreglos, Salud del sistema, plazos y foto en Mostrador, reservas, kiosco, pantalla TV, punto de pedido, planes de mantenimiento, informes nuevos, bot Telegram, Google Drive, autocuracion y arreglos de errores desde Telegram"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.75.zip",
-    "sha256":  "8b4f205dbee941892154a48ba7dfca9158f8d65ee375b438580f1ba57d238df2"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.76.zip",
+    "sha256":  "ce5f8e1bd814a99c25cba34e690979067df7ad4a866bf1aa9d3f420b1e0dc740"
 }
