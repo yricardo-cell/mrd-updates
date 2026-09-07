@@ -11189,6 +11189,39 @@ async def mantenimientos_planes_post(request: Request, user: Usuario = Depends(r
     return RedirectResponse("/mantenimientos/planes?ok=1", status_code=303)
 
 
+# ─── Herramientas paradas (mejora 26) ────────────────────────────────────────
+def _herramientas_paradas(db: Session, meses: int = 6) -> list[dict]:
+    """Herramientas activas en el almacén que no han salido en N meses (o nunca), con su valor."""
+    limite = datetime.now() - timedelta(days=30 * meses)
+    salida = []
+    for h in db.query(Herramienta).filter(Herramienta.activa == True, Herramienta.estado.in_(("disponible", "en_almacen"))).order_by(Herramienta.nombre).all():
+        ultimo = db.query(Movimiento).filter(Movimiento.herramienta_id == h.id, Movimiento.tipo.in_(("entrega", "traslado", "salida"))).order_by(Movimiento.id.desc()).first()
+        fecha = _utc_a_local(ultimo.fecha) if ultimo and ultimo.fecha else None
+        if fecha and fecha >= limite:
+            continue
+        valor = float(h.valor_actual or h.precio_compra or 0)
+        salida.append({"id": h.id, "codigo": h.codigo, "nombre": h.nombre, "categoria": h.categoria or "", "ultima_salida": fecha,
+                       "meses": int((datetime.now() - fecha).days // 30) if fecha else None, "valor": valor, "ubicacion": h.ubicacion_texto or ""})
+    salida.sort(key=lambda x: (-(x["meses"] if x["meses"] is not None else 9999), -x["valor"]))
+    return salida
+
+
+@app.get("/informes/paradas", response_class=HTMLResponse)
+def informe_paradas(request: Request, meses: int = 6, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    meses = max(1, min(int(meses or 6), 60))
+    filas = _herramientas_paradas(db, meses)
+    return templates.TemplateResponse(request, "informe_paradas.html", ctx_base(request, user, db, filas=filas, meses=meses, valor_total=round(sum(f["valor"] for f in filas), 2)))
+
+
+@app.get("/informes/paradas/excel")
+def informe_paradas_excel(meses: int = 6, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    from reports import exportar_tabla_excel as _xl
+    filas = _herramientas_paradas(db, max(1, min(int(meses or 6), 60)))
+    datos = _xl("Herramientas paradas", ["Código", "Herramienta", "Tipo", "Última salida", "Meses parada", "Valor (€)", "Dónde está"],
+                [[f["codigo"], f["nombre"], f["categoria"], f["ultima_salida"].strftime("%d/%m/%Y") if f["ultima_salida"] else "nunca", f["meses"] if f["meses"] is not None else "", f["valor"], f["ubicacion"]] for f in filas], [16, 34, 20, 14, 12, 12, 24])
+    return Response(content=datos, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=herramientas_paradas.xlsx"})
+
+
 def _alertas_consumo_obras_bg():
     """Una vez por semana: un aviso por cada obra/material con consumo anómalo (sin repetir la misma semana)."""
     try:
