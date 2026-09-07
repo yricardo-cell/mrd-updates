@@ -762,6 +762,8 @@ def apply_migrations(target_engine=None):
         ("maquinaria", "event_id", "VARCHAR(64)"),
         ("salidas_obra", "event_id", "VARCHAR(64)"),
         ("albaranes_salida", "event_id", "VARCHAR(64)"),
+        ("solicitudes_trabajador", "preparando_en", "DATETIME"),
+        ("solicitudes_trabajador", "lista_en", "DATETIME"),
         ("reparaciones", "foto_path", "VARCHAR(255)"),
     ]
 

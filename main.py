@@ -10792,6 +10792,64 @@ def reservas_calendario(request: Request, dias: int = 30, user: Usuario = Depend
     return templates.TemplateResponse(request, "reservas.html", ctx_base(request, user, db, por_dia=sorted(por_dia.items()), dias=dias, choques=sum(1 for f in filas if f["choque"]), total=len(filas)))
 
 
+# ─── Tiempo de respuesta del almacén (mejora 21) ─────────────────────────────
+def _tiempos_pedidos(db: Session, semanas: int = 8) -> dict:
+    """Por semana: pedidos, horas medias de pedido→listo y de listo→recogido; y por quien lo preparó."""
+    desde = datetime.now() - timedelta(weeks=semanas)
+    rows = db.query(SolicitudTrabajador).filter(SolicitudTrabajador.creado_en >= desde, SolicitudTrabajador.estado.in_(("lista", "entregada"))).all()
+    sem: dict[str, dict] = {}
+    por_persona: dict[str, dict] = {}
+
+    def _h(a, b):
+        return None if not a or not b else max(0.0, (b - a).total_seconds() / 3600)
+
+    for s in rows:
+        creado = _utc_a_local(s.creado_en) if s.creado_en else None
+        lista = s.lista_en
+        recogido = s.recogida_confirmada_en or s.entregado_en
+        clave = creado.strftime("%G-S%V") if creado else "?"
+        g = sem.setdefault(clave, {"semana": clave, "pedidos": 0, "h_listo": [], "h_recogido": [], "sin_recoger": 0})
+        g["pedidos"] += 1
+        x = _h(creado, lista)
+        if x is not None:
+            g["h_listo"].append(x)
+        y = _h(lista, recogido)
+        if y is not None:
+            g["h_recogido"].append(y)
+        elif s.estado == "lista":
+            g["sin_recoger"] += 1
+        u = db.get(Usuario, s.revisado_por_id) if s.revisado_por_id else None
+        nombre = (u.nombre or u.username) if u else "—"
+        p = por_persona.setdefault(nombre, {"quien": nombre, "pedidos": 0, "h_listo": []})
+        p["pedidos"] += 1
+        if x is not None:
+            p["h_listo"].append(x)
+
+    def _media(v):
+        return round(sum(v) / len(v), 1) if v else None
+
+    semanas_out = [{"semana": g["semana"], "pedidos": g["pedidos"], "media_h_listo": _media(g["h_listo"]), "media_h_recogido": _media(g["h_recogido"]), "sin_recoger": g["sin_recoger"]} for g in sorted(sem.values(), key=lambda x: x["semana"], reverse=True)]
+    personas = [{"quien": p["quien"], "pedidos": p["pedidos"], "media_h_listo": _media(p["h_listo"])} for p in sorted(por_persona.values(), key=lambda x: -x["pedidos"])]
+    todas_listo = [x for g in sem.values() for x in g["h_listo"]]
+    todas_rec = [x for g in sem.values() for x in g["h_recogido"]]
+    return {"semanas": semanas_out, "personas": personas, "media_h_listo": _media(todas_listo), "media_h_recogido": _media(todas_rec), "pedidos": len(rows)}
+
+
+@app.get("/informes/tiempos-pedidos", response_class=HTMLResponse)
+def informe_tiempos_pedidos(request: Request, semanas: int = 8, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    semanas = max(1, min(int(semanas or 8), 52))
+    return templates.TemplateResponse(request, "informe_tiempos_pedidos.html", ctx_base(request, user, db, datos=_tiempos_pedidos(db, semanas), semanas=semanas))
+
+
+@app.get("/informes/tiempos-pedidos/excel")
+def informe_tiempos_pedidos_excel(semanas: int = 8, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    from reports import exportar_tabla_excel as _xl
+    d = _tiempos_pedidos(db, max(1, min(int(semanas or 8), 52)))
+    datos = _xl("Tiempo de respuesta del almacén", ["Semana", "Pedidos", "Horas pedido→listo", "Horas listo→recogido", "Listos sin recoger"],
+                [[g["semana"], g["pedidos"], g["media_h_listo"] if g["media_h_listo"] is not None else "", g["media_h_recogido"] if g["media_h_recogido"] is not None else "", g["sin_recoger"]] for g in d["semanas"]], [14, 10, 20, 22, 18])
+    return Response(content=datos, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=tiempos_pedidos.xlsx"})
+
+
 def _alertas_consumo_obras_bg():
     """Una vez por semana: un aviso por cada obra/material con consumo anómalo (sin repetir la misma semana)."""
     try:

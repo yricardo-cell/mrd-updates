@@ -274,6 +274,10 @@ def transition_worker_request(
     request.notas_gestion = (notes or "").strip()[:3000] or request.notas_gestion
     request.revisado_por_id = user.id
     request.actualizado_en = datetime.now()
+    if new_status == "preparando" and not request.preparando_en:
+        request.preparando_en = datetime.now()   # mejora 21
+    if new_status == "lista":
+        request.lista_en = datetime.now()
     if new_status == "entregada":
         request.entregado_en = datetime.now()
         ensure_delivery_note_for_request(db, user, request)

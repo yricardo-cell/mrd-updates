@@ -251,6 +251,8 @@ class SolicitudTrabajador(Base):
     voy_a_recoger_en = Column(DateTime, nullable=True)    # el trabajador avisó que va a recogerlo (mejora 9)
     fotos_json = Column(Text, nullable=True)   # fotos del pedido (mejora 11)
     kit_nombre = Column(String(100), nullable=True)   # pedido a partir de un kit de trabajo (mejora 25)
+    preparando_en = Column(DateTime, nullable=True)   # tiempos del almacén (mejora 21)
+    lista_en = Column(DateTime, nullable=True)
 
     @property
     def fotos_lista(self) -> list:
