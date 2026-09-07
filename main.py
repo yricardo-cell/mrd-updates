@@ -958,6 +958,16 @@ def startup_event():
                     _espera_disponible_bg()
                     _tm.sleep(6*3600)  # cada 6 horas
             _thr.Thread(target=_run_alerts, daemon=True, name="alertas_bg").start()
+
+            def _run_diario():   # mejora 27: resumen diario por Telegram a la hora configurada
+                _tm.sleep(60)
+                while True:
+                    try:
+                        _resumen_diario_bg_tick()
+                    except Exception as _e:
+                        mrd_logging.log_error(f"Resumen diario: {_e}")
+                    _tm.sleep(300)
+            _thr.Thread(target=_run_diario, daemon=True, name="resumen_diario_bg").start()
         except Exception:
             pass
 
@@ -9309,6 +9319,195 @@ def _resumen_semanal_bg():
             db.close()
     except Exception as exc:  # pragma: no cover
         mrd_logging.log_error(f"Resumen semanal: {exc}")
+
+
+# ─── Resumen diario al almacén por Telegram (mejora 27) ──────────────────────
+
+LOCAL_ENV_PATH = BASE_DIR / "config" / "local.env"
+_RESUMEN_DIARIO_ESTADO = BASE_DIR / "config" / "resumen_diario_estado.json"
+
+
+def _telegram_config() -> dict:
+    return {"bot_token": os.getenv("MRD_TELEGRAM_BOT_TOKEN", "") or "", "chat_id": os.getenv("MRD_TELEGRAM_CHAT_ID", "") or "",
+            "activo": (os.getenv("MRD_RESUMEN_DIARIO", "0") or "0") in ("1", "true", "si", "sí"),
+            "hora": os.getenv("MRD_RESUMEN_DIARIO_HORA", "07:00") or "07:00"}
+
+
+def _guardar_local_env(claves: dict) -> None:
+    """Escribe/actualiza claves en config/local.env (fuera del paquete público) y en el entorno del proceso."""
+    lineas = []
+    if LOCAL_ENV_PATH.is_file():
+        lineas = LOCAL_ENV_PATH.read_text(encoding="utf-8").splitlines()
+    vistas = set()
+    salida = []
+    for ln in lineas:
+        k = ln.split("=", 1)[0].strip() if "=" in ln and not ln.lstrip().startswith("#") else None
+        if k in claves:
+            if claves[k] is not None:
+                salida.append(f"{k}={claves[k]}")
+            vistas.add(k)
+        else:
+            salida.append(ln)
+    for k, v in claves.items():
+        if k not in vistas and v is not None:
+            salida.append(f"{k}={v}")
+    LOCAL_ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    LOCAL_ENV_PATH.write_text("\n".join(salida) + "\n", encoding="utf-8")
+    for k, v in claves.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = str(v)
+
+
+def _resumen_diario_texto(db: Session, hoy: date | None = None) -> str:
+    """Texto del resumen de la mañana para el almacén."""
+    hoy = hoy or date.today()
+    fin = datetime.combine(hoy, datetime.max.time())
+    activos = ("pendiente", "revision", "aprobada", "preparando")
+    para_hoy = db.query(SolicitudTrabajador).filter(SolicitudTrabajador.estado.in_(activos), SolicitudTrabajador.necesario_para.isnot(None), SolicitudTrabajador.necesario_para <= fin).order_by(SolicitudTrabajador.necesario_para).all()
+    sin_fecha = db.query(SolicitudTrabajador).filter(SolicitudTrabajador.estado.in_(activos), SolicitudTrabajador.necesario_para.is_(None)).count()
+    listas = db.query(SolicitudTrabajador).filter(SolicitudTrabajador.estado == "lista", SolicitudTrabajador.recogida_confirmada_en.is_(None)).all()
+    voy = [s for s in listas if s.voy_a_recoger_en]
+    fuera = db.query(Herramienta).filter(Herramienta.activa == True, Herramienta.estado.in_(["entregada", "en_obra", "en_transporte"])).all()
+    ids = [h.id for h in fuera]
+    vencen_hoy, vencidas = [], 0
+    if ids:
+        ultima = {}
+        for mov in db.query(Movimiento).filter(Movimiento.herramienta_id.in_(ids), Movimiento.tipo.in_(["entrega", "traslado"])).order_by(Movimiento.id.desc()).all():
+            ultima.setdefault(mov.herramienta_id, mov)
+        for h in fuera:
+            mov = ultima.get(h.id)
+            if mov is None or not mov.fecha_devolucion_prevista:
+                continue
+            d = mov.fecha_devolucion_prevista.date()
+            quien = db.get(Trabajador, mov.trabajador_id) if mov.trabajador_id else None
+            if d == hoy:
+                vencen_hoy.append(f"{h.nombre} ({quien.nombre_completo if quien else '?'})")
+            elif d < hoy:
+                vencidas += 1
+    revisiones = db.query(Herramienta).filter(Herramienta.activa == True, Herramienta.fecha_proximo_mantenimiento.isnot(None), Herramienta.fecha_proximo_mantenimiento <= hoy + timedelta(days=7)).order_by(Herramienta.fecha_proximo_mantenimiento).limit(10).all()
+    traspasos = db.query(TraspasoPortal).filter(TraspasoPortal.estado == "pendiente").count()
+    ayer = datetime.combine(hoy - timedelta(days=1), datetime.min.time())
+    inc_nuevas = db.query(IncidenciaPortalTrabajador).filter(IncidenciaPortalTrabajador.creado_en >= ayer).count()
+    esperan = db.query(LineaSolicitudTrabajador).filter(LineaSolicitudTrabajador.espera_disponible == True, LineaSolicitudTrabajador.avisado_disponible_en.is_(None)).count()
+
+    l = [f"MRD, resumen del {hoy.strftime('%d/%m/%Y')}"]
+    l.append(f"Pedidos para hoy: {len(para_hoy)}" + (f" (+{sin_fecha} sin fecha)" if sin_fecha else ""))
+    for s in para_hoy[:8]:
+        t = db.get(Trabajador, s.trabajador_id)
+        l.append(f"  - {s.numero} {t.nombre_completo if t else ''}: {_portal_necesario_texto(s.necesario_para)}" + (" · llevar a obra" if s.entrega_modo == "llevar" else "") + " · " + ", ".join(f"{x.cantidad}x {x.descripcion}" for x in s.lineas[:3]))
+    nombres_voy = []
+    for s in voy[:6]:
+        t = db.get(Trabajador, s.trabajador_id)
+        nombres_voy.append(t.nombre_completo if t else "?")
+    l.append(f"Listos sin recoger: {len(listas)}" + (f"; van a recoger: {', '.join(nombres_voy)}" if nombres_voy else ""))
+    l.append(f"Plazos que vencen hoy: {len(vencen_hoy)}" + (" (" + "; ".join(vencen_hoy[:6]) + ")" if vencen_hoy else "") + (f" · ya vencidos: {vencidas}" if vencidas else ""))
+    if revisiones:
+        l.append("Revisiones en 7 días: " + "; ".join(f"{h.nombre} {h.fecha_proximo_mantenimiento.strftime('%d/%m')}" for h in revisiones[:6]))
+    if traspasos:
+        l.append(f"Traspasos entre compañeros pendientes: {traspasos}")
+    if inc_nuevas:
+        l.append(f"Incidencias nuevas desde ayer: {inc_nuevas}")
+    if esperan:
+        l.append(f"Pedidos esperando a que quede algo libre: {esperan}")
+    return "\n".join(l)
+
+
+def _resumen_diario_enviar(db: Session) -> dict:
+    cfg = _telegram_config()
+    if not cfg["bot_token"] or not cfg["chat_id"]:
+        return {"ok": False, "error": "Telegram no configurado"}
+    import telegram_notif as _tg
+    texto = _resumen_diario_texto(db)
+    err = _tg.enviar_mensaje(texto, cfg["bot_token"], cfg["chat_id"])
+    if err:
+        mrd_logging.log_error(f"Resumen diario Telegram: {err}")
+        return {"ok": False, "error": err}
+    return {"ok": True, "texto": texto}
+
+
+def _resumen_diario_bg_tick(ahora: datetime | None = None) -> bool:
+    """Envía el resumen una vez al día a partir de la hora configurada. Devuelve True si lo envió."""
+    ahora = ahora or datetime.now()
+    cfg = _telegram_config()
+    if not cfg["activo"] or not cfg["bot_token"] or not cfg["chat_id"]:
+        return False
+    try:
+        hh, mm = (int(x) for x in cfg["hora"].split(":")[:2])
+    except ValueError:
+        hh, mm = 7, 0
+    if (ahora.hour, ahora.minute) < (hh, mm):
+        return False
+    try:
+        estado = json.loads(_RESUMEN_DIARIO_ESTADO.read_text(encoding="utf-8")) if _RESUMEN_DIARIO_ESTADO.is_file() else {}
+    except ValueError:
+        estado = {}
+    if estado.get("ultimo") == ahora.date().isoformat():
+        return False
+    from database import SessionLocal as _SLd
+    db = _SLd()
+    try:
+        r = _resumen_diario_enviar(db)
+    finally:
+        db.close()
+    if r.get("ok"):
+        _RESUMEN_DIARIO_ESTADO.write_text(json.dumps({"ultimo": ahora.date().isoformat()}), encoding="utf-8")
+    return bool(r.get("ok"))
+
+
+@app.get("/configuracion/telegram", response_class=HTMLResponse)
+def configuracion_telegram(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    cfg = _telegram_config()
+    tok = cfg["bot_token"]
+    return templates.TemplateResponse(request, "configuracion_telegram.html", ctx_base(
+        request, user, db, cfg=cfg, token_mascara=(("•" * 8 + tok[-4:]) if tok else ""), vista_previa=_resumen_diario_texto(db),
+    ))
+
+
+@app.post("/configuracion/telegram", response_class=RedirectResponse)
+async def configuracion_telegram_guardar(request: Request, user: Usuario = Depends(requiere_login)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    form = await request.form()
+    claves = {}
+    tok = str(form.get("bot_token") or "").strip()
+    if tok:
+        claves["MRD_TELEGRAM_BOT_TOKEN"] = tok
+    chat = str(form.get("chat_id") or "").strip()
+    if chat:
+        claves["MRD_TELEGRAM_CHAT_ID"] = chat
+    claves["MRD_RESUMEN_DIARIO"] = "1" if str(form.get("activo") or "") in ("1", "on") else "0"
+    hora = str(form.get("hora") or "07:00").strip()[:5]
+    claves["MRD_RESUMEN_DIARIO_HORA"] = hora if len(hora) == 5 and hora[2] == ":" else "07:00"
+    _guardar_local_env(claves)
+    return RedirectResponse("/configuracion/telegram?ok=1", status_code=303)
+
+
+@app.post("/configuracion/telegram/probar")
+def configuracion_telegram_probar(user: Usuario = Depends(requiere_login)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    cfg = _telegram_config()
+    if not cfg["bot_token"] or not cfg["chat_id"]:
+        raise HTTPException(400, "Falta el token del bot o el chat")
+    import telegram_notif as _tg
+    err = _tg.enviar_mensaje("MRD Tool Control: prueba de Telegram correcta.", cfg["bot_token"], cfg["chat_id"])
+    if err:
+        raise HTTPException(502, f"Telegram: {err}")
+    return {"ok": True}
+
+
+@app.post("/configuracion/telegram/resumen")
+def configuracion_telegram_resumen(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    r = _resumen_diario_enviar(db)
+    if not r.get("ok"):
+        raise HTTPException(400, r.get("error") or "No enviado")
+    return {"ok": True}
 
 
 def _ensayo_restauracion_bg():

@@ -4,6 +4,7 @@
 {% block breadcrumb %}<a href="/">Inicio</a><span class="sep">/</span><span class="current">Centro de control</span>{% endblock %}
 
 {% block content %}
+<a class="btn btn-outline-primary btn-sm mb-3" href="/configuracion/telegram"><i class="bi bi-telegram"></i> Telegram del almacén (resumen diario)</a>
 <section class="cfg-hero" aria-labelledby="cfg-title"><div class="cfg-hero-copy"><div class="cfg-eyebrow">Administración del sistema</div><h1 id="cfg-title">Centro de control</h1><p>Usuarios, copias y servicios esenciales reunidos en un único panel.</p></div><div class="cfg-version"><small>Versión activa</small><strong>{{ version_info.version_actual }}</strong><span>{{ version_info.estado | default('estable') | title }}</span></div></section>
 
 {% if request.query_params.get('backup') == 'ok' %}<div class="alert alert-success alert-dismissible"><i class="bi bi-check-circle me-2"></i>Copia de seguridad creada correctamente. <button class="btn-close" data-bs-dismiss="alert"></button></div>{% elif request.query_params.get('backup') == 'error' %}<div class="alert alert-danger alert-dismissible"><i class="bi bi-exclamation-triangle me-2"></i>Error al crear la copia de seguridad. <button class="btn-close" data-bs-dismiss="alert"></button></div>{% endif %}
