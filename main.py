@@ -18132,7 +18132,7 @@ def _espera_disponible_bg():
 
 PORTAL_IDIOMAS = {"es": "Español", "ro": "Română"}
 
-PORTAL_TEXTOS: dict[str, dict[str, str]] = {"ro": {'Lo que tengo': 'Ce am la mine', 'Mi historial': 'Istoricul meu', 'Escanear': 'Scanează', 'Solicitar': 'Cere material', 'Seguimiento': 'Urmărire', 'Devolver': 'Returnează', 'Incidencias': 'Incidente', 'Albaranes': 'Avize de livrare', 'Buzón': 'Sugestii', 'Mi cuenta': 'Contul meu', 'Instalar': 'Instalează', 'Salir': 'Ieșire', 'MI ESPACIO MRD': 'SPAȚIUL MEU MRD', 'CARNET DIGITAL MRD': 'LEGITIMAȚIE DIGITALĂ MRD', 'Trabajador': 'Muncitor', 'AVISOS': 'ANUNȚURI', 'Notificaciones': 'Notificări', 'TU INVENTARIO PERSONAL': 'INVENTARUL TĂU PERSONAL', 'PROTECCIÓN': 'PROTECȚIE', 'Tu EPI': 'Echipamentul tău de protecție', 'ESCÁNER': 'SCANER', 'Escanear una herramienta': 'Scanează o sculă', 'TU ACTIVIDAD': 'ACTIVITATEA TA', 'PEDIDO AL ALMACÉN': 'COMANDĂ LA DEPOZIT', '¿Qué necesitas?': 'De ce ai nevoie?', 'SEGUIMIENTO': 'URMĂRIRE', 'Mis solicitudes': 'Cererile mele', 'DOCUMENTOS': 'DOCUMENTE', 'Mis albaranes': 'Avizele mele', 'ESCUCHA ACTIVA': 'ASCULTARE ACTIVĂ', 'Quejas y sugerencias': 'Reclamații și sugestii', 'DEVOLUCIONES': 'RETURURI', 'Solicitar una devolución': 'Cere o returnare', 'AYUDA RÁPIDA': 'AJUTOR RAPID', 'Comunicar una incidencia': 'Raportează un incident', 'IDENTIDAD Y SEGURIDAD': 'IDENTITATE ȘI SECURITATE', 'SEGURIDAD': 'SIGURANȚĂ', 'Documentación personal': 'Documente personale', 'Mis datos de contacto': 'Datele mele de contact', 'Teléfono': 'Telefon', 'Correo': 'E-mail', 'PIN actual para confirmar': 'PIN-ul actual pentru confirmare', 'Guardar datos': 'Salvează datele', 'Cambiar mi PIN': 'Schimbă PIN-ul', 'PIN actual': 'PIN-ul actual', 'PIN nuevo': 'PIN nou', 'Repite el PIN': 'Repetă PIN-ul', 'Cambiar PIN': 'Schimbă PIN-ul', 'Dispositivos conectados': 'Dispozitive conectate', 'Cerrar las demás sesiones': 'Închide celelalte sesiuni', 'Idioma': 'Limba', 'Elige el idioma en el que quieres ver tu portal.': 'Alege limba în care vrei să vezi portalul tău.', 'Confirmar recogida': 'Confirmă ridicarea', 'Borrar firma': 'Șterge semnătura', 'Firma con el dedo para confirmar que lo has recogido:': 'Semnează cu degetul pentru a confirma că ai ridicat materialul:', 'Enviar': 'Trimite', 'Enviar al almacén': 'Trimite la depozit', 'Cancelar solicitud': 'Anulează cererea', 'Marcar leídas': 'Marchează ca citite', 'Comunicar incidencia': 'Raportează incidentul', 'Enviar devolución': 'Trimite returnarea', 'Repetir mi último pedido': 'Repetă ultima mea comandă', 'Lo que sueles pedir:': 'Ce ceri de obicei:', 'Tipo': 'Tip', 'Fotos (hasta 5, opcional)': 'Poze (până la 5, opțional)', '¿Qué ha pasado?': 'Ce s-a întâmplat?', 'Tipo de activo': 'Tip de bun', 'Qué ha ocurrido': 'Ce s-a întâmplat', 'Privacidad': 'Confidențialitate', 'Prioridad': 'Prioritate', 'Obra o destino': 'Șantier sau destinație', 'Obra (opcional)': 'Șantier (opțional)', 'Nombre del activo': 'Numele bunului', 'Motivo': 'Motiv', 'Mensaje': 'Mesaj', 'Estado': 'Stare', 'Detalle (opcional)': 'Detalii (opțional)', 'Código': 'Cod', 'Código o QR': 'Cod sau QR', 'Categoría': 'Categorie', 'Cantidad': 'Cantitate', 'Asunto': 'Subiect', 'Artículo': 'Articol', '¿Para cuándo?': 'Pentru când?', 'Cuando se pueda': 'Când se poate', 'Hoy': 'Azi', 'Mañana': 'Mâine', 'Elegir fecha': 'Alege data', 'Fecha': 'Data', 'Hora (opcional)': 'Ora (opțional)', '¿Cuántos días lo necesitas?': 'Câte zile ai nevoie de el?', 'Lo recojo en el almacén': 'Îl ridic de la depozit', 'Que lo lleven a la obra': 'Să fie adus la șantier', 'Avísame cuando quede libre': 'Anunță-mă când se eliberează', 'Ver qué hay': 'Vezi ce există', 'libres': 'libere', 'ninguna libre ahora': 'niciuna liberă acum', 'Nada que mostrar': 'Nimic de arătat', 'Motivo o comentario': 'Motiv sau comentariu', 'Añadir otra cosa': 'Adaugă altceva', 'Enviar solicitud': 'Trimite cererea', 'Lo necesito': 'Am nevoie', 'días': 'zile', 'En espera de que quede libre': 'În așteptare să se elibereze', 'Solicitud registrada': 'Cerere înregistrată', 'Mensaje recibido': 'Mesaj primit', 'Incidencia registrada': 'Incident înregistrat', 'Devolución registrada': 'Returnare înregistrată', 'Datos guardados': 'Date salvate', 'PIN cambiado': 'PIN schimbat', 'Sesiones cerradas': 'Sesiuni închise', 'Solicitud cancelada': 'Cerere anulată', 'Comentario enviado': 'Comentariu trimis', 'Recogida confirmada': 'Ridicare confirmată', 'Idioma cambiado': 'Limba a fost schimbată', 'Operación completada': 'Operațiune finalizată', 'Gracias, queda anotado que tienes todo lo de tu lista': 'Mulțumim, am notat că ai tot ce este pe lista ta', 'Anotado: el almacén lo revisará': 'Notat: depozitul va verifica', 'Anotado: el almacén revisará que esa herramienta está contigo y la pondrá a tu nombre': 'Notat: depozitul va verifica că scula este la tine și o va trece pe numele tău'}}
+PORTAL_TEXTOS: dict[str, dict[str, str]] = {"ro": {'Lo que tengo': 'Ce am la mine', 'Mi historial': 'Istoricul meu', 'Escanear': 'Scanează', 'Solicitar': 'Cere material', 'Seguimiento': 'Urmărire', 'Devolver': 'Returnează', 'Incidencias': 'Incidente', 'Albaranes': 'Avize de livrare', 'Buzón': 'Sugestii', 'Mi cuenta': 'Contul meu', 'Instalar': 'Instalează', 'Salir': 'Ieșire', 'MI ESPACIO MRD': 'SPAȚIUL MEU MRD', 'CARNET DIGITAL MRD': 'LEGITIMAȚIE DIGITALĂ MRD', 'Trabajador': 'Muncitor', 'AVISOS': 'ANUNȚURI', 'Notificaciones': 'Notificări', 'TU INVENTARIO PERSONAL': 'INVENTARUL TĂU PERSONAL', 'PROTECCIÓN': 'PROTECȚIE', 'Tu EPI': 'Echipamentul tău de protecție', 'ESCÁNER': 'SCANER', 'Escanear una herramienta': 'Scanează o sculă', 'TU ACTIVIDAD': 'ACTIVITATEA TA', 'PEDIDO AL ALMACÉN': 'COMANDĂ LA DEPOZIT', '¿Qué necesitas?': 'De ce ai nevoie?', 'SEGUIMIENTO': 'URMĂRIRE', 'Mis solicitudes': 'Cererile mele', 'DOCUMENTOS': 'DOCUMENTE', 'Mis albaranes': 'Avizele mele', 'ESCUCHA ACTIVA': 'ASCULTARE ACTIVĂ', 'Quejas y sugerencias': 'Reclamații și sugestii', 'DEVOLUCIONES': 'RETURURI', 'Solicitar una devolución': 'Cere o returnare', 'AYUDA RÁPIDA': 'AJUTOR RAPID', 'Comunicar una incidencia': 'Raportează un incident', 'IDENTIDAD Y SEGURIDAD': 'IDENTITATE ȘI SECURITATE', 'SEGURIDAD': 'SIGURANȚĂ', 'Documentación personal': 'Documente personale', 'Mis datos de contacto': 'Datele mele de contact', 'Teléfono': 'Telefon', 'Correo': 'E-mail', 'PIN actual para confirmar': 'PIN-ul actual pentru confirmare', 'Guardar datos': 'Salvează datele', 'Cambiar mi PIN': 'Schimbă PIN-ul', 'PIN actual': 'PIN-ul actual', 'PIN nuevo': 'PIN nou', 'Repite el PIN': 'Repetă PIN-ul', 'Cambiar PIN': 'Schimbă PIN-ul', 'Dispositivos conectados': 'Dispozitive conectate', 'Cerrar las demás sesiones': 'Închide celelalte sesiuni', 'Idioma': 'Limba', 'Elige el idioma en el que quieres ver tu portal.': 'Alege limba în care vrei să vezi portalul tău.', 'Confirmar recogida': 'Confirmă ridicarea', 'Borrar firma': 'Șterge semnătura', 'Firma con el dedo para confirmar que lo has recogido:': 'Semnează cu degetul pentru a confirma că ai ridicat materialul:', 'Enviar': 'Trimite', 'Enviar al almacén': 'Trimite la depozit', 'Cancelar solicitud': 'Anulează cererea', 'Marcar leídas': 'Marchează ca citite', 'Comunicar incidencia': 'Raportează incidentul', 'Enviar devolución': 'Trimite returnarea', 'Repetir mi último pedido': 'Repetă ultima mea comandă', 'Lo que sueles pedir:': 'Ce ceri de obicei:', 'Tipo': 'Tip', 'Fotos (hasta 5, opcional)': 'Poze (până la 5, opțional)', '¿Qué ha pasado?': 'Ce s-a întâmplat?', 'Tipo de activo': 'Tip de bun', 'Qué ha ocurrido': 'Ce s-a întâmplat', 'Privacidad': 'Confidențialitate', 'Prioridad': 'Prioritate', 'Obra o destino': 'Șantier sau destinație', 'Obra (opcional)': 'Șantier (opțional)', 'Nombre del activo': 'Numele bunului', 'Motivo': 'Motiv', 'Mensaje': 'Mesaj', 'Estado': 'Stare', 'Detalle (opcional)': 'Detalii (opțional)', 'Código': 'Cod', 'Código o QR': 'Cod sau QR', 'Categoría': 'Categorie', 'Cantidad': 'Cantitate', 'Asunto': 'Subiect', 'Artículo': 'Articol', '¿Para cuándo?': 'Pentru când?', 'Cuando se pueda': 'Când se poate', 'Hoy': 'Azi', 'Mañana': 'Mâine', 'Elegir fecha': 'Alege data', 'Fecha': 'Data', 'Hora (opcional)': 'Ora (opțional)', '¿Cuántos días lo necesitas?': 'Câte zile ai nevoie de el?', 'Lo recojo en el almacén': 'Îl ridic de la depozit', 'Que lo lleven a la obra': 'Să fie adus la șantier', 'Avísame cuando quede libre': 'Anunță-mă când se eliberează', 'Ver qué hay': 'Vezi ce există', 'libres': 'libere', 'ninguna libre ahora': 'niciuna liberă acum', 'Nada que mostrar': 'Nimic de arătat', 'Motivo o comentario': 'Motiv sau comentariu', 'Añadir otra cosa': 'Adaugă altceva', 'Enviar solicitud': 'Trimite cererea', 'Lo necesito': 'Am nevoie', 'días': 'zile', 'En espera de que quede libre': 'În așteptare să se elibereze', 'La dejo en su hueco': 'O las la locul ei', 'Devuelta y colocada en su hueco': 'Returnată și pusă la locul ei', 'Ahora escanea el QR del hueco donde la dejas': 'Acum scanează codul QR al locului unde o lași', 'Solicitud registrada': 'Cerere înregistrată', 'Mensaje recibido': 'Mesaj primit', 'Incidencia registrada': 'Incident înregistrat', 'Devolución registrada': 'Returnare înregistrată', 'Datos guardados': 'Date salvate', 'PIN cambiado': 'PIN schimbat', 'Sesiones cerradas': 'Sesiuni închise', 'Solicitud cancelada': 'Cerere anulată', 'Comentario enviado': 'Comentariu trimis', 'Recogida confirmada': 'Ridicare confirmată', 'Idioma cambiado': 'Limba a fost schimbată', 'Operación completada': 'Operațiune finalizată', 'Gracias, queda anotado que tienes todo lo de tu lista': 'Mulțumim, am notat că ai tot ce este pe lista ta', 'Anotado: el almacén lo revisará': 'Notat: depozitul va verifica', 'Anotado: el almacén revisará que esa herramienta está contigo y la pondrá a tu nombre': 'Notat: depozitul va verifica că scula este la tine și o va trece pe numele tău'}}
 
 
 def _portal_traductor(idioma: str | None):
@@ -18592,6 +18592,62 @@ async def portal_cambiar_idioma(token: str, request: Request, db: Session = Depe
     worker.idioma = idioma
     db.commit()
     return RedirectResponse(f"/portal/{token}?ok=idioma#cuenta", status_code=303)
+
+
+def _portal_dejar_en_hueco(db: Session, worker: Trabajador, h: Herramienta, loc: Ubicacion) -> None:
+    """Devolución hecha por el propio trabajador desde el móvil: la herramienta queda disponible,
+    sin responsable y colocada en el hueco; queda movimiento, auditoría y aviso al almacén (mejora 3)."""
+    anterior = h.estado or ""
+    h.estado = "disponible"
+    h.responsable_id = None
+    h.obra_id = None
+    h.ubicacion_id = loc.id
+    h.ubicacion_texto = (loc.ruta_completa or loc.nombre or "")[:200]
+    if loc.almacen_id:
+        h.almacen_id = loc.almacen_id
+    db.add(Movimiento(
+        tipo="devolucion", estado_anterior=anterior, estado_nuevo="disponible",
+        origen=f"Portal del trabajador: {worker.nombre_completo}"[:200],
+        destino=(loc.ruta_completa or loc.nombre or "")[:200],
+        motivo="Dejada en su hueco desde el móvil"[:200],
+        herramienta_id=h.id, trabajador_id=worker.id,
+    ))
+    db.add(AuditoriaLog(tabla="herramientas", registro_id=h.id, accion="devolucion_portal",
+                        resumen=f"{worker.nombre_completo} dejó {h.nombre} ({h.codigo}) en {loc.nombre} desde su móvil", usuario_id=None))
+    db.add(Aviso(titulo=f"{worker.nombre_completo} ha dejado {h.nombre} en {loc.nombre}",
+                 mensaje=f"Devolución hecha desde el móvil: {h.nombre} ({h.codigo}) queda disponible y colocada en {loc.ruta_completa or loc.nombre}. Conviene echarle un vistazo.",
+                 prioridad="baja", tipo="sistema", enlace=f"/herramientas/{h.id}"))
+
+
+@app.post("/portal/{token}/escanear/colocar", response_class=RedirectResponse)
+async def portal_escanear_colocar(token: str, request: Request, db: Session = Depends(get_db)):
+    """Escáner del portal: 'La dejo en su hueco' (mejora 3). Form: codigo (herramienta), hueco (QR del hueco)."""
+    worker = _portal_worker_required(token, request, db)
+    form = await request.form()
+    codigo = str(form.get("codigo") or "").strip()[:128]
+    hueco = str(form.get("hueco") or "").strip()[:128]
+    if not codigo or not hueco:
+        raise HTTPException(400, "Faltan la herramienta o el hueco")
+    item = _portal_escaneo(db, worker, codigo)
+    if item.get("tipo") != "herramienta" or not item.get("es_mia"):
+        raise HTTPException(409, "Solo puedes dejar en su hueco una herramienta que conste a tu nombre")
+    try:
+        target = resolve_counter_item(db, hueco, warehouse_id=worker.almacen_id)
+    except CounterError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+    if target.get("tipo") != "ubicacion":
+        raise HTTPException(409, "Eso no es un hueco: escanea el QR del hueco donde la dejas")
+    loc = db.get(Ubicacion, int(target["id"]))
+    if not loc or not loc.activo or (worker.almacen_id and loc.almacen_id != worker.almacen_id):
+        raise HTTPException(404, "Ese hueco no existe en tu almacén")
+    h = db.get(Herramienta, int(item["id"]))
+    if h is None or not h.activa:
+        raise HTTPException(404, "Herramienta no encontrada")
+    if (h.estado or "") == "disponible" and h.responsable_id is None:
+        raise HTTPException(409, "Esa herramienta ya consta como devuelta")
+    _portal_dejar_en_hueco(db, worker, h, loc)
+    db.commit()
+    return RedirectResponse(f"/portal/{token}?ok=colocada#escanear", status_code=303)
 
 
 @app.get("/portal/{token}/api/disponibilidad")
