@@ -247,6 +247,16 @@ class SolicitudTrabajador(Base):
     entrega_modo = Column(String(20), nullable=True)      # recoger | llevar
     dias_uso = Column(Integer, nullable=True)             # cuántos días lo necesita -> plazo al entregar
     voy_a_recoger_en = Column(DateTime, nullable=True)    # el trabajador avisó que va a recogerlo (mejora 9)
+    fotos_json = Column(Text, nullable=True)   # fotos del pedido (mejora 11)
+
+    @property
+    def fotos_lista(self) -> list:
+        import json as _json
+        try:
+            lista = _json.loads(self.fotos_json) if self.fotos_json else []
+        except (TypeError, ValueError):
+            lista = []
+        return [str(x) for x in lista if x]
 
     trabajador = relationship("Trabajador", back_populates="solicitudes", foreign_keys=[trabajador_id])
     almacen = relationship("Almacen", foreign_keys=[almacen_id])
