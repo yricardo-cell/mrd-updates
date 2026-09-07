@@ -17914,6 +17914,129 @@ def _portal_lo_que_tengo(db: Session, t: Trabajador) -> list[dict]:
     return salida
 
 
+# ─── Portal: escanear desde el móvil (2.7.71, P1) ────────────────────────────
+
+def _portal_escaneo(db: Session, worker: Trabajador, codigo: str) -> dict:
+    """Qué es lo escaneado, quién lo tiene y qué puede hacer el trabajador con ello."""
+    try:
+        item = resolve_counter_item(db, codigo, warehouse_id=worker.almacen_id)
+    except CounterError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+    tipo = item.get("tipo") or ""
+    out = {"tipo": tipo, "id": item.get("id"), "nombre": item.get("nombre") or "", "codigo": item.get("codigo") or "",
+           "estado": (item.get("estado") or "").replace("_", " "), "quien": "", "desde": "", "ubicacion": "",
+           "es_mia": False, "puede_tengo": False, "puede_devolver": False, "contenido": []}
+    if tipo == "herramienta":
+        h = db.get(Herramienta, int(item.get("id") or 0))
+        if h is None:
+            raise HTTPException(404, "Herramienta no encontrada")
+        loc = db.get(Ubicacion, h.ubicacion_id) if h.ubicacion_id else None
+        out["ubicacion"] = loc.nombre if loc else ""
+        fuera = h.estado in ("entregada", "en_obra", "en_transporte")
+        mov = db.query(Movimiento).filter(Movimiento.herramienta_id == h.id, Movimiento.tipo.in_(["entrega", "traslado"])).order_by(Movimiento.id.desc()).first()
+        tid = h.responsable_id or (mov.trabajador_id if (mov is not None and fuera) else None)
+        if tid:
+            t = db.get(Trabajador, tid)
+            out["quien"] = t.nombre_completo if t else ""
+        elif fuera and mov is not None and mov.obra_id:
+            o = db.get(Obra, mov.obra_id)
+            out["quien"] = f"obra {o.nombre}" if o else ""
+        elif fuera and mov is not None:
+            out["quien"] = mov.destino or ""
+        if fuera and mov is not None and mov.fecha:
+            out["desde"] = _utc_a_local(mov.fecha).strftime("%d/%m/%Y")
+        out["es_mia"] = bool(tid == worker.id)
+        out["puede_tengo"] = not out["es_mia"] and h.estado not in ("baja",)
+        out["puede_devolver"] = out["es_mia"]
+    elif tipo == "epi_individual":
+        e = db.get(EPIIndividual, int(item.get("id") or 0))
+        if e is not None:
+            if e.trabajador_id:
+                t = db.get(Trabajador, e.trabajador_id)
+                out["quien"] = t.nombre_completo if t else ""
+            out["es_mia"] = e.trabajador_id == worker.id
+            out["puede_devolver"] = out["es_mia"]
+            out["puede_tengo"] = not out["es_mia"]
+    elif tipo == "ubicacion":
+        u = db.get(Ubicacion, int(item.get("id") or 0))
+        if u is not None:
+            out["ubicacion"] = u.ruta_completa or u.nombre
+            items = _nave_contenido(db, [u]).get(u.id, [])
+            out["contenido"] = [f"{i['nombre']}" + (f" ({i['quien']})" if i.get("quien") else "") for i in items[:12]]
+    elif tipo in ("material", "stock_epi"):
+        out["puede_devolver"] = True
+    elif tipo == "maquinaria":
+        m = db.get(Maquinaria, int(item.get("id") or 0))
+        if m is not None:
+            out["quien"] = m.responsable or ""
+            out["es_mia"] = bool(m.responsable and m.responsable.strip().lower() == worker.nombre_completo.strip().lower())
+            out["puede_tengo"] = not out["es_mia"]
+            out["puede_devolver"] = out["es_mia"]
+    return out
+
+
+@app.get("/portal/{token}/api/escanear")
+def portal_api_escanear(token: str, request: Request, codigo: str = Query(..., min_length=1, max_length=128), db: Session = Depends(get_db)):
+    worker = _portal_worker_required(token, request, db)
+    return JSONResponse({"ok": True, "item": _portal_escaneo(db, worker, codigo.strip())})
+
+
+@app.post("/portal/{token}/escanear/la-tengo", response_class=RedirectResponse)
+async def portal_escanear_la_tengo(token: str, request: Request, db: Session = Depends(get_db)):
+    """«La tengo yo»: si ya consta a su nombre, lo confirma; si no, avisa al almacén para que lo revise."""
+    worker = _portal_worker_required(token, request, db)
+    form = await request.form()
+    codigo = str(form.get("codigo") or "").strip()[:128]
+    if not codigo:
+        raise HTTPException(400, "Falta el código")
+    item = _portal_escaneo(db, worker, codigo)
+    if item["tipo"] == "herramienta" and item["es_mia"]:
+        h = db.get(Herramienta, int(item["id"]))
+        h.confirmada_portal_en = datetime.now()
+        db.add(AuditoriaLog(tabla="herramientas", registro_id=h.id, accion="confirmacion_portal", usuario_id=None,
+                            resumen=f"{worker.nombre_completo} confirma desde el portal que tiene 1 herramienta(s) (escáner)"))
+        db.commit()
+        return RedirectResponse(f"/portal/{token}?ok=confirmado#escanear", status_code=303)
+    if not item["puede_tengo"]:
+        raise HTTPException(409, "Ese artículo no se puede reclamar desde el portal")
+    descripcion = (f"Dice que tiene {item['nombre']} {item['codigo']} (escaneada desde su móvil). "
+                   + (f"Constaba a nombre de {item['quien']}." if item["quien"] else "No constaba a nombre de nadie."))
+    try:
+        row = create_worker_incident(db, worker, category="otro", asset_type=item["tipo"] if item["tipo"] in ("herramienta", "maquinaria") else "otro",
+                                     asset_code=item["codigo"], asset_name=item["nombre"], description=descripcion, photo_path=None)
+        db.add(AuditoriaLog(tabla="incidencias_portal_trabajador", registro_id=row.id, accion="crear_portal", resumen=row.numero, usuario_id=None))
+        enlace = f"/herramientas/{item['id']}" if item["tipo"] == "herramienta" else "/operaciones-portal-trabajadores"
+        db.add(Aviso(titulo=f"{worker.nombre_completo} dice que tiene {item['nombre']}", tipo="alerta", prioridad="media",
+                     enlace=enlace, mensaje=f"{descripcion}{chr(10)}Incidencia {row.numero}. Si es correcto, entrégasela por el Mostrador Único para que quede a su nombre."))
+        db.commit()
+    except WorkerPortalError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.detail)
+    return RedirectResponse(f"/portal/{token}?ok=la_tengo&numero={row.numero}#escanear", status_code=303)
+
+
+@app.post("/portal/{token}/escanear/devolver", response_class=RedirectResponse)
+async def portal_escanear_devolver(token: str, request: Request, db: Session = Depends(get_db)):
+    """«Quiero devolverla»: abre una devolución del portal con el artículo ya identificado."""
+    worker = _portal_worker_required(token, request, db)
+    form = await request.form()
+    codigo = str(form.get("codigo") or "").strip()[:128]
+    if not codigo:
+        raise HTTPException(400, "Falta el código")
+    item = _portal_escaneo(db, worker, codigo)
+    tipo = {"herramienta": "herramienta", "maquinaria": "maquinaria", "epi_individual": "epi", "stock_epi": "epi", "material": "material"}.get(item["tipo"], "otro")
+    try:
+        row = create_worker_return(db, worker, asset_type=tipo, asset_code=item["codigo"], description=item["nombre"] or codigo,
+                                   quantity=1, item_state=str(form.get("estado_material") or "correcto"),
+                                   reason=str(form.get("motivo") or "Devolución pedida desde el escáner del móvil"), photo_path=None)
+        db.add(AuditoriaLog(tabla="devoluciones_trabajador", registro_id=row.id, accion="crear_portal", resumen=row.numero, usuario_id=None))
+        db.commit()
+    except WorkerPortalError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.detail)
+    return RedirectResponse(f"/portal/{token}?ok=devolucion&numero={row.numero}#devoluciones", status_code=303)
+
+
 @app.post("/portal/{token}/tengo/confirmar", response_class=RedirectResponse)
 async def portal_confirmar_lo_que_tengo(token: str, request: Request, db: Session = Depends(get_db)):
     """El trabajador confirma con un toque que sigue teniendo lo que consta a su nombre (2.7.64)."""
