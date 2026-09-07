@@ -1113,6 +1113,8 @@ def startup_event():
                     mrd_logging.log_error(f"Prueba de humo: {_e}")
             _thr.Thread(target=_run_humo, daemon=True, name="prueba_humo_bg").start()
             if IS_PRODUCTION:
+                _thr.Thread(target=_arranque_bg, daemon=True, name="arranque_bg").start()   # mejora 37
+            if IS_PRODUCTION:
                 _thr.Thread(target=_tunel_bg, daemon=True, name="tunel_bg").start()   # mejora 35
             try:
                 _ra = json.loads(_RESTAURACION_AUTO.read_text(encoding="utf-8")) if _RESTAURACION_AUTO.is_file() else {}
@@ -11993,6 +11995,75 @@ def _recursos_tick(db_externa=None) -> dict:
         liberado = (res.get("limpieza") or {}).get("bytes", 0) / 1024 ** 2
         _notificar_sistema("Poco espacio en el disco del PC de MRD", f"Quedan {libre:.1f} GB. Se ha ejecutado la limpieza automática ({liberado:.0f} MB liberados). Si sigue bajo, hay que hacer sitio en el disco.")
     return res
+
+
+# ─── 37: tras un reinicio de Windows, todo en marcha ─────────────────────────
+_ARRANQUE_TAREAS_CONTINUAS = ("MRD Sentinel 24x7", "MRD Remote Telegram")
+_ARRANQUE_SERVICIOS = ("Cloudflared",)
+
+
+def _tarea_estado(nombre: str) -> str:
+    try:
+        r = subprocess.run(["schtasks", "/Query", "/TN", nombre, "/FO", "CSV", "/NH"], capture_output=True, text=True, timeout=20)
+        if r.returncode != 0:
+            return "no_existe"
+        partes = [p.strip().strip('"') for p in (r.stdout or "").strip().splitlines()[-1].split(",")]
+        return partes[-1] if partes else "?"
+    except Exception:
+        return "?"
+
+
+def _servicio_estado(nombre: str) -> str:
+    try:
+        r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", f"(Get-Service -Name '{nombre}' -ErrorAction Stop).Status"], capture_output=True, text=True, timeout=20)
+        return (r.stdout or "").strip() or "?"
+    except Exception:
+        return "?"
+
+
+def _arranque_decidir(tareas: dict, servicios: dict) -> list:
+    """Qué arrancar: tareas continuas que están paradas ('Ready'/'Listo') y servicios parados."""
+    acciones = []
+    for nombre, estado in tareas.items():
+        if estado in ("Ready", "Listo", "Queued"):
+            acciones.append(("tarea", nombre))
+    for nombre, estado in servicios.items():
+        if str(estado).lower() in ("stopped", "detenido"):
+            acciones.append(("servicio", nombre))
+    return acciones
+
+
+def _arranque_comprobar() -> list:
+    if sys.platform != "win32":
+        return []
+    tareas = {n: _tarea_estado(n) for n in _ARRANQUE_TAREAS_CONTINUAS}
+    servicios = {n: _servicio_estado(n) for n in _ARRANQUE_SERVICIOS}
+    acciones = _arranque_decidir(tareas, servicios)
+    hechas = []
+    for tipo, nombre in acciones:
+        try:
+            if tipo == "tarea":
+                r = subprocess.run(["schtasks", "/Run", "/TN", nombre], capture_output=True, text=True, timeout=30)
+            else:
+                r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", f"Start-Service -Name '{nombre}' -ErrorAction Stop; 'ok'"], capture_output=True, text=True, timeout=60)
+            hechas.append((tipo, nombre, r.returncode == 0))
+        except Exception as exc:
+            hechas.append((tipo, nombre, False))
+            mrd_logging.log_error(f"Arranque de {nombre}: {exc}")
+    if hechas:
+        _notificar_sistema("Tras reiniciar el PC: arrancado lo que faltaba", "; ".join(f"{n} ({'ok' if ok else 'no se pudo'})" for _, n, ok in hechas), prioridad="media")
+    return acciones
+
+
+def _arranque_bg():
+    import time as _t
+    _t.sleep(120)
+    while True:
+        try:
+            _arranque_comprobar()
+        except Exception as exc:
+            mrd_logging.log_error(f"Comprobación de arranque: {exc}")
+        _t.sleep(86400)
 
 
 def _alertas_consumo_obras_bg():
