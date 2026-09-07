@@ -71,3 +71,6 @@ input,select,textarea{transition:border-color .16s ease,box-shadow .16s ease}
 
 /* Revisión de EPI (mejora 7) */
 .epi-rev-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #eef1f5}.epi-rev-row>span{flex:1;font-weight:700;min-width:120px}.epi-revision{margin-top:8px}
+
+/* Tutorial de la primera vez (mejora 20) */
+.tutorial{position:fixed;inset:0;background:#08080bcc;z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}.tutorial-card{background:#fff;color:#172033;border-radius:20px;padding:22px;max-width:440px;width:100%;box-shadow:0 20px 60px #00000055}.tutorial-step{text-align:center;padding:10px 0}.tutorial-step i{font-size:2.6rem;color:#0e7490}.tutorial-step h3{font-size:1.15rem;margin:8px 0 6px}.tutorial-step p{font-size:.95rem;color:#3b4a5c}.tutorial-dots{display:flex;gap:6px;justify-content:center;margin:8px 0 14px}.tutorial-dots b{width:8px;height:8px;border-radius:50%;background:#cedae7}.tutorial-dots b.on{background:#0e7490}
