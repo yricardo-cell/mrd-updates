@@ -74,3 +74,6 @@ input,select,textarea{transition:border-color .16s ease,box-shadow .16s ease}
 
 /* Tutorial de la primera vez (mejora 20) */
 .tutorial{position:fixed;inset:0;background:#08080bcc;z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}.tutorial-card{background:#fff;color:#172033;border-radius:20px;padding:22px;max-width:440px;width:100%;box-shadow:0 20px 60px #00000055}.tutorial-step{text-align:center;padding:10px 0}.tutorial-step i{font-size:2.6rem;color:#0e7490}.tutorial-step h3{font-size:1.15rem;margin:8px 0 6px}.tutorial-step p{font-size:.95rem;color:#3b4a5c}.tutorial-dots{display:flex;gap:6px;justify-content:center;margin:8px 0 14px}.tutorial-dots b{width:8px;height:8px;border-radius:50%;background:#cedae7}.tutorial-dots b.on{background:#0e7490}
+
+/* Pantalla Hoy (mejora 1) */
+.hoy-list{display:flex;flex-direction:column;gap:8px}.hoy-item{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:#f4f7fb;color:#172033;text-decoration:none;font-weight:700}.hoy-item span{flex:1}.hoy-item>i:first-child{font-size:1.3rem}.hoy-item.ok{background:#e6f7ec;color:#166534}.hoy-item.warn{background:#fff4e5;color:#9a3412}.hoy-item.danger{background:#fde8e8;color:#991b1b}.hoy-item.info{background:#e0f2fe;color:#075985}.hoy-ok{margin:0;font-weight:700;color:#166534}
