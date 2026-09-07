@@ -698,6 +698,8 @@ def apply_migrations(target_engine=None):
         # Recuento por hueco (2.7.59)
         ("ubicaciones", "ultimo_recuento",      "DATETIME"),
         ("ubicaciones", "ultimo_recuento_faltan", "INTEGER"),
+        # Portal "Lo que tengo" (2.7.64)
+        ("herramientas", "confirmada_portal_en", "DATETIME"),
         # catalogo_epi — campos marca y notas
         ("catalogo_epi", "marca",            "VARCHAR(100)"),
         ("catalogo_epi", "notas",            "TEXT"),

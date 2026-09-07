@@ -42,3 +42,6 @@ input,select,textarea{transition:border-color .16s ease,box-shadow .16s ease}
 .digital-card{animation:cardGlow 4.2s ease-in-out infinite}
 @keyframes cardGlow{0%,100%{box-shadow:0 18px 45px #062a3360}50%{box-shadow:0 18px 55px #22d3ee45}}
 @media(prefers-reduced-motion:reduce){.digital-card{animation:none}.digital-card::before{display:none}.portal-primary{animation:none;background-position:0 0}.portal-primary::after{display:none}.portal-primary,.portal-tabs a,.btn-add,.remove-line,.asset-card,.timeline-card,.portal-panel{transition:none}}
+
+/* Lo que tengo (2.7.64) */
+.tengo-bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 16px;margin-bottom:12px;background:#fff;border:1px solid var(--line);border-radius:16px}.tengo-bar p{margin:0;flex:1 1 260px;color:var(--muted);font-size:.9rem}.tengo-bar form{margin:0}.tengo-bar .portal-primary{margin-top:0}.tengo-card{align-items:start}.tengo-card small{display:block}.tengo-vencida{color:#b21e2b;font-weight:700}.tengo-ok{color:#087756}.tengo-no{margin-top:8px}.tengo-no summary{cursor:pointer;color:#b21e2b;font-weight:750;font-size:.82rem;list-style:none}.tengo-no summary::before{content:'\25B8 '}.tengo-no[open] summary::before{content:'\25BE '}.tengo-no form{display:grid;gap:8px;margin-top:8px}.btn-add.danger{color:#b21e2b}

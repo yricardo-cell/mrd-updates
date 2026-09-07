@@ -8952,7 +8952,8 @@ def _quien_tiene_que(db: Session, warehouse_id: int | None) -> dict:
         desde = _utc_a_local(mov.fecha).date() if (mov is not None and mov.fecha) else None
         valor = float(h.precio_compra or 0)
         g["items"].append({"id": h.id, "nombre": h.nombre, "codigo": h.codigo or "", "desde": desde.strftime("%d/%m/%Y") if desde else "",
-                           "dias": (hoy - desde).days if desde else None, "valor": valor, "url": f"/herramientas/{h.id}", "estado": h.estado})
+                           "dias": (hoy - desde).days if desde else None, "valor": valor, "url": f"/herramientas/{h.id}", "estado": h.estado,
+                           "confirmada": h.confirmada_portal_en.strftime("%d/%m/%Y") if h.confirmada_portal_en else ""})
         g["n"] += 1
         g["valor"] += valor
     lista = sorted(grupos.values(), key=lambda g: (-g["n"], g["nombre"]))
@@ -17492,10 +17493,7 @@ def portal_trabajador(token: str, request: Request, db: Session = Depends(get_db
     epis = db.query(EPIIndividual).filter(EPIIndividual.trabajador_id == t.id, EPIIndividual.estado == "activo").all()
     formaciones = db.query(FormacionTrabajador).filter(FormacionTrabajador.trabajador_id == t.id).order_by(FormacionTrabajador.fecha_caducidad.asc().nullslast()).all()
     reconocs = db.query(ReconocimientoMedico).filter(ReconocimientoMedico.trabajador_id == t.id).order_by(ReconocimientoMedico.fecha.desc()).limit(3).all()
-    herramientas = db.query(Herramienta).filter(
-        Herramienta.responsable_id == t.id,
-        Herramienta.activa == True,
-    ).order_by(Herramienta.nombre).all()
+    herramientas = _portal_lo_que_tengo(db, t)  # 2.7.64: con desde cuándo, plazo y confirmación
     dotacion_lineas = db.query(LineaDotacion).join(DotacionTrabajador).filter(
         DotacionTrabajador.trabajador_id == t.id,
         DotacionTrabajador.estado == "entregada",
@@ -17594,6 +17592,86 @@ def portal_trabajador(token: str, request: Request, db: Session = Depends(get_db
     response.headers["Cache-Control"] = "no-store, private"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
+
+
+def _portal_lo_que_tengo(db: Session, t: Trabajador) -> list[dict]:
+    """Herramientas que constan a nombre del trabajador: las que tienen
+    responsable_id suyo y las que le entregó el Mostrador y siguen fuera.
+    Con desde cuándo, plazo (si lo hay) y si él mismo confirmó que la tiene."""
+    ids = {hid for (hid,) in db.query(Herramienta.id).filter(Herramienta.responsable_id == t.id, Herramienta.activa == True).all()}
+    ids |= {hid for (hid,) in db.query(Movimiento.herramienta_id).filter(
+        Movimiento.trabajador_id == t.id, Movimiento.tipo.in_(["entrega", "traslado"]), Movimiento.herramienta_id.isnot(None)).all()}
+    if not ids:
+        return []
+    hs = db.query(Herramienta).filter(Herramienta.id.in_(list(ids)), Herramienta.activa == True).order_by(Herramienta.nombre).all()
+    ultima: dict[int, Movimiento] = {}
+    for mov in db.query(Movimiento).filter(Movimiento.herramienta_id.in_([h.id for h in hs]), Movimiento.tipo.in_(["entrega", "traslado"])).order_by(Movimiento.id.desc()).all():
+        ultima.setdefault(mov.herramienta_id, mov)
+    hoy, ahora, salida = date.today(), datetime.now(), []
+    for h in hs:
+        mov = ultima.get(h.id)
+        fuera = h.estado in ("entregada", "en_obra", "en_transporte")
+        if not (h.responsable_id == t.id or (mov is not None and mov.trabajador_id == t.id and fuera)):
+            continue
+        desde = _utc_a_local(mov.fecha).date() if (mov is not None and mov.fecha) else None
+        prevista = mov.fecha_devolucion_prevista if mov is not None else None
+        obra = db.get(Obra, mov.obra_id) if (mov is not None and mov.obra_id) else None
+        salida.append({
+            "id": h.id, "nombre": h.nombre, "codigo": h.codigo or "", "estado": h.estado or "",
+            "marca": " ".join(x for x in (h.marca or "", h.modelo or "") if x).strip(),
+            "desde": desde.strftime("%d/%m/%Y") if desde else "", "dias": (hoy - desde).days if desde else None,
+            "obra": obra.nombre if obra else ((mov.destino or "") if mov is not None else ""),
+            "prevista": prevista.strftime("%d/%m/%Y") if prevista else "", "vencida": bool(prevista and prevista < ahora),
+            "confirmada": h.confirmada_portal_en.strftime("%d/%m/%Y") if h.confirmada_portal_en else "",
+        })
+    return salida
+
+
+@app.post("/portal/{token}/tengo/confirmar", response_class=RedirectResponse)
+async def portal_confirmar_lo_que_tengo(token: str, request: Request, db: Session = Depends(get_db)):
+    """El trabajador confirma con un toque que sigue teniendo lo que consta a su nombre (2.7.64)."""
+    worker = _portal_worker_required(token, request, db)
+    form = await request.form()
+    solo = str(form.get("herramienta_id") or "").strip()
+    ids = [i["id"] for i in _portal_lo_que_tengo(db, worker) if not solo or str(i["id"]) == solo]
+    if not ids:
+        raise HTTPException(400, "No tienes herramientas que confirmar")
+    ahora = datetime.now()
+    for h in db.query(Herramienta).filter(Herramienta.id.in_(ids)).all():
+        h.confirmada_portal_en = ahora
+    db.add(AuditoriaLog(tabla="herramientas", registro_id=ids[0], accion="confirmacion_portal", usuario_id=None,
+                        resumen=f"{worker.nombre_completo} confirma desde el portal que tiene {len(ids)} herramienta(s)"))
+    db.commit()
+    return RedirectResponse(f"/portal/{token}?ok=confirmado#asignado", status_code=303)
+
+
+@app.post("/portal/{token}/tengo/{hid}/no-la-tengo", response_class=RedirectResponse)
+async def portal_no_la_tengo(token: str, hid: int, request: Request, db: Session = Depends(get_db)):
+    """«Ya no la tengo»: abre una incidencia con el motivo y avisa al almacén (2.7.64)."""
+    worker = _portal_worker_required(token, request, db)
+    form = await request.form()
+    item = next((i for i in _portal_lo_que_tengo(db, worker) if i["id"] == hid), None)
+    if item is None:
+        raise HTTPException(404, "Esa herramienta no consta como tuya")
+    motivo = str(form.get("motivo") or "otro").strip()
+    detalle = str(form.get("detalle") or "").strip()[:2000]
+    quien = str(form.get("quien") or "").strip()[:200]
+    textos = {"devuelta": "Dice que ya la devolvió al almacén", "otro_trabajador": f"Dice que la tiene {quien or 'otro compañero'}",
+              "perdida": "Dice que la ha perdido", "estropeada": "Dice que está estropeada", "otro": "Dice que ya no la tiene"}
+    categoria = {"perdida": "perdida", "estropeada": "averia"}.get(motivo, "otro")
+    descripcion = f"{textos.get(motivo, textos['otro'])}." + (f" {detalle}" if detalle else "") \
+        + f" (Desde el portal, «Ya no la tengo»: {item['nombre']} {item['codigo']})"
+    try:
+        row = create_worker_incident(db, worker, category=categoria, asset_type="herramienta", asset_code=item["codigo"],
+                                     asset_name=item["nombre"], description=descripcion, photo_path=None)
+        db.add(AuditoriaLog(tabla="incidencias_portal_trabajador", registro_id=row.id, accion="crear_portal", resumen=row.numero, usuario_id=None))
+        db.add(Aviso(titulo=f"{worker.nombre_completo}: ya no tiene {item['nombre']}", tipo="alerta", prioridad="media",
+                     enlace=f"/herramientas/{hid}", mensaje=f"{descripcion}{chr(10)}Incidencia {row.numero}."))
+        db.commit()
+    except WorkerPortalError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.detail)
+    return RedirectResponse(f"/portal/{token}?ok=no_la_tengo&numero={row.numero}#asignado", status_code=303)
 
 
 @app.post("/portal/{token}/solicitudes", response_class=RedirectResponse)

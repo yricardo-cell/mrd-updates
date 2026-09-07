@@ -629,6 +629,8 @@ class Herramienta(Base):
     obra_id = Column(Integer, ForeignKey("obras.id"), nullable=True)
     vehiculo_id = Column(Integer, ForeignKey("vehiculos.id"), nullable=True)
     responsable_id = Column(Integer, ForeignKey("trabajadores.id"), nullable=True)
+    # 2.7.64: el trabajador confirmó desde su portal que la tiene
+    confirmada_portal_en = Column(DateTime, nullable=True)
 
     # ── Kits (2.7.39): maletín que contiene otras herramientas ──
     es_maletin = Column(Boolean, nullable=False, default=False, server_default="0")

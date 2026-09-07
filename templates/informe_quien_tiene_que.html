@@ -32,7 +32,7 @@
   <div class="card-header"><div class="card-title"><i class="bi {{ 'bi-person' if g.clave.startswith('t') else 'bi-building' }}"></i> {{ g.nombre }} <span class="badge badge-info ms-1">{{ g.n }}</span>{% if g.valor %} <small class="text-muted">· {{ '{:,.0f}'.format(g.valor) }} €</small>{% endif %}</div>
     <div class="qtq-noprint">{% if g.whatsapp_tel %}<a class="btn btn-sm btn-outline-success" href="https://wa.me/{{ g.whatsapp_tel }}?text={{ g.whatsapp_texto|urlencode }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> Recordar por WhatsApp</a>{% elif g.clave.startswith('t') %}<span class="small text-muted">sin teléfono en la ficha</span>{% endif %}</div></div>
   <div class="card-body p-0"><div class="list-group list-group-flush">
-    {% for i in g['items'] %}<a class="list-group-item list-group-item-action" href="{{ i.url }}"><span><strong>{{ i.nombre }}</strong><br><small class="text-muted">{{ i.codigo }}{% if i.desde %} · desde {{ i.desde }} ({{ i.dias }} días){% endif %}</small></span><span class="small">{% if i.valor %}{{ '{:,.0f}'.format(i.valor) }} €{% endif %}</span></a>{% endfor %}
+    {% for i in g['items'] %}<a class="list-group-item list-group-item-action" href="{{ i.url }}"><span><strong>{{ i.nombre }}</strong><br><small class="text-muted">{{ i.codigo }}{% if i.desde %} · desde {{ i.desde }} ({{ i.dias }} días){% endif %}{% if i.confirmada %} · <span class='text-success'>confirmó que la tiene el {{ i.confirmada }}</span>{% endif %}</small></span><span class="small">{% if i.valor %}{{ '{:,.0f}'.format(i.valor) }} €{% endif %}</span></a>{% endfor %}
   </div></div>
 </div>
 {% endfor %}
