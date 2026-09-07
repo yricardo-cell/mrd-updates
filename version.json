@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.60",
-    "nombre":  "MRD TOOL CONTROL -- Etiqueta QR del hueco rehecha para imprimir: nombre grande, QR de 44 mm y codigo que no desborda; enlaces de etiquetas en Zonas 3D",
+    "version_actual":  "2.7.61",
+    "nombre":  "MRD TOOL CONTROL -- Etiquetas con tamano configurable para la etiquetadora (Brother, Dymo, Niimbot, A4, personalizado) en HTML y PDF; resumen semanal por WhatsApp y push; firma en el Mostrador; informe quien tiene que; importar formaciones y reconocimientos desde Excel",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Etiqueta QR del hueco rehecha para imprimir: nombre grande, QR de 44 mm y codigo que no desborda; enlaces de etiquetas en Zonas 3D"
+                    "Etiquetas con tamano configurable para la etiquetadora (Brother, Dymo, Niimbot, A4, personalizado) en HTML y PDF; resumen semanal por WhatsApp y push; firma en el Mostrador; informe quien tiene que; importar formaciones y reconocimientos desde Excel"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.60.zip",
-    "sha256":  "5de7157e1d3702fa045af00cc10f172171b0db86d77439e6ba8668747b197763"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.61.zip",
+    "sha256":  "dcd94cc0423c5e575335017027f49c3aeadcd7770ab323d2bd07175653fbc2dc"
 }
