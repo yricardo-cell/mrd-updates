@@ -957,6 +957,7 @@ def startup_event():
                     _avisos_trabajador_bg()
                     _espera_disponible_bg()
                     _limpieza_automatica_bg()
+                    _alertas_consumo_obras_bg()
                     _tm.sleep(6*3600)  # cada 6 horas
             _thr.Thread(target=_run_alerts, daemon=True, name="alertas_bg").start()
 
@@ -9868,6 +9869,86 @@ async def api_prueba_humo_ejecutar(user: Usuario = Depends(requiere_login)):
     res = await run_in_threadpool(_prueba_de_humo)
     _HUMO_ESTADO.write_text(json.dumps({"version": res["version"], "ok": res["ok"], "fecha": res["fecha"], "comprobaciones": res["comprobaciones"]}, ensure_ascii=False), encoding="utf-8")
     return res
+
+
+# ─── Alertas de consumibles por obra (mejora 28) ─────────────────────────────
+
+_CONSUMO_ESTADO = BASE_DIR / "config" / "consumo_obras_estado.json"
+CONSUMO_TIPOS = ("salida", "consumo", "entrega")
+CONSUMO_FACTOR = 2.0        # esta semana > doble de la media semanal anterior
+CONSUMO_MINIMO = 5.0        # y al menos esta cantidad, para no avisar por 2 guantes
+
+
+def _consumo_obras_tabla(db: Session, hoy: date | None = None, semanas: int = 4) -> list[dict]:
+    """Consumo por obra y material en las últimas `semanas` semanas (la semana 0 es la actual) más la media de las 8 anteriores."""
+    hoy = hoy or date.today()
+    ini_ref = datetime.combine(hoy - timedelta(days=7 * (semanas + 8)), datetime.min.time())
+    movs = db.query(MovimientoMaterial).filter(MovimientoMaterial.tipo.in_(CONSUMO_TIPOS), MovimientoMaterial.obra_id.isnot(None), MovimientoMaterial.fecha >= ini_ref).all()
+    acc: dict[tuple, dict] = {}
+    for m in movs:
+        f = _utc_a_local(m.fecha).date() if m.fecha else hoy
+        dias = max(0, (hoy - f).days)
+        semana = dias // 7
+        k = (m.obra_id, m.material_id)
+        d = acc.setdefault(k, {"semanas": [0.0] * semanas, "ref": 0.0})
+        q = abs(float(m.cantidad or 0))
+        if semana < semanas:
+            d["semanas"][semana] += q
+        elif semana < semanas + 8:
+            d["ref"] += q
+    filas = []
+    for (oid, mid), d in acc.items():
+        obra = db.get(Obra, oid); mat = db.get(Material, mid)
+        media = d["ref"] / 8.0
+        actual = d["semanas"][0]
+        anomalo = actual >= CONSUMO_MINIMO and ((media > 0 and actual > CONSUMO_FACTOR * media) or (media == 0 and actual >= 3 * CONSUMO_MINIMO))
+        filas.append({"obra_id": oid, "obra": obra.nombre if obra else f"Obra {oid}", "material_id": mid, "material": mat.nombre if mat else f"Material {mid}",
+                      "unidad": (mat.unidad if mat else "") or "ud", "semanas": [round(x, 1) for x in d["semanas"]], "media": round(media, 1), "actual": round(actual, 1),
+                      "anomalo": anomalo, "factor": round(actual / media, 1) if media else None,
+                      "coste": round(actual * float((mat.precio_unidad if mat else 0) or 0), 2)})
+    filas.sort(key=lambda f: (not f["anomalo"], f["obra"], -f["actual"]))
+    return filas
+
+
+def _consumo_obras_anomalo(db: Session, hoy: date | None = None) -> list[dict]:
+    return [f for f in _consumo_obras_tabla(db, hoy) if f["anomalo"]]
+
+
+def _alertas_consumo_obras_bg():
+    """Una vez por semana: un aviso por cada obra/material con consumo anómalo (sin repetir la misma semana)."""
+    try:
+        try:
+            estado = json.loads(_CONSUMO_ESTADO.read_text(encoding="utf-8")) if _CONSUMO_ESTADO.is_file() else {}
+        except ValueError:
+            estado = {}
+        semana = date.today().strftime("%G-%V")
+        if estado.get("semana") == semana:
+            return
+        from database import SessionLocal as _SLc
+        db = _SLc()
+        try:
+            n = 0
+            for f in _consumo_obras_anomalo(db):
+                titulo = f"Consumo anómalo en {f['obra']}: {f['material']}"
+                if db.query(Aviso).filter(Aviso.titulo == titulo, Aviso.creado_en >= datetime.now() - timedelta(days=6)).first():
+                    continue
+                db.add(Aviso(titulo=titulo, mensaje=f"Esta semana {f['actual']} {f['unidad']} frente a una media de {f['media']} {f['unidad']}/semana" + (f" ({f['factor']}x)" if f['factor'] else "") + ". Puede ser una pérdida o un uso fuera de lo normal: conviene preguntar en la obra.",
+                             prioridad="media", tipo="sistema", enlace="/informes/consumo-obras"))
+                n += 1
+            db.commit()
+        finally:
+            db.close()
+        _CONSUMO_ESTADO.write_text(json.dumps({"semana": semana, "avisos": n}), encoding="utf-8")
+    except Exception as exc:  # pragma: no cover
+        mrd_logging.log_error(f"Alertas de consumo por obra: {exc}")
+
+
+@app.get("/informes/consumo-obras", response_class=HTMLResponse)
+def informe_consumo_obras(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    filas = _consumo_obras_tabla(db)
+    return templates.TemplateResponse(request, "informe_consumo_obras.html", ctx_base(
+        request, user, db, filas=filas, anomalos=[f for f in filas if f["anomalo"]], factor=CONSUMO_FACTOR, minimo=CONSUMO_MINIMO,
+    ))
 
 
 def _ensayo_restauracion_bg():
