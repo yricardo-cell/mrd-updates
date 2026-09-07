@@ -1007,6 +1007,7 @@ def startup_event():
                     _limpieza_automatica_bg()
                     _alertas_consumo_obras_bg()
                     _pedidos_sin_fecha_bg()
+                    _reservas_conflictos_bg()
                     _tm.sleep(6*3600)  # cada 6 horas
             _thr.Thread(target=_run_alerts, daemon=True, name="alertas_bg").start()
 
@@ -10711,6 +10712,84 @@ def configuracion_tv_clave(user: Usuario = Depends(requiere_login), db: Session 
     _ajuste_set(db, "tv_clave", secrets.token_urlsafe(18))
     db.commit()
     return RedirectResponse("/configuracion?tv=1#card-tv", status_code=303)
+
+
+# ─── Reservas: pedidos con fecha vistos como calendario, con choques (mejora 19) ────
+def _reservas_norm(txt: str) -> str:
+    t = " ".join((txt or "").lower().split())
+    t = re.sub(r"[^a-z0-9áéíóúñ ]", "", t)
+    return t[:60]
+
+
+def _reservas(db: Session, dias: int = 30, desde: date | None = None) -> list[dict]:
+    """Líneas de herramienta/maquinaria de los pedidos activos con «para cuándo», agrupadas por día; choque si se piden más unidades de las que existen."""
+    desde = desde or date.today()
+    hasta = desde + timedelta(days=dias)
+    pedidos = db.query(SolicitudTrabajador).filter(
+        SolicitudTrabajador.estado.in_(("pendiente", "revision", "aprobada", "preparando", "lista")),
+        SolicitudTrabajador.necesario_para.isnot(None),
+        SolicitudTrabajador.necesario_para >= datetime.combine(desde, datetime.min.time()),
+        SolicitudTrabajador.necesario_para < datetime.combine(hasta, datetime.min.time()),
+    ).order_by(SolicitudTrabajador.necesario_para.asc()).all()
+    filas: list[dict] = []
+    demanda: dict[tuple, int] = {}
+    for s in pedidos:
+        t = db.get(Trabajador, s.trabajador_id)
+        for l in s.lineas:
+            if (l.tipo or "") not in ("herramienta", "maquinaria"):
+                continue
+            clave = _reservas_norm(l.descripcion)
+            if not clave:
+                continue
+            cant = int(l.cantidad or 1)
+            demanda[(s.necesario_para.date(), clave)] = demanda.get((s.necesario_para.date(), clave), 0) + cant
+            filas.append({"fecha": s.necesario_para, "dia": s.necesario_para.date(), "solicitud": s.numero, "solicitud_id": s.id, "estado": s.estado,
+                          "trabajador": t.nombre_completo if t else "?", "descripcion": l.descripcion, "clave": clave, "cantidad": cant, "tipo": l.tipo})
+    total_por_clave: dict[str, int] = {}
+    for clave in {f["clave"] for f in filas}:
+        palabras = [p for p in clave.split() if len(p) > 2][:3]
+        q = db.query(Herramienta).filter(Herramienta.activa == True)
+        for p in palabras:
+            q = q.filter(func.lower(Herramienta.nombre).like(f"%{p}%"))
+        total_por_clave[clave] = q.count() if palabras else 0
+    for f in filas:
+        f["existen"] = total_por_clave.get(f["clave"], 0)
+        f["pedidas_ese_dia"] = demanda[(f["dia"], f["clave"])]
+        f["choque"] = f["existen"] > 0 and f["pedidas_ese_dia"] > f["existen"]
+        f["desconocida"] = f["existen"] == 0
+    return filas
+
+
+def _reservas_conflictos_bg(db_externa=None) -> int:
+    """Aviso diario al almacén si en los próximos 7 días hay más pedidos de una herramienta que unidades existen."""
+    from database import SessionLocal as _SL
+    db = db_externa or _SL()
+    try:
+        choques = [f for f in _reservas(db, 7) if f["choque"]]
+        if not choques:
+            return 0
+        grupos = {}
+        for f in choques:
+            grupos.setdefault((f["dia"], f["clave"]), f)
+        titulo = f"Reservas que chocan en los próximos 7 días: {len(grupos)}"
+        if db.query(Aviso).filter(Aviso.titulo == titulo, Aviso.leido == False).first() is None:
+            cuerpo = "; ".join(f"{g['dia'].strftime('%d/%m')} {g['descripcion']}: {g['pedidas_ese_dia']} pedidas y hay {g['existen']}" for g in list(grupos.values())[:10])
+            db.add(Aviso(titulo=titulo, mensaje=cuerpo[:1500] + ". Mira /reservas para repartir o avisar.", prioridad="media", tipo="solicitud", enlace="/reservas"))
+            db.commit()
+        return len(grupos)
+    finally:
+        if db_externa is None:
+            db.close()
+
+
+@app.get("/reservas", response_class=HTMLResponse)
+def reservas_calendario(request: Request, dias: int = 30, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    dias = max(7, min(int(dias or 30), 120))
+    filas = _reservas(db, dias)
+    por_dia: dict = {}
+    for f in filas:
+        por_dia.setdefault(f["dia"], []).append(f)
+    return templates.TemplateResponse(request, "reservas.html", ctx_base(request, user, db, por_dia=sorted(por_dia.items()), dias=dias, choques=sum(1 for f in filas if f["choque"]), total=len(filas)))
 
 
 def _alertas_consumo_obras_bg():
