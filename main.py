@@ -28,6 +28,8 @@ from typing import Optional, Dict, Any, Literal
 import json
 import io
 import hashlib
+import base64
+import secrets
 from collections import OrderedDict
 
 from fastapi import (
@@ -63,7 +65,7 @@ from config import (
 from database import engine, get_db, Base, apply_migrations, SessionLocal
 import mantenimiento as mant_engine
 from models import (
-    ComunicadoEmpresa, ComunicadoLectura, TraspasoPortal,
+    ComunicadoEmpresa, ComunicadoLectura, TraspasoPortal, PasskeyTrabajador,
     Ubicacion, NaveZona, NaveElemento,
     Usuario, Trabajador, Almacen, Obra, Vehiculo, Herramienta, Movimiento,
     Incidencia, Reparacion, Material, Documento, Proveedor, Categoria, AuditoriaLog,
@@ -18094,6 +18096,7 @@ def portal_trabajador(token: str, request: Request, db: Session = Depends(get_db
         "request": request, "trabajador": t, "epis": epis, "hoy_items": hoy_items, "comunicados_portal": comunicados_portal,
         "cuidado": _cuidado_material(db, t),
         "traspasos_portal": traspasos_portal, "companeros": _companeros_portal(db, t),
+        "passkeys": db.query(PasskeyTrabajador).filter_by(trabajador_id=t.id).order_by(PasskeyTrabajador.id).all(),
         "kit_estado": kit_estado_portal, "catalogo_kit": catalogo_kit_portal,
         "formaciones": formaciones, "reconocimientos": reconocs,
         "herramientas": herramientas, "maquinaria": maquinaria,
@@ -18298,11 +18301,272 @@ def trabajadores_cuidado(request: Request, user: Usuario = Depends(requiere_logi
     return templates.TemplateResponse(request, "trabajadores_cuidado.html", ctx_base(request, user, db, filas=filas))
 
 
+# ─── Entrar con huella o cara: passkeys WebAuthn (mejora 4) ──────────────────
+
+_PASSKEY_RETOS: dict[str, tuple[bytes, int, float]] = {}   # clave -> (reto, trabajador_id, caduca)
+
+
+def _b64u(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def _b64u_dec(s: str) -> bytes:
+    s = (s or "").strip()
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def _cbor_decode(data: bytes, pos: int = 0):
+    """Decodificador CBOR mínimo (enteros, bytes, texto, listas, mapas, booleanos): lo justo para WebAuthn."""
+    if pos >= len(data):
+        raise ValueError("CBOR truncado")
+    ib = data[pos]; mt, ai = ib >> 5, ib & 31; pos += 1
+
+    def _n(ai, pos):
+        if ai < 24:
+            return ai, pos
+        if ai == 24:
+            return data[pos], pos + 1
+        if ai == 25:
+            return int.from_bytes(data[pos:pos + 2], "big"), pos + 2
+        if ai == 26:
+            return int.from_bytes(data[pos:pos + 4], "big"), pos + 4
+        if ai == 27:
+            return int.from_bytes(data[pos:pos + 8], "big"), pos + 8
+        raise ValueError("CBOR no soportado")
+
+    if mt == 0:
+        return _n(ai, pos)
+    if mt == 1:
+        n, pos = _n(ai, pos); return -1 - n, pos
+    if mt == 2:
+        n, pos = _n(ai, pos); return bytes(data[pos:pos + n]), pos + n
+    if mt == 3:
+        n, pos = _n(ai, pos); return data[pos:pos + n].decode("utf-8"), pos + n
+    if mt == 4:
+        n, pos = _n(ai, pos); out = []
+        for _ in range(n):
+            v, pos = _cbor_decode(data, pos); out.append(v)
+        return out, pos
+    if mt == 5:
+        n, pos = _n(ai, pos); out = {}
+        for _ in range(n):
+            k, pos = _cbor_decode(data, pos); v, pos = _cbor_decode(data, pos); out[k] = v
+        return out, pos
+    if mt == 7 and ai in (20, 21, 22):
+        return {20: False, 21: True, 22: None}[ai], pos
+    raise ValueError("CBOR no soportado")
+
+
+def _passkey_rp_id(request: Request) -> str:
+    return (request.url.hostname or "localhost").lower()
+
+
+def _passkey_origenes(request: Request) -> set[str]:
+    host = request.headers.get("host") or request.url.netloc
+    out = {str(request.base_url).rstrip("/"), f"https://{host}", f"http://{host}"}
+    if MRD_PUBLIC_URL:
+        out.add(MRD_PUBLIC_URL.rstrip("/"))
+    return out
+
+
+def _passkey_nuevo_reto(trabajador_id: int) -> tuple[str, str]:
+    ahora = datetime.now().timestamp()
+    for k in [k for k, v in _PASSKEY_RETOS.items() if v[2] < ahora]:
+        _PASSKEY_RETOS.pop(k, None)
+    clave, reto = secrets.token_urlsafe(24), secrets.token_bytes(32)
+    _PASSKEY_RETOS[clave] = (reto, trabajador_id, ahora + 300)
+    return clave, _b64u(reto)
+
+
+def _passkey_tomar_reto(clave: str, trabajador_id: int) -> bytes | None:
+    v = _PASSKEY_RETOS.pop(clave or "", None)
+    if not v or v[1] != trabajador_id or v[2] < datetime.now().timestamp():
+        return None
+    return v[0]
+
+
+def _passkey_client_data(client_data_b64u: str, tipo: str, reto: bytes, origenes: set[str]) -> bytes:
+    raw = _b64u_dec(client_data_b64u)
+    try:
+        cd = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        raise HTTPException(400, "Datos del navegador no válidos")
+    if cd.get("type") != tipo:
+        raise HTTPException(400, "Tipo de operación no válido")
+    if _b64u_dec(cd.get("challenge", "")) != reto:
+        raise HTTPException(400, "El reto no coincide; vuelve a intentarlo")
+    if cd.get("origin") not in origenes:
+        raise HTTPException(400, "Origen no permitido")
+    return raw
+
+
+def _passkey_parse_authdata(auth: bytes) -> dict:
+    if len(auth) < 37:
+        raise HTTPException(400, "Datos de autenticación incompletos")
+    out = {"rp_id_hash": auth[:32], "flags": auth[32], "sign_count": int.from_bytes(auth[33:37], "big"), "cred_id": None, "cose": None}
+    if auth[32] & 0x40:   # AT: datos de la credencial
+        n = int.from_bytes(auth[53:55], "big")
+        out["cred_id"] = auth[55:55 + n]
+        try:
+            out["cose"], _ = _cbor_decode(auth, 55 + n)
+        except ValueError:
+            raise HTTPException(400, "Clave pública no válida")
+    return out
+
+
+def _cose_a_pem(cose: dict) -> str:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec, rsa
+    try:
+        if cose.get(1) == 2:      # EC2 P-256
+            if cose.get(-1) != 1:
+                raise HTTPException(400, "Curva no soportada")
+            pub = ec.EllipticCurvePublicNumbers(int.from_bytes(cose[-2], "big"), int.from_bytes(cose[-3], "big"), ec.SECP256R1()).public_key()
+        elif cose.get(1) == 3:    # RSA
+            pub = rsa.RSAPublicNumbers(int.from_bytes(cose[-2], "big"), int.from_bytes(cose[-1], "big")).public_key()
+        else:
+            raise HTTPException(400, "Tipo de clave no soportado")
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(400, "Clave pública no válida")
+    return pub.public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode()
+
+
+def _passkey_verificar_firma(pem: str, datos: bytes, firma: bytes) -> bool:
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
+    try:
+        pub = serialization.load_pem_public_key(pem.encode())
+        if isinstance(pub, rsa.RSAPublicKey):
+            pub.verify(firma, datos, padding.PKCS1v15(), hashes.SHA256())
+        else:
+            pub.verify(firma, datos, ec.ECDSA(hashes.SHA256()))
+        return True
+    except (InvalidSignature, ValueError):
+        return False
+
+
+@app.post("/portal/{token}/passkey/opciones")
+def portal_passkey_opciones(token: str, request: Request, db: Session = Depends(get_db)):
+    """Opciones para registrar la huella/cara de este móvil (navigator.credentials.create)."""
+    worker = _portal_worker_required(token, request, db)
+    clave, reto = _passkey_nuevo_reto(worker.id)
+    existentes = [{"type": "public-key", "id": p.credential_id} for p in db.query(PasskeyTrabajador).filter_by(trabajador_id=worker.id).all()]
+    return JSONResponse({"ok": True, "clave": clave, "publicKey": {
+        "challenge": reto, "rp": {"id": _passkey_rp_id(request), "name": "MRD Tool Control"},
+        "user": {"id": _b64u(f"trabajador:{worker.id}".encode()), "name": worker.codigo or worker.nombre_completo, "displayName": worker.nombre_completo},
+        "pubKeyCredParams": [{"type": "public-key", "alg": -7}, {"type": "public-key", "alg": -257}],
+        "authenticatorSelection": {"authenticatorAttachment": "platform", "userVerification": "required", "residentKey": "preferred"},
+        "timeout": 60000, "attestation": "none", "excludeCredentials": existentes,
+    }})
+
+
+@app.post("/portal/{token}/passkey/registrar")
+async def portal_passkey_registrar(token: str, request: Request, db: Session = Depends(get_db)):
+    worker = _portal_worker_required(token, request, db)
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "Cuerpo no válido")
+    reto = _passkey_tomar_reto(str(body.get("clave") or ""), worker.id)
+    if reto is None:
+        raise HTTPException(400, "El registro ha caducado; vuelve a intentarlo")
+    resp = body.get("response") or {}
+    _passkey_client_data(str(resp.get("clientDataJSON") or ""), "webauthn.create", reto, _passkey_origenes(request))
+    try:
+        att, _ = _cbor_decode(_b64u_dec(str(resp.get("attestationObject") or "")))
+    except ValueError:
+        raise HTTPException(400, "Registro no válido")
+    ad = _passkey_parse_authdata(att.get("authData") or b"")
+    if ad["rp_id_hash"] != hashlib.sha256(_passkey_rp_id(request).encode()).digest():
+        raise HTTPException(400, "El registro no es de este servidor")
+    if not (ad["flags"] & 0x01) or not ad["cred_id"] or not ad["cose"]:
+        raise HTTPException(400, "El móvil no ha verificado tu presencia")
+    cred_id = _b64u(ad["cred_id"])
+    if db.query(PasskeyTrabajador).filter_by(credential_id=cred_id).first():
+        raise HTTPException(409, "Este móvil ya está registrado")
+    if db.query(PasskeyTrabajador).filter_by(trabajador_id=worker.id).count() >= 5:
+        raise HTTPException(409, "Ya tienes 5 dispositivos registrados; quita alguno")
+    db.add(PasskeyTrabajador(trabajador_id=worker.id, credential_id=cred_id, public_key_pem=_cose_a_pem(ad["cose"]), sign_count=ad["sign_count"],
+                             dispositivo=str(body.get("nombre") or request.headers.get("user-agent") or "Móvil")[:200]))
+    db.add(AuditoriaLog(tabla="trabajadores", registro_id=worker.id, accion="passkey_alta", resumen=f"{worker.nombre_completo} registró la huella/cara de un móvil", usuario_id=None))
+    db.commit()
+    return JSONResponse({"ok": True})
+
+
+@app.post("/portal/{token}/passkey/{pid}/eliminar", response_class=RedirectResponse)
+def portal_passkey_eliminar(token: str, pid: int, request: Request, db: Session = Depends(get_db)):
+    worker = _portal_worker_required(token, request, db)
+    p = db.get(PasskeyTrabajador, pid)
+    if p is None or p.trabajador_id != worker.id:
+        raise HTTPException(404, "No encontrado")
+    db.delete(p)
+    db.commit()
+    return RedirectResponse(f"/portal/{token}?ok=huella_borrada#cuenta", status_code=303)
+
+
+def _passkey_buscar_trabajador(db: Session, codigo: str) -> Trabajador | None:
+    clean = (codigo or "").strip()[:64]
+    if not clean:
+        return None
+    return db.query(Trabajador).filter(Trabajador.activo == True, Trabajador.portal_pin_hash.isnot(None),
+                                       or_(Trabajador.codigo == clean, Trabajador.dni == clean, Trabajador.portal_token == clean)).first()
+
+
+@app.post("/portal-trabajador/passkey/opciones")
+async def portal_login_passkey_opciones(request: Request, db: Session = Depends(get_db)):
+    """Opciones para entrar con la huella (navigator.credentials.get) a partir del código del trabajador."""
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "Cuerpo no válido")
+    worker = _passkey_buscar_trabajador(db, str(body.get("codigo") or ""))
+    creds = db.query(PasskeyTrabajador).filter_by(trabajador_id=worker.id).all() if worker else []
+    if not worker or not creds:
+        raise HTTPException(404, "Este código no tiene huella registrada; entra con el PIN y regístrala en Mi cuenta")
+    clave, reto = _passkey_nuevo_reto(worker.id)
+    return JSONResponse({"ok": True, "clave": clave, "publicKey": {
+        "challenge": reto, "rpId": _passkey_rp_id(request), "timeout": 60000, "userVerification": "required",
+        "allowCredentials": [{"type": "public-key", "id": c.credential_id} for c in creds],
+    }})
+
+
+@app.post("/portal-trabajador/passkey/verificar")
+async def portal_login_passkey_verificar(request: Request, db: Session = Depends(get_db)):
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "Cuerpo no válido")
+    worker = _passkey_buscar_trabajador(db, str(body.get("codigo") or ""))
+    if worker is None:
+        raise HTTPException(404, "Trabajador no encontrado")
+    reto = _passkey_tomar_reto(str(body.get("clave") or ""), worker.id)
+    if reto is None:
+        raise HTTPException(400, "La huella ha caducado; vuelve a intentarlo")
+    cred = db.query(PasskeyTrabajador).filter_by(trabajador_id=worker.id, credential_id=str(body.get("id") or "")).first()
+    if cred is None:
+        raise HTTPException(404, "Este móvil no está registrado para este trabajador")
+    resp = body.get("response") or {}
+    client_raw = _passkey_client_data(str(resp.get("clientDataJSON") or ""), "webauthn.get", reto, _passkey_origenes(request))
+    auth = _b64u_dec(str(resp.get("authenticatorData") or ""))
+    ad = _passkey_parse_authdata(auth)
+    if ad["rp_id_hash"] != hashlib.sha256(_passkey_rp_id(request).encode()).digest() or not (ad["flags"] & 0x01):
+        raise HTTPException(400, "Huella no válida para este servidor")
+    if not _passkey_verificar_firma(cred.public_key_pem, auth + hashlib.sha256(client_raw).digest(), _b64u_dec(str(resp.get("signature") or ""))):
+        raise HTTPException(401, "La huella no coincide")
+    if ad["sign_count"] and cred.sign_count and ad["sign_count"] <= cred.sign_count:
+        raise HTTPException(401, "Huella rechazada (contador de firmas)")
+    cred.sign_count = ad["sign_count"]
+    cred.ultimo_uso_en = datetime.now()
+    db.add(AuditoriaLog(tabla="trabajadores", registro_id=worker.id, accion="passkey_login", resumen=f"{worker.nombre_completo} entró con la huella del móvil", usuario_id=None))
+    return _worker_login_response(request, worker, db)
+
+
 # ─── Idioma del portal del trabajador (P5): castellano o rumano ──────────────
 
 PORTAL_IDIOMAS = {"es": "Español", "ro": "Română"}
 
-PORTAL_TEXTOS: dict[str, dict[str, str]] = {"ro": {'Lo que tengo': 'Ce am la mine', 'Mi historial': 'Istoricul meu', 'Escanear': 'Scanează', 'Solicitar': 'Cere material', 'Seguimiento': 'Urmărire', 'Devolver': 'Returnează', 'Incidencias': 'Incidente', 'Albaranes': 'Avize de livrare', 'Buzón': 'Sugestii', 'Mi cuenta': 'Contul meu', 'Instalar': 'Instalează', 'Salir': 'Ieșire', 'MI ESPACIO MRD': 'SPAȚIUL MEU MRD', 'CARNET DIGITAL MRD': 'LEGITIMAȚIE DIGITALĂ MRD', 'Trabajador': 'Muncitor', 'AVISOS': 'ANUNȚURI', 'Notificaciones': 'Notificări', 'TU INVENTARIO PERSONAL': 'INVENTARUL TĂU PERSONAL', 'PROTECCIÓN': 'PROTECȚIE', 'Tu EPI': 'Echipamentul tău de protecție', 'ESCÁNER': 'SCANER', 'Escanear una herramienta': 'Scanează o sculă', 'TU ACTIVIDAD': 'ACTIVITATEA TA', 'PEDIDO AL ALMACÉN': 'COMANDĂ LA DEPOZIT', '¿Qué necesitas?': 'De ce ai nevoie?', 'SEGUIMIENTO': 'URMĂRIRE', 'Mis solicitudes': 'Cererile mele', 'DOCUMENTOS': 'DOCUMENTE', 'Mis albaranes': 'Avizele mele', 'ESCUCHA ACTIVA': 'ASCULTARE ACTIVĂ', 'Quejas y sugerencias': 'Reclamații și sugestii', 'DEVOLUCIONES': 'RETURURI', 'Solicitar una devolución': 'Cere o returnare', 'AYUDA RÁPIDA': 'AJUTOR RAPID', 'Comunicar una incidencia': 'Raportează un incident', 'IDENTIDAD Y SEGURIDAD': 'IDENTITATE ȘI SECURITATE', 'SEGURIDAD': 'SIGURANȚĂ', 'Documentación personal': 'Documente personale', 'Mis datos de contacto': 'Datele mele de contact', 'Teléfono': 'Telefon', 'Correo': 'E-mail', 'PIN actual para confirmar': 'PIN-ul actual pentru confirmare', 'Guardar datos': 'Salvează datele', 'Cambiar mi PIN': 'Schimbă PIN-ul', 'PIN actual': 'PIN-ul actual', 'PIN nuevo': 'PIN nou', 'Repite el PIN': 'Repetă PIN-ul', 'Cambiar PIN': 'Schimbă PIN-ul', 'Dispositivos conectados': 'Dispozitive conectate', 'Cerrar las demás sesiones': 'Închide celelalte sesiuni', 'Idioma': 'Limba', 'Elige el idioma en el que quieres ver tu portal.': 'Alege limba în care vrei să vezi portalul tău.', 'Confirmar recogida': 'Confirmă ridicarea', 'Borrar firma': 'Șterge semnătura', 'Firma con el dedo para confirmar que lo has recogido:': 'Semnează cu degetul pentru a confirma că ai ridicat materialul:', 'Enviar': 'Trimite', 'Enviar al almacén': 'Trimite la depozit', 'Cancelar solicitud': 'Anulează cererea', 'Marcar leídas': 'Marchează ca citite', 'Comunicar incidencia': 'Raportează incidentul', 'Enviar devolución': 'Trimite returnarea', 'Repetir mi último pedido': 'Repetă ultima mea comandă', 'Lo que sueles pedir:': 'Ce ceri de obicei:', 'Tipo': 'Tip', 'Fotos (hasta 5, opcional)': 'Poze (până la 5, opțional)', '¿Qué ha pasado?': 'Ce s-a întâmplat?', 'Tipo de activo': 'Tip de bun', 'Qué ha ocurrido': 'Ce s-a întâmplat', 'Privacidad': 'Confidențialitate', 'Prioridad': 'Prioritate', 'Obra o destino': 'Șantier sau destinație', 'Obra (opcional)': 'Șantier (opțional)', 'Nombre del activo': 'Numele bunului', 'Motivo': 'Motiv', 'Mensaje': 'Mesaj', 'Estado': 'Stare', 'Detalle (opcional)': 'Detalii (opțional)', 'Código': 'Cod', 'Código o QR': 'Cod sau QR', 'Categoría': 'Categorie', 'Cantidad': 'Cantitate', 'Asunto': 'Subiect', 'Artículo': 'Articol', '¿Para cuándo?': 'Pentru când?', 'Cuando se pueda': 'Când se poate', 'Hoy': 'Azi', 'Mañana': 'Mâine', 'Elegir fecha': 'Alege data', 'Fecha': 'Data', 'Hora (opcional)': 'Ora (opțional)', '¿Cuántos días lo necesitas?': 'Câte zile ai nevoie de el?', 'Lo recojo en el almacén': 'Îl ridic de la depozit', 'Que lo lleven a la obra': 'Să fie adus la șantier', 'Avísame cuando quede libre': 'Anunță-mă când se eliberează', 'Ver qué hay': 'Vezi ce există', 'libres': 'libere', 'ninguna libre ahora': 'niciuna liberă acum', 'Nada que mostrar': 'Nimic de arătat', 'Motivo o comentario': 'Motiv sau comentariu', 'Añadir otra cosa': 'Adaugă altceva', 'Enviar solicitud': 'Trimite cererea', 'Lo necesito': 'Am nevoie', 'días': 'zile', 'En espera de que quede libre': 'În așteptare să se elibereze', 'La dejo en su hueco': 'O las la locul ei', 'Ver ficha': 'Vezi fișa', 'Se la paso a un compañero': 'O dau unui coleg', 'Elige al compañero': 'Alege colegul', 'Nota (opcional)': 'Notă (opțional)', 'Pasar': 'Dă-o', 'TRASPASOS': 'TRANSFERURI', 'Traspasos entre compañeros': 'Transferuri între colegi', 'te pasa': 'îți dă', 'Aceptar': 'Acceptă', 'Rechazar': 'Refuză', 'Cancelar': 'Anulează', 'Enviados': 'Trimise', 'No tienes traspasos.': 'Nu ai transferuri.', 'Traspaso enviado: el compañero tiene que aceptarlo en su móvil': 'Transfer trimis: colegul trebuie să îl accepte pe telefon', 'Traspaso aceptado: la herramienta ya consta a tu nombre': 'Transfer acceptat: scula este acum pe numele tău', 'Traspaso rechazado': 'Transfer refuzat', 'Mi cuidado del material': 'Grija mea pentru materiale', 'puntos': 'puncte', 'Suma puntos devolviendo a tiempo, comunicando incidencias, revisando tu EPI, confirmando lo que tienes y firmando las recogidas.': 'Aduni puncte returnând la timp, raportând incidente, verificându-ți EPI-ul, confirmând ce ai și semnând ridicările.', 'AVISOS DE LA EMPRESA': 'ANUNȚURILE FIRMEI', 'Avisos de la empresa': 'Anunțurile firmei', 'Leído': 'Citit', 'Ya lo leíste': 'L-ai citit deja', 'Marcar como leído': 'Marchează ca citit', 'Aviso marcado como leído': 'Anunț marcat ca citit', 'No hay avisos de la empresa.': 'Nu există anunțuri ale firmei.', '¿La sigues necesitando?': 'Mai ai nevoie de ea?', 'Sí, la sigo necesitando': 'Da, mai am nevoie', 'No, devolverla': 'Nu, o returnez', 'días con ella': 'zile cu ea', 'Foto de lo que necesitas (opcional, hasta 3)': 'Poză cu ce ai nevoie (opțional, până la 3)', 'Ver foto (opcional)': 'Vezi poza (opțional)', 'Si no sabes cómo se llama, haz una foto y el almacén lo identifica.': 'Dacă nu știi cum se numește, fă o poză și depozitul îl identifică.', 'Grabar mensaje de voz': 'Înregistrează mesaj vocal', 'Parar': 'Oprește', 'Grabando…': 'Se înregistrează…', 'Quitar el audio': 'Șterge audio', 'Mensaje de voz listo': 'Mesaj vocal gata', 'HOY': 'AZI', 'Lo que tienes pendiente': 'Ce ai de făcut', 'Todo al día. Nada pendiente por tu parte.': 'Totul la zi. Nimic în așteptare din partea ta.', 'Revisa tu EPI este mes (un toque por pieza)': 'Verifică-ți EPI-ul luna aceasta (o atingere pe piesă)', 'Bienvenido a tu portal MRD': 'Bun venit în portalul tău MRD', 'Tres cosas que puedes hacer desde el móvil:': 'Trei lucruri pe care le poți face de pe telefon:', '1. Escanear': '1. Scanează', 'Apunta con la cámara al QR de una herramienta o de un hueco: te dice qué es y quién la tiene, y puedes decir «la tengo yo», devolverla o dejarla en su hueco.': 'Îndreaptă camera spre codul QR al unei scule sau al unui loc: îți spune ce este și cine o are, și poți spune «o am eu», o poți returna sau o poți lăsa la locul ei.', '2. Pedir': '2. Cere', 'Escribe lo que necesitas (por ejemplo «taladro»), di para cuándo y si lo recoges o te lo llevan. Con «Repetir mi último pedido» tardas dos toques.': 'Scrie ce ai nevoie (de exemplu «bormașină»), spune pentru când și dacă îl ridici sau ți-l aduc. Cu «Repetă ultima comandă» durează două atingeri.', '3. Confirmar': '3. Confirmă', 'Cuando recojas material, firma con el dedo en «Mis solicitudes» y confirma en «Lo que tengo» que lo tienes. Así el almacén sabe que está en buenas manos.': 'Când ridici material, semnează cu degetul în «Cererile mele» și confirmă în «Ce am la mine» că îl ai. Așa depozitul știe că este pe mâini bune.', 'Siguiente': 'Următorul', 'Entendido': 'Am înțeles', 'Ver el tutorial otra vez': 'Vezi tutorialul din nou', 'Tutorial': 'Tutorial', 'Revisión de tu EPI': 'Verificarea EPI-ului tău', 'Bien': 'Bine', 'Mal o me falta': 'Rău sau îmi lipsește', 'Marca cada pieza. Lo que esté mal se comunica y lo que falte se pide solo.': 'Marchează fiecare piesă. Ce este rău se raportează și ce lipsește se comandă automat.', 'Guardar revisión': 'Salvează verificarea', 'Última revisión': 'Ultima verificare', 'Todavía no has revisado tu EPI': 'Încă nu ți-ai verificat EPI-ul', 'Revisión de EPI anotada': 'Verificarea EPI a fost notată', 'Kit básico': 'Kit de bază', 'Voy a recogerlo': 'Vin să îl ridic', 'Listo para recoger en el Mostrador de': 'Gata de ridicat la ghișeul din', 'Avisaste que vas a recogerlo a las': 'Ai anunțat că vii să îl ridici la', 'Avisado: el almacén sabe que vas a recogerlo': 'Anunțat: depozitul știe că vii să îl ridici', 'Llevarla al almacén': 'Du-o la depozit', 'Revisión el': 'Revizie pe', 'Revisión vencida el': 'Revizie expirată pe', 'Ficha de la herramienta': 'Fișa sculei', 'Volver a mi portal': 'Înapoi la portalul meu', 'Documentos y manuales': 'Documente și manuale', 'Últimos movimientos': 'Ultimele mișcări', 'Próxima revisión': 'Următoarea revizie', 'Mantenimiento pendiente': 'Întreținere în așteptare', 'Dónde se guarda': 'Unde se păstrează', 'Quiero devolverla': 'Vreau să o returnez', 'Devuelta y colocada en su hueco': 'Returnată și pusă la locul ei', 'Ahora escanea el QR del hueco donde la dejas': 'Acum scanează codul QR al locului unde o lași', 'Solicitud registrada': 'Cerere înregistrată', 'Mensaje recibido': 'Mesaj primit', 'Incidencia registrada': 'Incident înregistrat', 'Devolución registrada': 'Returnare înregistrată', 'Datos guardados': 'Date salvate', 'PIN cambiado': 'PIN schimbat', 'Sesiones cerradas': 'Sesiuni închise', 'Solicitud cancelada': 'Cerere anulată', 'Comentario enviado': 'Comentariu trimis', 'Recogida confirmada': 'Ridicare confirmată', 'Idioma cambiado': 'Limba a fost schimbată', 'Operación completada': 'Operațiune finalizată', 'Gracias, queda anotado que tienes todo lo de tu lista': 'Mulțumim, am notat că ai tot ce este pe lista ta', 'Anotado: el almacén lo revisará': 'Notat: depozitul va verifica', 'Anotado: el almacén revisará que esa herramienta está contigo y la pondrá a tu nombre': 'Notat: depozitul va verifica că scula este la tine și o va trece pe numele tău'}}
+PORTAL_TEXTOS: dict[str, dict[str, str]] = {"ro": {'Lo que tengo': 'Ce am la mine', 'Mi historial': 'Istoricul meu', 'Escanear': 'Scanează', 'Solicitar': 'Cere material', 'Seguimiento': 'Urmărire', 'Devolver': 'Returnează', 'Incidencias': 'Incidente', 'Albaranes': 'Avize de livrare', 'Buzón': 'Sugestii', 'Mi cuenta': 'Contul meu', 'Instalar': 'Instalează', 'Salir': 'Ieșire', 'MI ESPACIO MRD': 'SPAȚIUL MEU MRD', 'CARNET DIGITAL MRD': 'LEGITIMAȚIE DIGITALĂ MRD', 'Trabajador': 'Muncitor', 'AVISOS': 'ANUNȚURI', 'Notificaciones': 'Notificări', 'TU INVENTARIO PERSONAL': 'INVENTARUL TĂU PERSONAL', 'PROTECCIÓN': 'PROTECȚIE', 'Tu EPI': 'Echipamentul tău de protecție', 'ESCÁNER': 'SCANER', 'Escanear una herramienta': 'Scanează o sculă', 'TU ACTIVIDAD': 'ACTIVITATEA TA', 'PEDIDO AL ALMACÉN': 'COMANDĂ LA DEPOZIT', '¿Qué necesitas?': 'De ce ai nevoie?', 'SEGUIMIENTO': 'URMĂRIRE', 'Mis solicitudes': 'Cererile mele', 'DOCUMENTOS': 'DOCUMENTE', 'Mis albaranes': 'Avizele mele', 'ESCUCHA ACTIVA': 'ASCULTARE ACTIVĂ', 'Quejas y sugerencias': 'Reclamații și sugestii', 'DEVOLUCIONES': 'RETURURI', 'Solicitar una devolución': 'Cere o returnare', 'AYUDA RÁPIDA': 'AJUTOR RAPID', 'Comunicar una incidencia': 'Raportează un incident', 'IDENTIDAD Y SEGURIDAD': 'IDENTITATE ȘI SECURITATE', 'SEGURIDAD': 'SIGURANȚĂ', 'Documentación personal': 'Documente personale', 'Mis datos de contacto': 'Datele mele de contact', 'Teléfono': 'Telefon', 'Correo': 'E-mail', 'PIN actual para confirmar': 'PIN-ul actual pentru confirmare', 'Guardar datos': 'Salvează datele', 'Cambiar mi PIN': 'Schimbă PIN-ul', 'PIN actual': 'PIN-ul actual', 'PIN nuevo': 'PIN nou', 'Repite el PIN': 'Repetă PIN-ul', 'Cambiar PIN': 'Schimbă PIN-ul', 'Dispositivos conectados': 'Dispozitive conectate', 'Cerrar las demás sesiones': 'Închide celelalte sesiuni', 'Idioma': 'Limba', 'Elige el idioma en el que quieres ver tu portal.': 'Alege limba în care vrei să vezi portalul tău.', 'Confirmar recogida': 'Confirmă ridicarea', 'Borrar firma': 'Șterge semnătura', 'Firma con el dedo para confirmar que lo has recogido:': 'Semnează cu degetul pentru a confirma că ai ridicat materialul:', 'Enviar': 'Trimite', 'Enviar al almacén': 'Trimite la depozit', 'Cancelar solicitud': 'Anulează cererea', 'Marcar leídas': 'Marchează ca citite', 'Comunicar incidencia': 'Raportează incidentul', 'Enviar devolución': 'Trimite returnarea', 'Repetir mi último pedido': 'Repetă ultima mea comandă', 'Lo que sueles pedir:': 'Ce ceri de obicei:', 'Tipo': 'Tip', 'Fotos (hasta 5, opcional)': 'Poze (până la 5, opțional)', '¿Qué ha pasado?': 'Ce s-a întâmplat?', 'Tipo de activo': 'Tip de bun', 'Qué ha ocurrido': 'Ce s-a întâmplat', 'Privacidad': 'Confidențialitate', 'Prioridad': 'Prioritate', 'Obra o destino': 'Șantier sau destinație', 'Obra (opcional)': 'Șantier (opțional)', 'Nombre del activo': 'Numele bunului', 'Motivo': 'Motiv', 'Mensaje': 'Mesaj', 'Estado': 'Stare', 'Detalle (opcional)': 'Detalii (opțional)', 'Código': 'Cod', 'Código o QR': 'Cod sau QR', 'Categoría': 'Categorie', 'Cantidad': 'Cantitate', 'Asunto': 'Subiect', 'Artículo': 'Articol', '¿Para cuándo?': 'Pentru când?', 'Cuando se pueda': 'Când se poate', 'Hoy': 'Azi', 'Mañana': 'Mâine', 'Elegir fecha': 'Alege data', 'Fecha': 'Data', 'Hora (opcional)': 'Ora (opțional)', '¿Cuántos días lo necesitas?': 'Câte zile ai nevoie de el?', 'Lo recojo en el almacén': 'Îl ridic de la depozit', 'Que lo lleven a la obra': 'Să fie adus la șantier', 'Avísame cuando quede libre': 'Anunță-mă când se eliberează', 'Ver qué hay': 'Vezi ce există', 'libres': 'libere', 'ninguna libre ahora': 'niciuna liberă acum', 'Nada que mostrar': 'Nimic de arătat', 'Motivo o comentario': 'Motiv sau comentariu', 'Añadir otra cosa': 'Adaugă altceva', 'Enviar solicitud': 'Trimite cererea', 'Lo necesito': 'Am nevoie', 'días': 'zile', 'En espera de que quede libre': 'În așteptare să se elibereze', 'La dejo en su hueco': 'O las la locul ei', 'Ver ficha': 'Vezi fișa', 'Huella o cara': 'Amprentă sau față', 'Con la huella o la cara de tu móvil entras sin teclear el PIN.': 'Cu amprenta sau fața telefonului intri fără să tastezi PIN-ul.', 'Registrar este móvil': 'Înregistrează acest telefon', 'Quitar': 'Elimină', 'Huella registrada: la próxima vez entras sin PIN': 'Amprentă înregistrată: data viitoare intri fără PIN', 'Huella eliminada': 'Amprentă eliminată', 'Este móvil no permite huella o cara': 'Acest telefon nu permite amprentă sau față', 'Registrado el': 'Înregistrat pe', 'Se la paso a un compañero': 'O dau unui coleg', 'Elige al compañero': 'Alege colegul', 'Nota (opcional)': 'Notă (opțional)', 'Pasar': 'Dă-o', 'TRASPASOS': 'TRANSFERURI', 'Traspasos entre compañeros': 'Transferuri între colegi', 'te pasa': 'îți dă', 'Aceptar': 'Acceptă', 'Rechazar': 'Refuză', 'Cancelar': 'Anulează', 'Enviados': 'Trimise', 'No tienes traspasos.': 'Nu ai transferuri.', 'Traspaso enviado: el compañero tiene que aceptarlo en su móvil': 'Transfer trimis: colegul trebuie să îl accepte pe telefon', 'Traspaso aceptado: la herramienta ya consta a tu nombre': 'Transfer acceptat: scula este acum pe numele tău', 'Traspaso rechazado': 'Transfer refuzat', 'Mi cuidado del material': 'Grija mea pentru materiale', 'puntos': 'puncte', 'Suma puntos devolviendo a tiempo, comunicando incidencias, revisando tu EPI, confirmando lo que tienes y firmando las recogidas.': 'Aduni puncte returnând la timp, raportând incidente, verificându-ți EPI-ul, confirmând ce ai și semnând ridicările.', 'AVISOS DE LA EMPRESA': 'ANUNȚURILE FIRMEI', 'Avisos de la empresa': 'Anunțurile firmei', 'Leído': 'Citit', 'Ya lo leíste': 'L-ai citit deja', 'Marcar como leído': 'Marchează ca citit', 'Aviso marcado como leído': 'Anunț marcat ca citit', 'No hay avisos de la empresa.': 'Nu există anunțuri ale firmei.', '¿La sigues necesitando?': 'Mai ai nevoie de ea?', 'Sí, la sigo necesitando': 'Da, mai am nevoie', 'No, devolverla': 'Nu, o returnez', 'días con ella': 'zile cu ea', 'Foto de lo que necesitas (opcional, hasta 3)': 'Poză cu ce ai nevoie (opțional, până la 3)', 'Ver foto (opcional)': 'Vezi poza (opțional)', 'Si no sabes cómo se llama, haz una foto y el almacén lo identifica.': 'Dacă nu știi cum se numește, fă o poză și depozitul îl identifică.', 'Grabar mensaje de voz': 'Înregistrează mesaj vocal', 'Parar': 'Oprește', 'Grabando…': 'Se înregistrează…', 'Quitar el audio': 'Șterge audio', 'Mensaje de voz listo': 'Mesaj vocal gata', 'HOY': 'AZI', 'Lo que tienes pendiente': 'Ce ai de făcut', 'Todo al día. Nada pendiente por tu parte.': 'Totul la zi. Nimic în așteptare din partea ta.', 'Revisa tu EPI este mes (un toque por pieza)': 'Verifică-ți EPI-ul luna aceasta (o atingere pe piesă)', 'Bienvenido a tu portal MRD': 'Bun venit în portalul tău MRD', 'Tres cosas que puedes hacer desde el móvil:': 'Trei lucruri pe care le poți face de pe telefon:', '1. Escanear': '1. Scanează', 'Apunta con la cámara al QR de una herramienta o de un hueco: te dice qué es y quién la tiene, y puedes decir «la tengo yo», devolverla o dejarla en su hueco.': 'Îndreaptă camera spre codul QR al unei scule sau al unui loc: îți spune ce este și cine o are, și poți spune «o am eu», o poți returna sau o poți lăsa la locul ei.', '2. Pedir': '2. Cere', 'Escribe lo que necesitas (por ejemplo «taladro»), di para cuándo y si lo recoges o te lo llevan. Con «Repetir mi último pedido» tardas dos toques.': 'Scrie ce ai nevoie (de exemplu «bormașină»), spune pentru când și dacă îl ridici sau ți-l aduc. Cu «Repetă ultima comandă» durează două atingeri.', '3. Confirmar': '3. Confirmă', 'Cuando recojas material, firma con el dedo en «Mis solicitudes» y confirma en «Lo que tengo» que lo tienes. Así el almacén sabe que está en buenas manos.': 'Când ridici material, semnează cu degetul în «Cererile mele» și confirmă în «Ce am la mine» că îl ai. Așa depozitul știe că este pe mâini bune.', 'Siguiente': 'Următorul', 'Entendido': 'Am înțeles', 'Ver el tutorial otra vez': 'Vezi tutorialul din nou', 'Tutorial': 'Tutorial', 'Revisión de tu EPI': 'Verificarea EPI-ului tău', 'Bien': 'Bine', 'Mal o me falta': 'Rău sau îmi lipsește', 'Marca cada pieza. Lo que esté mal se comunica y lo que falte se pide solo.': 'Marchează fiecare piesă. Ce este rău se raportează și ce lipsește se comandă automat.', 'Guardar revisión': 'Salvează verificarea', 'Última revisión': 'Ultima verificare', 'Todavía no has revisado tu EPI': 'Încă nu ți-ai verificat EPI-ul', 'Revisión de EPI anotada': 'Verificarea EPI a fost notată', 'Kit básico': 'Kit de bază', 'Voy a recogerlo': 'Vin să îl ridic', 'Listo para recoger en el Mostrador de': 'Gata de ridicat la ghișeul din', 'Avisaste que vas a recogerlo a las': 'Ai anunțat că vii să îl ridici la', 'Avisado: el almacén sabe que vas a recogerlo': 'Anunțat: depozitul știe că vii să îl ridici', 'Llevarla al almacén': 'Du-o la depozit', 'Revisión el': 'Revizie pe', 'Revisión vencida el': 'Revizie expirată pe', 'Ficha de la herramienta': 'Fișa sculei', 'Volver a mi portal': 'Înapoi la portalul meu', 'Documentos y manuales': 'Documente și manuale', 'Últimos movimientos': 'Ultimele mișcări', 'Próxima revisión': 'Următoarea revizie', 'Mantenimiento pendiente': 'Întreținere în așteptare', 'Dónde se guarda': 'Unde se păstrează', 'Quiero devolverla': 'Vreau să o returnez', 'Devuelta y colocada en su hueco': 'Returnată și pusă la locul ei', 'Ahora escanea el QR del hueco donde la dejas': 'Acum scanează codul QR al locului unde o lași', 'Solicitud registrada': 'Cerere înregistrată', 'Mensaje recibido': 'Mesaj primit', 'Incidencia registrada': 'Incident înregistrat', 'Devolución registrada': 'Returnare înregistrată', 'Datos guardados': 'Date salvate', 'PIN cambiado': 'PIN schimbat', 'Sesiones cerradas': 'Sesiuni închise', 'Solicitud cancelada': 'Cerere anulată', 'Comentario enviado': 'Comentariu trimis', 'Recogida confirmada': 'Ridicare confirmată', 'Idioma cambiado': 'Limba a fost schimbată', 'Operación completada': 'Operațiune finalizată', 'Gracias, queda anotado que tienes todo lo de tu lista': 'Mulțumim, am notat că ai tot ce este pe lista ta', 'Anotado: el almacén lo revisará': 'Notat: depozitul va verifica', 'Anotado: el almacén revisará que esa herramienta está contigo y la pondrá a tu nombre': 'Notat: depozitul va verifica că scula este la tine și o va trece pe numele tău'}}
 
 
 def _portal_traductor(idioma: str | None):

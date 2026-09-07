@@ -2748,3 +2748,17 @@ class TraspasoPortal(Base):
     herramienta = relationship("Herramienta", foreign_keys=[herramienta_id])
     de_trabajador = relationship("Trabajador", foreign_keys=[de_trabajador_id])
     a_trabajador = relationship("Trabajador", foreign_keys=[a_trabajador_id])
+
+
+class PasskeyTrabajador(Base):
+    """Huella / cara del móvil (passkey WebAuthn) para entrar al portal sin PIN (mejora 4)."""
+    __tablename__ = "passkeys_trabajador"
+
+    id = Column(Integer, primary_key=True)
+    trabajador_id = Column(Integer, ForeignKey("trabajadores.id"), nullable=False, index=True)
+    credential_id = Column(String(1024), nullable=False, unique=True)   # base64url
+    public_key_pem = Column(Text, nullable=False)
+    sign_count = Column(Integer, nullable=False, default=0)
+    dispositivo = Column(String(200), nullable=True)
+    creado_en = Column(DateTime, nullable=False, server_default=func.now())
+    ultimo_uso_en = Column(DateTime, nullable=True)
