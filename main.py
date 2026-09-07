@@ -1008,6 +1008,7 @@ def startup_event():
                     _limpieza_automatica_bg()
                     _alertas_consumo_obras_bg()
                     _pedidos_sin_fecha_bg()
+                    _planes_mantenimiento_bg()
                     _punto_pedido_bg()
                     _reservas_conflictos_bg()
                     _tm.sleep(6*3600)  # cada 6 horas
@@ -11085,6 +11086,107 @@ async def materiales_enlazar_codigo(request: Request, user: Usuario = Depends(re
     db.add(AuditoriaLog(tabla="materiales", registro_id=mat.id, accion="codigo_barras", resumen=f"Código de barras {codigo} enlazado", usuario_id=user.id))
     db.commit()
     return RedirectResponse(f"/materiales/{mat.id}?ok=ean", status_code=303)
+
+
+# ─── Planes de mantenimiento por tipo de herramienta (mejora 25) ─────────────
+_PLANES_ESTADO = BASE_DIR / "config" / "planes_estado.json"
+
+
+def _planes_mantenimiento(db: Session) -> list[dict]:
+    planes = _ajuste_get(db, "planes_mantenimiento", []) or []
+    salida = []
+    for p in planes:
+        try:
+            d = int(p.get("intervalo_dias") or 0)
+        except (TypeError, ValueError):
+            d = 0
+        if (p.get("categoria") or "").strip() and d > 0:
+            salida.append({"categoria": p["categoria"].strip(), "tipo": (p.get("tipo") or "Revisión").strip()[:30], "intervalo_dias": d, "descripcion": (p.get("descripcion") or "").strip()[:300]})
+    return salida
+
+
+def _planes_generar(db: Session, usuario_id: int | None = None) -> int:
+    """Crea el mantenimiento programado que falte a cada herramienta activa de la categoría del plan (sin duplicar el pendiente)."""
+    creados = 0
+    for plan in _planes_mantenimiento(db):
+        for h in db.query(Herramienta).filter(Herramienta.activa == True, Herramienta.categoria == plan["categoria"]).all():
+            pendiente = db.query(MantenimientoProgramado).filter(
+                MantenimientoProgramado.tipo_activo == "herramienta", MantenimientoProgramado.activo_id == h.id,
+                MantenimientoProgramado.tipo == plan["tipo"], MantenimientoProgramado.estado.in_(("pendiente", "programado", "aplazado", "en_curso", "en_proceso", "vencido")),
+            ).first()
+            if pendiente is not None:
+                continue
+            base = h.fecha_ultimo_mantenimiento or h.fecha_compra or date.today()
+            if isinstance(base, datetime):
+                base = base.date()
+            fecha = base + timedelta(days=plan["intervalo_dias"])
+            if fecha < date.today():
+                fecha = date.today()   # herramienta antigua sin mantenimientos registrados: la primera revisión toca ya
+            db.add(MantenimientoProgramado(tipo_activo="herramienta", activo_id=h.id, nombre_activo=h.nombre, codigo_activo=h.codigo, tipo=plan["tipo"],
+                                           descripcion=plan["descripcion"] or f"{plan['tipo']} cada {plan['intervalo_dias']} días ({plan['categoria']})",
+                                           fecha_programada=datetime.combine(fecha, datetime.min.time()).replace(hour=9), intervalo_dias=plan["intervalo_dias"], estado="pendiente", creado_por_id=usuario_id))
+            if not h.intervalo_mantenimiento_dias:
+                h.intervalo_mantenimiento_dias = plan["intervalo_dias"]
+            creados += 1
+    if creados:
+        db.add(AuditoriaLog(tabla="mantenimientos", registro_id=0, accion="planes_generar", resumen=f"Planes de mantenimiento: {creados} programados", usuario_id=usuario_id))
+    return creados
+
+
+def _planes_mantenimiento_bg(db_externa=None, ahora: datetime | None = None):
+    from database import SessionLocal as _SL
+    ahora = ahora or datetime.now()
+    try:
+        estado = json.loads(_PLANES_ESTADO.read_text(encoding="utf-8")) if _PLANES_ESTADO.is_file() else {}
+    except ValueError:
+        estado = {}
+    if db_externa is None and estado.get("semana") == ahora.strftime("%G-%V"):
+        return None
+    db = db_externa or _SL()
+    try:
+        n = _planes_generar(db)
+        db.commit()
+        if db_externa is None:
+            _PLANES_ESTADO.write_text(json.dumps({"semana": ahora.strftime("%G-%V"), "creados": n}), encoding="utf-8")
+        return n
+    except Exception as exc:
+        db.rollback()
+        mrd_logging.log_error(f"Planes de mantenimiento: {exc}")
+        return None
+    finally:
+        if db_externa is None:
+            db.close()
+
+
+@app.get("/mantenimientos/planes", response_class=HTMLResponse)
+def mantenimientos_planes(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if not tiene_permiso(user, "editar"):
+        raise HTTPException(403, "Sin permiso")
+    cats = sorted({(c or "").strip() for (c,) in db.query(Herramienta.categoria).filter(Herramienta.activa == True).distinct() if c})
+    planes = _planes_mantenimiento(db)
+    conteo = {c: db.query(Herramienta).filter(Herramienta.activa == True, Herramienta.categoria == c).count() for c in cats}
+    return templates.TemplateResponse(request, "mantenimientos_planes.html", ctx_base(request, user, db, planes=planes, categorias=cats, conteo=conteo, ok=request.query_params.get("ok")))
+
+
+@app.post("/mantenimientos/planes", response_class=RedirectResponse)
+async def mantenimientos_planes_post(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if not tiene_permiso(user, "editar"):
+        raise HTTPException(403, "Sin permiso")
+    form = await request.form()
+    accion = str(form.get("accion") or "guardar")
+    if accion == "generar":
+        n = _planes_generar(db, user.id)
+        db.commit()
+        return RedirectResponse(f"/mantenimientos/planes?ok=gen{n}", status_code=303)
+    cats, tipos, dias, descs = form.getlist("categoria"), form.getlist("tipo"), form.getlist("intervalo_dias"), form.getlist("descripcion")
+    planes = []
+    for i, c in enumerate(cats):
+        d = str(dias[i] if i < len(dias) else "").strip()
+        if str(c).strip() and d.isdigit() and int(d) > 0:
+            planes.append({"categoria": str(c).strip(), "tipo": str(tipos[i] if i < len(tipos) else "Revisión").strip() or "Revisión", "intervalo_dias": int(d), "descripcion": str(descs[i] if i < len(descs) else "").strip()})
+    _ajuste_set(db, "planes_mantenimiento", planes)
+    db.commit()
+    return RedirectResponse("/mantenimientos/planes?ok=1", status_code=303)
 
 
 def _alertas_consumo_obras_bg():
