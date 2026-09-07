@@ -969,6 +969,14 @@ def startup_event():
                         mrd_logging.log_error(f"Resumen diario: {_e}")
                     _tm.sleep(300)
             _thr.Thread(target=_run_diario, daemon=True, name="resumen_diario_bg").start()
+
+            def _run_humo():   # mejora 33: comprobación tras arrancar con una versión nueva
+                _tm.sleep(45)
+                try:
+                    _humo_tras_actualizar_tick()
+                except Exception as _e:
+                    mrd_logging.log_error(f"Prueba de humo: {_e}")
+            _thr.Thread(target=_run_humo, daemon=True, name="prueba_humo_bg").start()
         except Exception:
             pass
 
@@ -9641,6 +9649,149 @@ def api_limpieza_ejecutar(user: Usuario = Depends(requiere_login), db: Session =
     _LIMPIEZA_ESTADO.write_text(json.dumps({"ultimo": date.today().isoformat(), "resultado": res}), encoding="utf-8")
     db.add(AuditoriaLog(tabla="sistema", registro_id=0, accion="limpieza_manual", resumen=f"Limpieza manual: {res}", usuario_id=user.id))
     db.commit()
+    return res
+
+
+# ─── Prueba de humo tras cada actualización (mejora 33) ──────────────────────
+
+_HUMO_ESTADO = BASE_DIR / "config" / "ultima_version_comprobada.json"
+
+
+def _humo_fetch_local(path: str) -> tuple[int, str]:
+    import urllib.request as _ur
+    port = int(os.getenv("MRD_PORT", "8000") or 8000)
+    try:
+        with _ur.urlopen(f"http://127.0.0.1:{port}{path}", timeout=8) as r:
+            return r.status, r.read(200000).decode("utf-8", "replace")
+    except Exception as exc:   # HTTPError también
+        code = getattr(exc, "code", 0) or 0
+        return code, str(exc)
+
+
+def _prueba_de_humo(fetch=None) -> dict:
+    """Comprueba lo básico y devuelve {'ok', 'version', 'comprobaciones': [(nombre, ok, detalle)], 'fecha'}."""
+    fetch = fetch or _humo_fetch_local
+    version = leer_version_actual().get("version_actual", VERSION)
+    comp: list[tuple[str, bool, str]] = []
+
+    def c(nombre, ok, detalle=""):
+        comp.append((nombre, bool(ok), str(detalle)[:200]))
+
+    st, txt = fetch("/health")
+    c("Servidor responde (/health)", st == 200 and version in txt, f"{st} {txt[:60]}")
+    st, txt = fetch("/login")
+    c("Pantalla de entrada", st == 200 and "password" in txt.lower(), str(st))
+    st, txt = fetch("/portal-trabajador")
+    c("Portal del trabajador", st == 200 and "codigo" in txt.lower(), str(st))
+    st, txt = fetch("/mostrador")
+    c("Mostrador (pide sesión)", st in (200, 302, 303, 401, 403), str(st))
+    st, txt = fetch("/scan")
+    c("Escáner", st in (200, 302, 303, 401, 403), str(st))
+    st, txt = fetch("/sw.js")
+    c("Service worker con la versión", st == 200 and f"mrd-static-v{version}" in txt, str(st))
+    st, txt = fetch("/static/css/portal-trabajador.css")
+    c("Estilos del portal", st == 200 and len(txt) > 1000, str(st))
+    try:
+        from database import SessionLocal as _SLh
+        db = _SLh()
+        try:
+            integ = db.execute(text("PRAGMA quick_check")).scalar()
+            c("Base de datos íntegra", integ == "ok", str(integ))
+            cols = {r[1] for r in db.execute(text("PRAGMA table_info(solicitudes_trabajador)")).fetchall()}
+            c("Migraciones aplicadas", {"necesario_para", "voy_a_recoger_en", "fotos_json"} <= cols, ", ".join(sorted(cols))[:120])
+            tablas = {r[0] for r in db.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()}
+            c("Tablas nuevas", {"traspasos_portal", "comunicados_empresa", "passkeys_trabajador"} <= tablas, str(len(tablas)) + " tablas")
+            n_trab = db.execute(text("SELECT COUNT(*) FROM trabajadores")).scalar()
+            c("Datos presentes", (n_trab or 0) >= 0, f"{n_trab} trabajadores")
+        finally:
+            db.close()
+    except Exception as exc:
+        c("Base de datos", False, str(exc))
+    hilos = {t.name for t in threading.enumerate()}
+    c("Tareas de fondo activas", "alertas_bg" in hilos or os.getenv("MRD_TESTING") == "1", ", ".join(sorted(h for h in hilos if h.endswith("_bg"))) or "sin hilos _bg")
+    try:
+        libre = shutil.disk_usage(str(BASE_DIR)).free / 1024 ** 3
+        c("Espacio en disco", libre > 1.0, f"{libre:.1f} GB libres")
+    except OSError as exc:
+        c("Espacio en disco", False, str(exc))
+    try:
+        import backup_manager as _bkh
+        est = _bkh.get_backup_status()
+        ult = est.get("last_backup") or {}
+        fecha = str(ult.get("fecha") or ult.get("timestamp") or ult.get("created_at") or "")
+        c("Última copia de seguridad", bool(ult), fecha[:19] or "sin copias")
+    except Exception as exc:
+        c("Copias de seguridad", False, str(exc))
+    ok = all(x[1] for x in comp)
+    return {"ok": ok, "version": version, "comprobaciones": comp, "fecha": datetime.now().isoformat(timespec="seconds")}
+
+
+def _humo_texto(res: dict) -> str:
+    fallos = [x for x in res["comprobaciones"] if not x[1]]
+    cab = f"MRD {res['version']}: " + ("todo bien tras la actualización" if res["ok"] else f"ATENCIÓN, {len(fallos)} comprobación(es) con fallo")
+    lineas = [cab, f"{len(res['comprobaciones']) - len(fallos)}/{len(res['comprobaciones'])} comprobaciones correctas"]
+    for nombre, okk, det in res["comprobaciones"]:
+        lineas.append(f"{'OK' if okk else 'FALLO'} {nombre}" + (f": {det}" if det and not okk else ""))
+    return "\n".join(lineas)
+
+
+def _humo_notificar(res: dict, db_externa=None) -> None:
+    texto = _humo_texto(res)
+    cfg = _telegram_config()
+    if cfg["bot_token"] and cfg["chat_id"]:
+        try:
+            import telegram_notif as _tg
+            err = _tg.enviar_mensaje(texto, cfg["bot_token"], cfg["chat_id"])
+            if err:
+                mrd_logging.log_error(f"Prueba de humo Telegram: {err}")
+        except Exception as exc:
+            mrd_logging.log_error(f"Prueba de humo Telegram: {exc}")
+    try:
+        from database import SessionLocal as _SLn
+        db = db_externa or _SLn()
+        try:
+            db.add(Aviso(titulo=("Actualización comprobada: todo bien" if res["ok"] else "Actualización con fallos en la comprobación") + f" ({res['version']})",
+                         mensaje=texto[:1500], prioridad="baja" if res["ok"] else "alta", tipo="sistema", enlace="/configuracion"))
+            db.commit()
+        finally:
+            if db_externa is None:
+                db.close()
+    except Exception as exc:
+        mrd_logging.log_error(f"Prueba de humo aviso: {exc}")
+
+
+def _humo_tras_actualizar_tick(fetch=None, notificar=None) -> dict | None:
+    """Si la versión que arranca es distinta de la última comprobada, ejecuta la prueba y avisa. Devuelve el resultado o None."""
+    version = leer_version_actual().get("version_actual", VERSION)
+    try:
+        estado = json.loads(_HUMO_ESTADO.read_text(encoding="utf-8")) if _HUMO_ESTADO.is_file() else {}
+    except ValueError:
+        estado = {}
+    if estado.get("version") == version:
+        return None
+    res = _prueba_de_humo(fetch)
+    (notificar or _humo_notificar)(res)
+    _HUMO_ESTADO.write_text(json.dumps({"version": version, "ok": res["ok"], "fecha": res["fecha"], "comprobaciones": res["comprobaciones"]}, ensure_ascii=False), encoding="utf-8")
+    mrd_logging.log_app(f"Prueba de humo {version}: {'OK' if res['ok'] else 'FALLOS'}")
+    return res
+
+
+@app.get("/api/sistema/prueba-humo")
+def api_prueba_humo_estado(user: Usuario = Depends(requiere_login)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    try:
+        return json.loads(_HUMO_ESTADO.read_text(encoding="utf-8")) if _HUMO_ESTADO.is_file() else {}
+    except ValueError:
+        return {}
+
+
+@app.post("/api/sistema/prueba-humo")
+async def api_prueba_humo_ejecutar(user: Usuario = Depends(requiere_login)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    res = await run_in_threadpool(_prueba_de_humo)
+    _HUMO_ESTADO.write_text(json.dumps({"version": res["version"], "ok": res["ok"], "fecha": res["fecha"], "comprobaciones": res["comprobaciones"]}, ensure_ascii=False), encoding="utf-8")
     return res
 
 
