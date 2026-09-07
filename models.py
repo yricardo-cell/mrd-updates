@@ -292,6 +292,8 @@ class LineaSolicitudTrabajador(Base):
     cantidad = Column(Integer, nullable=False, default=1)
     cantidad_aprobada = Column(Integer, nullable=True)
     espera_disponible = Column(Boolean, nullable=False, default=False)   # avisar cuando quede libre (mejora 21)
+    picking_codigo = Column(String(128), nullable=True)   # qué se cogió al preparar (mejora 23)
+    picking_en = Column(DateTime, nullable=True)
     avisado_disponible_en = Column(DateTime, nullable=True)
     observaciones = Column(Text, nullable=True)
 

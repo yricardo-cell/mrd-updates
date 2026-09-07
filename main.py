@@ -8024,6 +8024,149 @@ async def mostrador_cola_estado(sid: int, request: Request, user: Usuario = Depe
     return RedirectResponse("/mostrador/cola", status_code=303)
 
 
+# ─── Picking guiado (mejora 23) ──────────────────────────────────────────────
+
+_PICKING_TIPOS = {"herramienta": ("herramienta",), "maquinaria": ("maquinaria",), "consumible": ("material",), "epi": ("stock_epi", "epi_individual"), "ropa": ("stock_epi",), "otro": ()}
+
+
+def _picking_tokens(s: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9áéíóúñ]{3,}", (s or "").lower()) if w not in {"con", "para", "del", "las", "los", "por", "una", "uno"}}
+
+
+def _picking_candidatos(db: Session, linea, warehouse_id: int | None, maximo: int = 6) -> list[dict]:
+    """Dónde coger lo que pide la línea: unidades/materiales con su hueco, ordenados por hueco."""
+    toks = _picking_tokens(linea.descripcion)
+    if not toks:
+        return []
+    out = []
+
+    def _hueco(obj):
+        loc = db.get(Ubicacion, obj.ubicacion_id) if getattr(obj, "ubicacion_id", None) else None
+        return ((loc.ruta_completa or loc.nombre) if loc else (getattr(obj, "ubicacion_texto", "") or "sin hueco")), ((loc.zona or "") if loc else "")
+
+    def _score(nombre):
+        tn = _picking_tokens(nombre)
+        return len(tn & toks) / max(len(toks), 1) if tn else 0
+
+    if linea.tipo in ("herramienta", "maquinaria"):
+        Model = Herramienta if linea.tipo == "herramienta" else Maquinaria
+        q = db.query(Model).filter(Model.activa == True, Model.estado == "disponible")
+        if warehouse_id:
+            q = q.filter(Model.almacen_id == warehouse_id)
+        for h in q.limit(600).all():
+            sc = _score(h.nombre)
+            if sc >= 0.5:
+                hueco, zona = _hueco(h)
+                out.append({"tipo": linea.tipo, "id": h.id, "codigo": getattr(h, "codigo", "") or "", "nombre": h.nombre, "hueco": hueco, "zona": zona, "cantidad": 1, "score": sc})
+    elif linea.tipo == "consumible":
+        q = db.query(Material).filter(Material.activo == True)
+        if warehouse_id:
+            q = q.filter(Material.almacen_id == warehouse_id)
+        for m in q.limit(600).all():
+            sc = _score(m.nombre)
+            if sc >= 0.5:
+                hueco, zona = _hueco(m)
+                out.append({"tipo": "material", "id": m.id, "codigo": m.codigo or "", "nombre": m.nombre, "hueco": hueco, "zona": zona, "cantidad": float(m.stock_actual or 0), "score": sc})
+    elif linea.tipo in ("epi", "ropa"):
+        q = db.query(StockEPI)
+        if warehouse_id:
+            q = q.filter(or_(StockEPI.almacen_id == warehouse_id, StockEPI.almacen_id.is_(None)))
+        for e in q.limit(600).all():
+            sc = _score(e.nombre)
+            if sc >= 0.5 and (not linea.talla or not e.talla or e.talla.lower() == (linea.talla or "").lower()):
+                hueco, zona = _hueco(e)
+                out.append({"tipo": "stock_epi", "id": e.id, "codigo": e.codigo or "", "nombre": e.nombre + (f" T.{e.talla}" if e.talla else ""), "hueco": hueco, "zona": zona, "cantidad": int(e.cantidad or 0), "score": sc})
+    out.sort(key=lambda c: (-c["score"], c["zona"], c["hueco"]))
+    return out[:maximo]
+
+
+def _picking_estado(db: Session, s, warehouse_id: int | None) -> dict:
+    lineas = []
+    for l in s.lineas:
+        lineas.append({"id": l.id, "tipo": l.tipo, "descripcion": l.descripcion, "talla": l.talla or "", "cantidad": l.cantidad_aprobada or l.cantidad,
+                       "hecha": bool(l.picking_en), "picking_codigo": l.picking_codigo or "", "asignacion": l.observaciones or "",
+                       "candidatos": [] if l.picking_en else _picking_candidatos(db, l, warehouse_id)})
+    lineas.sort(key=lambda x: (x["hecha"], (x["candidatos"][0]["zona"], x["candidatos"][0]["hueco"]) if x["candidatos"] else ("zzz", "zzz")))
+    return {"id": s.id, "numero": s.numero, "estado": s.estado, "lineas": lineas, "completo": all(x["hecha"] for x in lineas) if lineas else False}
+
+
+def _picking_marcar(db: Session, user, s, codigo: str, linea_id: int | None, warehouse_id: int | None) -> dict:
+    """Marca una línea como cogida (por escaneo o a mano). Si se completan todas, el pedido pasa a 'lista'."""
+    item = None
+    if codigo:
+        try:
+            item = resolve_counter_item(db, codigo, warehouse_id=warehouse_id)
+        except CounterError as exc:
+            raise HTTPException(exc.status_code, exc.detail)
+    pendientes = [l for l in s.lineas if not l.picking_en]
+    if not pendientes:
+        raise HTTPException(409, "Todas las líneas ya están preparadas")
+    linea = None
+    if linea_id:
+        linea = next((l for l in pendientes if l.id == linea_id), None)
+        if linea is None:
+            raise HTTPException(404, "Esa línea no está pendiente")
+    elif item is not None:
+        tipo = item.get("tipo") or ""
+        posibles = [l for l in pendientes if tipo in _PICKING_TIPOS.get(l.tipo, ())]
+        if not posibles:
+            raise HTTPException(409, f"Lo escaneado ({item.get('nombre') or codigo}) no encaja con ninguna línea pendiente")
+        toks = _picking_tokens(item.get("nombre") or "")
+        posibles.sort(key=lambda l: -len(_picking_tokens(l.descripcion) & toks))
+        if len(posibles) > 1 and not (_picking_tokens(posibles[0].descripcion) & toks):
+            raise HTTPException(409, "No sé a qué línea corresponde: márcala a mano")
+        linea = posibles[0]
+    else:
+        raise HTTPException(400, "Escanea un código o elige la línea")
+    linea.picking_en = datetime.now()
+    linea.picking_codigo = ((item.get("codigo") if item else codigo) or "manual")[:128]
+    if item is not None:
+        linea.observaciones = f"{item.get('nombre') or ''} · {item.get('codigo') or ''}".strip(" ·")[:500]
+    db.flush()
+    completo = all(l.picking_en for l in s.lineas)
+    if completo and s.estado in ("pendiente", "revision", "aprobada", "preparando"):
+        camino = {"pendiente": "aprobada", "revision": "aprobada", "aprobada": "preparando", "preparando": "lista"}
+        try:
+            while s.estado in camino:
+                transition_worker_request(db, user, s, new_status=camino[s.estado], notes="Preparado con picking guiado", access_warehouse_id=warehouse_id)
+        except WorkerPortalError as exc:
+            raise HTTPException(exc.status_code, exc.detail)
+    db.commit()
+    est = _picking_estado(db, s, warehouse_id)
+    est["linea_marcada"] = linea.id
+    return est
+
+
+@app.get("/solicitudes-trabajadores/{sid}/picking", response_class=HTMLResponse)
+def solicitud_picking(sid: int, request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if not (tiene_permiso(user, "entregar") or tiene_permiso(user, "devolver") or user.rol == "admin"):
+        raise HTTPException(403, "Sin permiso")
+    s = db.query(SolicitudTrabajador).options(joinedload(SolicitudTrabajador.lineas)).filter(SolicitudTrabajador.id == sid).first()
+    if s is None:
+        raise HTTPException(404, "Pedido no encontrado")
+    warehouse = _active_warehouse(db, user, request)
+    t = db.get(Trabajador, s.trabajador_id)
+    return templates.TemplateResponse(request, "solicitud_picking.html", ctx_base(
+        request, user, db, s=s, quien=t.nombre_completo if t else "", estado=_picking_estado(db, s, warehouse.id if warehouse else None),
+    ))
+
+
+@app.post("/api/solicitudes-trabajadores/{sid}/picking/marcar")
+async def api_solicitud_picking_marcar(sid: int, request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if not (tiene_permiso(user, "entregar") or tiene_permiso(user, "devolver") or user.rol == "admin"):
+        raise HTTPException(403, "Sin permiso")
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    s = db.query(SolicitudTrabajador).options(joinedload(SolicitudTrabajador.lineas)).filter(SolicitudTrabajador.id == sid).first()
+    if s is None:
+        raise HTTPException(404, "Pedido no encontrado")
+    warehouse = _active_warehouse(db, user, request)
+    lid = body.get("linea_id")
+    return JSONResponse(_picking_marcar(db, user, s, str(body.get("codigo") or "").strip()[:128], int(lid) if lid else None, warehouse.id if warehouse else None))
+
+
 @app.get("/api/mostrador/solicitudes-activas")
 def mostrador_solicitudes_activas(trabajador_id: int, request: Request,
                                   user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):

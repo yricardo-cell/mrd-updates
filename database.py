@@ -755,6 +755,8 @@ def apply_migrations(target_engine=None):
         ("lineas_solicitud_trabajador", "observaciones", "TEXT"),
         ("lineas_solicitud_trabajador", "espera_disponible", "BOOLEAN NOT NULL DEFAULT 0"),
         ("lineas_solicitud_trabajador", "avisado_disponible_en", "DATETIME"),
+        ("lineas_solicitud_trabajador", "picking_codigo", "VARCHAR(128)"),
+        ("lineas_solicitud_trabajador", "picking_en", "DATETIME"),
         # Idempotencia de formularios: evita duplicados por doble clic o
         # reintento del mismo envío (alta de maquinaria, salidas, albaranes).
         ("maquinaria", "event_id", "VARCHAR(64)"),
