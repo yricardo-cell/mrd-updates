@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.68",
-    "nombre":  "MRD TOOL CONTROL -- Foto del hueco, pedidos del trabajador cerrados desde el Mostrador y Localizador visual sobre la Vista de la nave",
+    "version_actual":  "2.7.69",
+    "nombre":  "MRD TOOL CONTROL -- Guardian Fase 2 (MRD Sentinel 1.9.0): eventos de seguridad para las reglas de deteccion de Sentinel y vigilancia mutua (MRD avisa si Sentinel deja de responder)",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Foto del hueco, pedidos del trabajador cerrados desde el Mostrador y Localizador visual sobre la Vista de la nave"
+                    "Guardian Fase 2 (MRD Sentinel 1.9.0): eventos de seguridad para las reglas de deteccion de Sentinel y vigilancia mutua (MRD avisa si Sentinel deja de responder)"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.68.zip",
-    "sha256":  "bed640679dee20e1340feccbab9d22d910fd43c2351bef37f926e9c4ae8beaef"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.69.zip",
+    "sha256":  "3c0b446fc37688c80e1a4009e288b7df631b44cf3b44f81fdfad0c349906462a"
 }
