@@ -7846,6 +7846,9 @@ def mostrador_resolver(
     db: Session = Depends(get_db),
     request: Request = None,
 ):
+    if "[object " in codigo or codigo.strip().lower() in ("undefined", "null", "[object]"):
+        # Fallo real (07/09/2026): un cliente con una versión antigua en caché mandaba el evento del clic como código.
+        raise HTTPException(400, "Lectura vacía: vuelve a escanear el código")
     if not (tiene_permiso(user, "entregar") or tiene_permiso(user, "devolver")):
         raise HTTPException(403, "Sin permiso")
     try:
