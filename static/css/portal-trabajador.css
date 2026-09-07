@@ -68,3 +68,6 @@ input,select,textarea{transition:border-color .16s ease,box-shadow .16s ease}
 
 /* Pedido listo (mejora 9) */
 .listo-box{background:#e6f7ec;color:#166534;border-radius:12px;padding:10px 12px;margin:8px 0;font-weight:600}
+
+/* Revisión de EPI (mejora 7) */
+.epi-rev-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #eef1f5}.epi-rev-row>span{flex:1;font-weight:700;min-width:120px}.epi-revision{margin-top:8px}

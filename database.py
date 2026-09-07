@@ -501,6 +501,7 @@ def apply_migrations(target_engine=None):
         ("trabajadores", "portal_pin_cambio_obligatorio", "BOOLEAN NOT NULL DEFAULT 0"),
         ("trabajadores", "portal_contacto_verificado_en", "DATETIME"),
         ("trabajadores", "idioma", "VARCHAR(5)"),
+        ("trabajadores", "epi_revisado_en", "DATETIME"),
         ("trabajadores", "talla_ropa",     "VARCHAR(20)"),
         ("trabajadores", "talla_calzado", "VARCHAR(20)"),
         # almacenes

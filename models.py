@@ -161,6 +161,7 @@ class Trabajador(Base):
     portal_pin_actualizado_en = Column(DateTime, nullable=True)
     portal_pin_cambio_obligatorio = Column(Boolean, nullable=False, default=False)
     idioma = Column(String(5), nullable=True)   # idioma del portal: es / ro (P5)
+    epi_revisado_en = Column(DateTime, nullable=True)   # última revisión de EPI desde el portal (mejora 7)
     portal_contacto_verificado_en = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
