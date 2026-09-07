@@ -3597,6 +3597,161 @@ def epis_stock_minimo(
     return RedirectResponse("/epis/stock", status_code=303)
 
 
+# ─── Historial por trabajador (2.7.65) ───────────────────────────────────────
+HISTORIAL_TIPOS = {
+    "herramienta": ("Herramientas", "bi-tools"), "material": ("Materiales", "bi-box-seam"), "epi": ("EPI y ropa", "bi-shield-check"),
+    "albaran": ("Albaranes", "bi-receipt"), "solicitud": ("Pedidos del portal", "bi-bag-plus"), "incidencia": ("Incidencias", "bi-exclamation-triangle"),
+    "devolucion": ("Devoluciones pedidas", "bi-arrow-return-left"), "buzon": ("Buzón", "bi-chat-heart"), "presencia": ("Presencia", "bi-calendar-check"),
+    "formacion": ("Formación y salud", "bi-mortarboard"), "portal": ("Confirmaciones del portal", "bi-phone"),
+}
+
+
+def _hist_local(valor):
+    """Fecha de la BD (UTC o local según quién la escribió) a datetime local para ordenar."""
+    if valor is None:
+        return None
+    if isinstance(valor, datetime):
+        return _utc_a_local(valor)
+    if isinstance(valor, date):
+        return datetime(valor.year, valor.month, valor.day)
+    return None
+
+
+def _historial_trabajador(db: Session, t: Trabajador, desde: date | None = None, hasta: date | None = None) -> list[dict]:
+    """Todo lo que ha pasado con un trabajador, en una sola línea de tiempo:
+    herramientas que se llevó y devolvió, materiales, EPI y ropa, albaranes,
+    pedidos, incidencias y devoluciones del portal, buzón, presencia,
+    formación y reconocimientos, y sus confirmaciones desde el portal."""
+    from models import PartePresencia as _PartePresencia
+    eventos: list[dict] = []
+
+    def add(fecha, tipo, titulo, detalle="", estado="", url=""):
+        f = _hist_local(fecha)
+        if f is None:
+            return
+        eventos.append({"fecha": f, "tipo": tipo, "titulo": titulo, "detalle": detalle or "", "estado": (estado or "").replace("_", " "), "url": url or ""})
+
+    movs = db.query(Movimiento).filter(Movimiento.trabajador_id == t.id).order_by(Movimiento.id.desc()).limit(3000).all()
+    hids = {m.herramienta_id for m in movs if m.herramienta_id}
+    hmap = {h.id: h for h in db.query(Herramienta).filter(Herramienta.id.in_(list(hids))).all()} if hids else {}
+    oids = {m.obra_id for m in movs if m.obra_id}
+    omap = {o.id: o for o in db.query(Obra).filter(Obra.id.in_(list(oids))).all()} if oids else {}
+    verbos = {"entrega": "Se llevó", "devolucion": "Devolvió", "traslado": "Traslado de", "perdida": "Perdió", "robo": "Robo de", "reparacion": "Llevó a reparar", "baja": "Baja de"}
+    for m in movs:
+        h = hmap.get(m.herramienta_id)
+        nombre = h.nombre if h else f"herramienta {m.herramienta_id or ''}".strip()
+        partes = [h.codigo if h else "", f"obra {omap[m.obra_id].nombre}" if m.obra_id in omap else (m.destino or ""),
+                  f"devolver antes del {m.fecha_devolucion_prevista:%d/%m/%Y}" if m.fecha_devolucion_prevista else "", m.motivo or ""]
+        add(m.fecha, "herramienta", f"{verbos.get(m.tipo, (m.tipo or 'movimiento').capitalize())} {nombre}", " · ".join(x for x in partes if x), m.tipo, f"/herramientas/{h.id}" if h else "")
+
+    for mm in db.query(MovimientoMaterial).filter(MovimientoMaterial.trabajador_id == t.id).order_by(MovimientoMaterial.id.desc()).limit(1500).all():
+        mat = db.get(Material, mm.material_id) if mm.material_id else None
+        verbo = {"salida": "Se llevó", "entrada": "Devolvió"}.get(mm.tipo, (mm.tipo or "movimiento").capitalize())
+        cant = f"{mm.cantidad:g}" if isinstance(mm.cantidad, (int, float)) else str(mm.cantidad or "")
+        add(mm.fecha, "material", f"{verbo} {cant} {(mat.unidad if mat and mat.unidad else 'ud')} de {mat.nombre if mat else 'material'}", mm.referencia or mm.notas or "", mm.tipo, f"/materiales/{mat.id}" if mat else "")
+
+    for e in db.query(EntregaEPI).filter(EntregaEPI.trabajador_id == t.id).order_by(EntregaEPI.id.desc()).limit(500).all():
+        try:
+            items = json.loads(e.items_json or "[]")
+        except (TypeError, ValueError):
+            items = []
+        txt = ", ".join((f"{i.get('cantidad', 1)}× {i.get('nombre', '')}" + (f" T.{i['talla']}" if i.get("talla") else "")) if isinstance(i, dict) else str(i) for i in items)
+        add(e.fecha, "epi", f"Entrega de EPI/ropa ({e.tipo or 'mostrador'})", txt, "entregado", f"/trabajadores/{t.id}/epis")
+
+    for d in db.query(DotacionTrabajador).filter(DotacionTrabajador.trabajador_id == t.id).order_by(DotacionTrabajador.id.desc()).limit(300).all():
+        lineas = db.query(LineaDotacion).filter(LineaDotacion.dotacion_id == d.id).all()
+        txt = ", ".join(f"{l.cantidad}× {l.nombre}" + (f" T.{l.talla}" if l.talla else "") for l in lineas)
+        add(d.confirmado_en or d.creado_en, "epi", f"Dotación de ropa y EPI ({(d.estado or '').replace('_', ' ')})", txt, d.estado, f"/trabajadores/{t.id}/epis")
+
+    for hi in db.query(HistorialEPIIndividual).filter(HistorialEPIIndividual.trabajador_id == t.id).order_by(HistorialEPIIndividual.id.desc()).limit(500).all():
+        epi = db.get(EPIIndividual, hi.epi_id) if hi.epi_id else None
+        nombre = f"{epi.tipo} {epi.codigo_fabricacion or ''}".strip() if epi else "EPI individual"
+        url = f"/epis/individuales/{epi.id}" if epi else ""
+        add(hi.fecha_asignacion, "epi", f"Se le asignó {nombre}", hi.notas or "", "asignado", url)
+        if hi.fecha_devolucion:
+            add(hi.fecha_devolucion, "epi", f"Devolvió {nombre}", "", "devuelto", url)
+
+    for a in db.query(AlbaranSalida).filter(AlbaranSalida.responsable_id == t.id).order_by(AlbaranSalida.id.desc()).limit(500).all():
+        try:
+            n = len(a.items)
+        except Exception:
+            n = 0
+        add(a.fecha_salida, "albaran", f"Albarán {a.numero} ({(a.tipo_documento or 'salida').replace('_', ' ')})", f"{n} líneas" + (f" · {a.origen_destino}" if a.origen_destino else ""), a.estado, f"/albaranes-salida/{a.id}")
+
+    for s in db.query(SolicitudTrabajador).filter(SolicitudTrabajador.trabajador_id == t.id).order_by(SolicitudTrabajador.id.desc()).limit(500).all():
+        add(s.creado_en, "solicitud", f"Pedido {s.numero}", s.asunto or s.motivo or "", s.estado, "/solicitudes-trabajadores")
+    for i in db.query(IncidenciaPortalTrabajador).filter(IncidenciaPortalTrabajador.trabajador_id == t.id).order_by(IncidenciaPortalTrabajador.id.desc()).limit(500).all():
+        add(i.creado_en, "incidencia", f"Incidencia {i.numero} ({i.categoria})", " · ".join(x for x in [i.activo_nombre or i.activo_codigo or "", (i.descripcion or "")[:160]] if x), i.estado, "/operaciones-portal-trabajadores")
+    for dv in db.query(SolicitudDevolucionTrabajador).filter(SolicitudDevolucionTrabajador.trabajador_id == t.id).order_by(SolicitudDevolucionTrabajador.id.desc()).limit(500).all():
+        add(dv.creado_en, "devolucion", f"Quiere devolver {dv.cantidad:g}× {dv.descripcion}" if isinstance(dv.cantidad, (int, float)) else f"Quiere devolver {dv.descripcion}", dv.motivo or "", dv.estado, "/operaciones-portal-trabajadores")
+    for c in db.query(ComunicacionTrabajador).filter(ComunicacionTrabajador.trabajador_id == t.id, ComunicacionTrabajador.privacidad != "anonima").order_by(ComunicacionTrabajador.id.desc()).limit(300).all():
+        add(c.creado_en, "buzon", f"Buzón {c.numero} ({c.tipo})", c.asunto or "", c.estado, "/operaciones-portal-trabajadores")
+
+    for p in db.query(_PartePresencia).filter(_PartePresencia.trabajador_id == t.id).order_by(_PartePresencia.id.desc()).limit(1000).all():
+        o = db.get(Obra, p.obra_id) if p.obra_id else None
+        add(p.fecha, "presencia", f"Presencia {p.hora_entrada or ''}–{p.hora_salida or ''}".strip("–"), (f"obra {o.nombre}" if o else "") + (f" · {p.notas}" if p.notas else ""), "", "/partes-presencia")
+    for f in db.query(FormacionTrabajador).filter(FormacionTrabajador.trabajador_id == t.id).order_by(FormacionTrabajador.id.desc()).limit(300).all():
+        add(f.fecha_realizacion or f.created_at, "formacion", f"Formación: {f.nombre_curso}", (f"caduca {f.fecha_caducidad:%d/%m/%Y}" if f.fecha_caducidad else "sin caducidad") + (f" · {f.entidad}" if f.entidad else ""), "", f"/trabajadores/{t.id}/formacion")
+    for rm in db.query(ReconocimientoMedico).filter(ReconocimientoMedico.trabajador_id == t.id).order_by(ReconocimientoMedico.id.desc()).limit(100).all():
+        add(rm.fecha or rm.created_at, "formacion", "Reconocimiento médico", " · ".join(x for x in [(rm.resultado or "").replace("_", " "), f"próximo {rm.fecha_proxima:%d/%m/%Y}" if rm.fecha_proxima else ""] if x), rm.resultado, f"/trabajadores/{t.id}/reconocimientos")
+
+    for al in db.query(AuditoriaLog).filter(AuditoriaLog.accion == "confirmacion_portal", AuditoriaLog.resumen.like(f"{t.nombre_completo} confirma%")).order_by(AuditoriaLog.id.desc()).limit(200).all():
+        add(al.fecha, "portal", "Confirmó desde su móvil que tiene sus herramientas", al.resumen or "", "confirmado", "/informes/quien-tiene-que")
+
+    if desde:
+        eventos = [e for e in eventos if e["fecha"].date() >= desde]
+    if hasta:
+        eventos = [e for e in eventos if e["fecha"].date() <= hasta]
+    eventos.sort(key=lambda e: e["fecha"], reverse=True)
+    return eventos
+
+
+def _hist_fecha_param(valor: str | None) -> date | None:
+    try:
+        return date.fromisoformat(valor) if valor else None
+    except ValueError:
+        return None
+
+
+@app.get("/trabajadores/{tid}/historial", response_class=HTMLResponse)
+def trabajador_historial(tid: int, request: Request, desde: str = "", hasta: str = "", tipo: str = "",
+                         user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Historial por trabajador (2.7.65): todo lo que ha tenido, devuelto y pedido, en una línea de tiempo."""
+    t = db.get(Trabajador, tid)
+    if not t:
+        raise HTTPException(404, "Trabajador no encontrado")
+    _require_warehouse_access(user, t.almacen_id)
+    d1, d2 = _hist_fecha_param(desde), _hist_fecha_param(hasta)
+    eventos = _historial_trabajador(db, t, d1, d2)
+    conteo: dict[str, int] = {}
+    for e in eventos:
+        conteo[e["tipo"]] = conteo.get(e["tipo"], 0) + 1
+    tipo = tipo if tipo in HISTORIAL_TIPOS else ""
+    if tipo:
+        eventos = [e for e in eventos if e["tipo"] == tipo]
+    return templates.TemplateResponse(request, "trabajador_historial.html", ctx_base(
+        request, user, db, trabajador=t, eventos=eventos[:1500], total=len(eventos), conteo=conteo, tipos=HISTORIAL_TIPOS,
+        desde=d1.isoformat() if d1 else "", hasta=d2.isoformat() if d2 else "", tipo=tipo,
+    ))
+
+
+@app.get("/trabajadores/{tid}/historial/excel")
+def trabajador_historial_excel(tid: int, request: Request, desde: str = "", hasta: str = "", tipo: str = "",
+                               user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    t = db.get(Trabajador, tid)
+    if not t:
+        raise HTTPException(404, "Trabajador no encontrado")
+    _require_warehouse_access(user, t.almacen_id)
+    eventos = _historial_trabajador(db, t, _hist_fecha_param(desde), _hist_fecha_param(hasta))
+    if tipo in HISTORIAL_TIPOS:
+        eventos = [e for e in eventos if e["tipo"] == tipo]
+    filas = [[e["fecha"].strftime("%d/%m/%Y %H:%M"), HISTORIAL_TIPOS.get(e["tipo"], (e["tipo"],))[0], e["titulo"], e["detalle"], e["estado"]] for e in eventos]
+    excel = exportar_tabla_excel(f"Historial de {t.nombre_completo}", ["Fecha", "Tipo", "Qué pasó", "Detalle", "Estado"], filas, [17, 20, 44, 60, 14])
+    nombre = re.sub(r"[^A-Za-z0-9_-]+", "_", t.nombre_completo)[:40]
+    return Response(content=excel, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f"attachment; filename=historial_{nombre}_{date.today().isoformat()}.xlsx"})
+
+
 @app.get("/trabajadores/{tid}/epis/{eid}/pdf")
 def trabajador_epi_pdf(tid: int, eid: int,
                        user: Usuario = Depends(requiere_login),
@@ -17571,6 +17726,7 @@ def portal_trabajador(token: str, request: Request, db: Session = Depends(get_db
         .order_by(CatalogoEPI.orden, CatalogoEPI.nombre).all()
     ] or KIT_EPI_INICIAL
     kit_estado_portal = _kit_epi_estado(db, t.id, catalogo_kit_portal)
+    historial_portal = _historial_trabajador(db, t)[:60]  # 2.7.65: "Mi historial"
     response = templates.TemplateResponse(request, "portal_trabajador.html", {
         "request": request, "trabajador": t, "epis": epis,
         "kit_estado": kit_estado_portal, "catalogo_kit": catalogo_kit_portal,
@@ -17588,6 +17744,7 @@ def portal_trabajador(token: str, request: Request, db: Session = Depends(get_db
         "catalogo_por_tipo": catalogo_por_tipo,
         "carnet_qr_b64": carnet_qr_b64,
         "dotacion_lineas": dotacion_lineas,
+        "historial_portal": historial_portal,
     })
     response.headers["Cache-Control"] = "no-store, private"
     response.headers["Referrer-Policy"] = "no-referrer"

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Historial — {{ trabajador.nombre_completo }} — {{ app_name }}{% endblock %}
+{% block breadcrumb %}
+<a href="/">Inicio</a> / <a href="/trabajadores">Trabajadores</a> / <a href="/trabajadores/{{ trabajador.id }}/epis">{{ trabajador.nombre_completo }}</a> / Historial
+{% endblock %}
+{% block extra_css %}
+<style>
+.hist-chips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.hist-chips a{border:1px solid rgba(148,163,184,.5);border-radius:999px;padding:4px 11px;font-size:.85rem;text-decoration:none;color:inherit}
+.hist-chips a.activo{background:#0891b2;color:#fff;border-color:#0891b2}
+.hist-tabla td{vertical-align:top}
+.hist-fecha{white-space:nowrap;font-variant-numeric:tabular-nums}
+.hist-tipo{font-size:.75rem;white-space:nowrap}
+.hist-detalle{color:#5b6577;font-size:.86rem}
+@media (max-width:700px){.hist-tabla thead{display:none}.hist-tabla tr{display:block;border-bottom:1px solid #e5e7eb;padding:6px 0}.hist-tabla td{display:block;border:0;padding:2px 4px}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="mrd-page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <div>
+    <h1 class="page-title"><i class="bi bi-clock-history"></i> Historial de {{ trabajador.nombre_completo }}</h1>
+    <p class="page-subtitle">Todo lo que ha tenido, devuelto y pedido, en orden. {{ total }} hechos{% if desde or hasta %} en el periodo elegido{% endif %}.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-secondary btn-sm" href="/trabajadores/{{ trabajador.id }}/epis"><i class="bi bi-person-vcard"></i> Ficha</a>
+    <a class="btn btn-outline-success btn-sm" href="/trabajadores/{{ trabajador.id }}/historial/excel?desde={{ desde }}&hasta={{ hasta }}&tipo={{ tipo }}"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+  </div>
+</div>
+<form method="get" class="row g-2 align-items-end mb-2">
+  <div class="col-auto"><label class="form-label mb-0 small">Desde</label><input type="date" name="desde" value="{{ desde }}" class="form-control form-control-sm"></div>
+  <div class="col-auto"><label class="form-label mb-0 small">Hasta</label><input type="date" name="hasta" value="{{ hasta }}" class="form-control form-control-sm"></div>
+  <input type="hidden" name="tipo" value="{{ tipo }}">
+  <div class="col-auto"><button class="btn btn-sm btn-primary" type="submit">Filtrar</button> <a class="btn btn-sm btn-outline-secondary" href="/trabajadores/{{ trabajador.id }}/historial">Todo</a></div>
+</form>
+<div class="hist-chips">
+  <a href="/trabajadores/{{ trabajador.id }}/historial?desde={{ desde }}&hasta={{ hasta }}" class="{{ 'activo' if not tipo else '' }}">Todo · {{ conteo.values()|sum }}</a>
+  {% for clave, par in tipos.items() %}{% if conteo.get(clave) %}<a href="/trabajadores/{{ trabajador.id }}/historial?desde={{ desde }}&hasta={{ hasta }}&tipo={{ clave }}" class="{{ 'activo' if tipo == clave else '' }}"><i class="bi {{ par[1] }}"></i> {{ par[0] }} · {{ conteo[clave] }}</a>{% endif %}{% endfor %}
+</div>
+<div class="card"><div class="card-body p-0">
+{% if eventos %}
+<div class="table-responsive"><table class="table table-sm table-hover mb-0 hist-tabla">
+  <thead><tr><th>Fecha</th><th>Tipo</th><th>Qué pasó</th><th>Detalle</th><th>Estado</th></tr></thead>
+  <tbody>
+  {% for e in eventos %}
+  <tr>
+    <td class="hist-fecha">{{ e.fecha.strftime('%d/%m/%Y %H:%M') }}</td>
+    <td><span class="badge badge-secondary hist-tipo"><i class="bi {{ tipos[e.tipo][1] }}"></i> {{ tipos[e.tipo][0] }}</span></td>
+    <td>{% if e.url %}<a href="{{ e.url }}" class="text-reset">{{ e.titulo }}</a>{% else %}{{ e.titulo }}{% endif %}</td>
+    <td class="hist-detalle">{{ e.detalle }}</td>
+    <td class="small">{{ e.estado }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}
+<div class="text-muted p-4 text-center"><i class="bi bi-inbox"></i> No hay nada registrado{% if desde or hasta or tipo %} con ese filtro{% endif %}.</div>
+{% endif %}
+</div></div>
+{% endblock %}
