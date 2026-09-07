@@ -1033,6 +1033,12 @@ def startup_event():
                     mrd_logging.log_error(f"Prueba de humo: {_e}")
             _thr.Thread(target=_run_humo, daemon=True, name="prueba_humo_bg").start()
             try:
+                import asyncio as _aio_v
+                globals()["_APP_LOOP"] = _aio_v.get_event_loop()
+            except Exception:
+                pass
+            _thr.Thread(target=_vigilante_bg, daemon=True, name="vigilante_bg").start()   # mejora 31
+            try:
                 _bot_asegurar_token()   # mejora 29: token compartido con el bot de Telegram
             except Exception as _e:
                 mrd_logging.log_error(f"Token del bot: {_e}")
@@ -11517,6 +11523,155 @@ def configuracion_drive_copiar(user: Usuario = Depends(requiere_login), db: Sess
     except Exception:
         msg = "tarea-falta"
     return RedirectResponse(f"/configuracion/drive?msg={msg}", status_code=303)
+
+
+# ─── Autocuración (31-39): aviso común por Telegram y en la app ──────────────
+def _supervisado() -> bool:
+    return os.getenv("MRD_SUPERVISADO") == "1"
+
+
+def _notificar_sistema(titulo: str, texto: str, prioridad: str = "alta", enlace: str = "/configuracion/salud") -> None:
+    """Aviso de sistema: Telegram (si está configurado) y Aviso en la app. Nunca lanza excepciones."""
+    try:
+        cfg = _telegram_config()
+        if cfg.get("bot_token") and cfg.get("chat_id"):
+            import telegram_notif as _tg
+            err = _tg.enviar_mensaje(f"{titulo}" + chr(10) + texto, cfg["bot_token"], cfg["chat_id"], parse_mode="")
+            if err:
+                mrd_logging.log_error(f"Aviso de sistema Telegram: {err}")
+    except Exception as exc:
+        mrd_logging.log_error(f"Aviso de sistema Telegram: {exc}")
+    try:
+        from database import SessionLocal as _SLs
+        db = _SLs()
+        try:
+            db.add(Aviso(titulo=titulo[:200], mensaje=texto[:1500], prioridad=prioridad, tipo="sistema", enlace=enlace))
+            db.commit()
+        finally:
+            db.close()
+    except Exception as exc:
+        mrd_logging.log_error(f"Aviso de sistema: {exc}")
+    mrd_logging.log_app(f"{titulo}: {texto[:200]}")
+
+
+def _estado_json_leer(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    except ValueError:
+        return {}
+
+
+def _estado_json_escribir(path: Path, datos: dict) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(datos, ensure_ascii=False, default=str), encoding="utf-8")
+    except OSError as exc:
+        mrd_logging.log_error(f"Estado {path.name}: {exc}")
+
+
+def _reiniciar_proceso(motivo: str) -> None:
+    """Sale con código 3: el lanzador SERVICIO_MRD.ps1 relanza uvicorn en 1 segundo."""
+    mrd_logging.log_app(f"Reinicio automático: {motivo}")
+    import threading as _thr2
+
+    def _salir():
+        import time as _t
+        _t.sleep(1.5)
+        os._exit(3)
+    _thr2.Thread(target=_salir, daemon=True).start()
+
+
+# ─── 31: vigilante de cuelgues ───────────────────────────────────────────────
+_VIGILANTE_ESTADO = BASE_DIR / "config" / "vigilante_estado.json"
+_APP_LOOP = None
+_VIGILANTE_FALLOS = 0
+
+
+def _vigilante_comprobar(timeout: float = 10.0) -> tuple[bool, str]:
+    """¿Responde el bucle de eventos y el servidor HTTP local?"""
+    import urllib.request as _ur
+    loop = _APP_LOOP
+    if loop is not None and loop.is_running():
+        import threading as _th
+        ev = _th.Event()
+        try:
+            loop.call_soon_threadsafe(ev.set)
+        except RuntimeError as exc:
+            return False, f"bucle de eventos: {exc}"
+        if not ev.wait(timeout):
+            return False, "el bucle de eventos no responde"
+    port = int(os.getenv("MRD_PORT", "8000") or 8000)
+    try:
+        with _ur.urlopen(f"http://127.0.0.1:{port}/health", timeout=timeout) as r:
+            if r.status != 200:
+                return False, f"/health devuelve {r.status}"
+    except Exception as exc:
+        return False, f"/health no responde: {type(exc).__name__}"
+    return True, ""
+
+
+def _vigilante_decidir(fallos: int, ahora: datetime, estado: dict, arranque: datetime, supervisado: bool, actualizando: bool = False, umbral: int = 4) -> str:
+    """'ok' | 'esperar' | 'avisar' | 'reiniciar'. Reinicia como mucho una vez cada 30 minutos y nunca en los 3 primeros minutos."""
+    if (ahora - arranque).total_seconds() < 180 or actualizando:
+        return "esperar"
+    if fallos <= 0:
+        return "ok"
+    if fallos < umbral:
+        return "esperar"
+    ultimo = estado.get("ultimo_reinicio")
+    try:
+        ultimo_dt = datetime.fromisoformat(ultimo) if ultimo else None
+    except ValueError:
+        ultimo_dt = None
+    if ultimo_dt and (ahora - ultimo_dt).total_seconds() < 1800:
+        return "avisar"
+    return "reiniciar" if supervisado else "avisar"
+
+
+def _vigilante_actualizando() -> bool:
+    try:
+        return _updater.get_state().get("status") in ("descargando", "verificando", "instalando", "reiniciando")
+    except Exception:
+        return False
+
+
+def _vigilante_tick() -> str:
+    global _VIGILANTE_FALLOS
+    ok, motivo = _vigilante_comprobar()
+    _VIGILANTE_FALLOS = 0 if ok else _VIGILANTE_FALLOS + 1
+    estado = _estado_json_leer(_VIGILANTE_ESTADO)
+    accion = _vigilante_decidir(_VIGILANTE_FALLOS, datetime.now(), estado, _APP_INICIO, _supervisado(), _vigilante_actualizando())
+    if accion == "reiniciar":
+        estado["ultimo_reinicio"] = datetime.now().isoformat(timespec="seconds")
+        estado["motivo"] = motivo
+        _estado_json_escribir(_VIGILANTE_ESTADO, estado)
+        _notificar_sistema("MRD se reinicia solo: no respondía", f"{motivo}. Llevaba {_VIGILANTE_FALLOS} comprobaciones seguidas sin responder; el vigilante lo reinicia ahora (tarda unos 10 segundos).")
+        _reiniciar_proceso(f"vigilante: {motivo}")
+    elif accion == "avisar" and _VIGILANTE_FALLOS in (4, 20, 60):
+        _notificar_sistema("MRD no responde", f"{motivo}. No se reinicia solo (ya se reinició hace poco o no está supervisado): reinícialo desde /servicio o con /reiniciar en Telegram.")
+    try:
+        import psutil as _ps
+        rss_mb = _ps.Process().memory_info().rss / 1024 ** 2
+        hora = datetime.now().hour
+        if rss_mb > 1500 and 3 <= hora <= 5 and _supervisado() and estado.get("reinicio_memoria") != date.today().isoformat():
+            estado["reinicio_memoria"] = date.today().isoformat()
+            _estado_json_escribir(_VIGILANTE_ESTADO, estado)
+            _notificar_sistema("MRD se reinicia de madrugada por memoria", f"El proceso usa {rss_mb:.0f} MB; reinicio preventivo a las {hora}:00.", prioridad="media")
+            _reiniciar_proceso(f"memoria {rss_mb:.0f} MB")
+    except Exception:
+        pass
+    return accion
+
+
+def _vigilante_bg():
+    import time as _t
+    _t.sleep(60)
+    while True:
+        try:
+            _vigilante_tick()
+        except Exception as exc:
+            mrd_logging.log_error(f"Vigilante: {exc}")
+        _t.sleep(30)
 
 
 def _alertas_consumo_obras_bg():
