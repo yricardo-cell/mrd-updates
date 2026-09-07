@@ -51,3 +51,6 @@ input,select,textarea{transition:border-color .16s ease,box-shadow .16s ease}
 
 /* Pedido en dos toques (2.7.72) */
 .quick-order{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}.quick-repeat{border:0;border-radius:12px;padding:12px 16px;background:linear-gradient(115deg,#0891b2,#0e7490);color:#fff;font-weight:800;font-size:1rem}.quick-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.quick-label{font-size:.78rem;font-weight:750;color:#53657a}.quick-chip{border:1px solid #cedae7;background:#fff;border-radius:999px;padding:7px 12px;font-weight:700;color:#0e7490}.quick-chip:active{background:#e0f7fa}.portal-primary.pulse{box-shadow:0 0 0 4px #22d3ee55}
+
+/* Firma en el móvil (P6) */
+.firma-pad{width:100%;height:150px;background:#fff;border:2px dashed #aab5c5;border-radius:12px;touch-action:none;display:block;margin:4px 0 8px}

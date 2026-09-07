@@ -239,6 +239,8 @@ class SolicitudTrabajador(Base):
     fecha_estimada = Column(DateTime, nullable=True)
     cancelada_por_trabajador_en = Column(DateTime, nullable=True)
     recogida_confirmada_en = Column(DateTime, nullable=True)
+    recogida_firma_datos = Column(Text, nullable=True)      # firma en el móvil (P6)
+    recogida_firma_nombre = Column(String(100), nullable=True)
 
     trabajador = relationship("Trabajador", back_populates="solicitudes", foreign_keys=[trabajador_id])
     almacen = relationship("Almacen", foreign_keys=[almacen_id])

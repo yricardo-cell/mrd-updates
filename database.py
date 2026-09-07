@@ -730,6 +730,8 @@ def apply_migrations(target_engine=None):
         ("solicitudes_trabajador", "fecha_estimada", "DATETIME"),
         ("solicitudes_trabajador", "cancelada_por_trabajador_en", "DATETIME"),
         ("solicitudes_trabajador", "recogida_confirmada_en", "DATETIME"),
+        ("solicitudes_trabajador", "recogida_firma_datos", "TEXT"),
+        ("solicitudes_trabajador", "recogida_firma_nombre", "VARCHAR(100)"),
         ("solicitudes_trabajador", "tipo", "VARCHAR(20)"),
         ("solicitudes_trabajador", "categoria", "VARCHAR(50)"),
         ("solicitudes_trabajador", "asunto", "VARCHAR(200)"),

@@ -8057,6 +8057,8 @@ def mostrador_operar(
                 result["solicitudes"] = entregadas
         if payload.trabajador_id and payload.accion == "salida":
             result["kit"] = _avisar_kit_incompleto(db, payload.trabajador_id)
+            if not payload.firma_datos and result.get("albaran_id"):
+                _avisar_firma_albaran(db, payload.trabajador_id, int(result["albaran_id"]), str(result.get("albaran_numero") or ""))
         db.commit()
         return JSONResponse(result)
     except CounterError as exc:
@@ -18448,18 +18450,40 @@ async def portal_comentar_solicitud(
 
 
 @app.post("/portal/{token}/solicitudes/{request_id}/confirmar-recogida", response_class=RedirectResponse)
-def portal_confirmar_recogida(
+async def portal_confirmar_recogida(
     token: str, request_id: int, request: Request, db: Session = Depends(get_db),
 ):
+    """Confirmar la recogida firmando en la pantalla del móvil (P6)."""
     worker = _portal_worker_required(token, request, db)
     row = db.get(SolicitudTrabajador, request_id)
     if not row or row.trabajador_id != worker.id:
         raise HTTPException(404, "Solicitud no encontrada")
     if row.estado not in {"lista", "entregada"}:
         raise HTTPException(409, "La solicitud todavía no está lista para recoger")
+    form = await request.form()
+    firma = str(form.get("firma_datos") or "").strip()
+    if not firma:
+        raise HTTPException(422, "Firma en la pantalla antes de confirmar")
+    if len(firma) > 1_000_000:
+        raise HTTPException(413, "La firma es demasiado grande")
+    _decode_delivery_signature(firma)
     row.recogida_confirmada_en = datetime.now()
+    row.recogida_firma_datos = firma
+    row.recogida_firma_nombre = worker.nombre_completo[:100]
     db.commit()
     return RedirectResponse(f"/portal/{token}?ok=recogida#solicitudes", status_code=303)
+
+
+def _avisar_firma_albaran(db: Session, trabajador_id: int, albaran_id: int, numero: str) -> None:
+    """Salida por el Mostrador sin firma en el mostrador: el trabajador firma el albarán en su móvil (P6)."""
+    t = db.get(Trabajador, trabajador_id)
+    if t is None or not t.portal_token:
+        return
+    create_worker_notification(
+        db, t.id, title=f"Firma el albarán {numero} en tu móvil",
+        message="Te han entregado material por el Mostrador. Abre el albarán, revísalo y firma la conformidad con el dedo.",
+        kind="albaran", link=f"/portal/{t.portal_token}/albaranes/{albaran_id}", event_key=f"albaran:{albaran_id}:firmar",
+    )
 
 
 async def _save_worker_portal_photo(
