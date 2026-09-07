@@ -12,6 +12,7 @@
 .rc-hueco{border:2px dashed rgba(148,163,184,.6);border-radius:14px;padding:14px;text-align:center}
 .rc-hueco.activo{border-style:solid;border-color:#0891b2;background:rgba(8,145,178,.06)}
 .rc-hueco h2{margin:0;font-size:1.3rem}
+.rc-foto{max-height:140px;max-width:100%;border-radius:10px;margin-top:8px}
 #rc-lista .list-group-item{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
 .rc-presente{background:rgba(22,163,74,.12)}.rc-falta{background:rgba(220,38,38,.10)}.rc-fuera{opacity:.6}.rc-nuevo{background:rgba(8,145,178,.10)}
 .rc-kpis{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}.rc-kpis span{border:1px solid rgba(148,163,184,.4);border-radius:999px;padding:4px 10px;font-size:.85rem}
@@ -30,6 +31,7 @@
         <div class="small text-muted">Recontando</div>
         <h2 id="rc-nombre">{{ hueco_actual.nombre if hueco_actual else 'Escanea un hueco' }}</h2>
         <div class="small text-muted" id="rc-sub"></div>
+        <img id="rc-foto" class="rc-foto" alt="Foto del hueco" hidden>
       </div>
       <select id="rc-select" class="form-select mt-2"><option value="">…o elige el hueco en la lista</option>{% for u in huecos %}<option value="{{ u.id }}" {% if hueco_actual and u.id == hueco_actual.id %}selected{% endif %}>{{ u.nombre }}</option>{% endfor %}</select>
       <div class="input-group input-group-lg mt-3"><input id="rc-scan" class="form-control" placeholder="Escanea lo que hay dentro…" autocomplete="off" autofocus><button id="rc-scan-btn" class="btn btn-primary" type="button"><i class="bi bi-check-lg"></i></button></div>
@@ -65,7 +67,7 @@
     fuera.forEach(i=>html+=fila(i,'rc-fuera',`<span class="badge badge-info">${i.quien?'la tiene '+esc(i.quien):esc(i.estado||'fuera')}</span>`));
     lista.innerHTML=html||'<div class="text-muted small p-3">Este hueco no tiene nada asignado. Escanea lo que haya y se colocará aquí.</div>'}
   async function cargar(id,n){hueco=id;vistos=new Set();nuevos=[];nombre.textContent=n||'…';box.classList.add('activo');if(sel.value!==String(id))sel.value=String(id);
-    try{const r=await fetch('/api/nave/recuento/'+id,{headers:{Accept:'application/json'}});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo cargar');esperados=d.esperados;nombre.textContent=d.hueco.nombre;subt.textContent=(d.hueco.ruta||'')+(d.hueco.ultimo_recuento?` · último recuento ${d.hueco.ultimo_recuento}`+(d.hueco.ultimo_recuento_faltan?` (faltaban ${d.hueco.ultimo_recuento_faltan})`:' (todo bien)'):' · nunca recontado');estado.className='scan-state ok';estado.textContent='Hueco cargado. Escanea lo que haya dentro.'}catch(e){estado.className='scan-state err';estado.textContent=e.message}
+    try{const r=await fetch('/api/nave/recuento/'+id,{headers:{Accept:'application/json'}});const d=await r.json();if(!r.ok)throw new Error(d.detail||'No se pudo cargar');esperados=d.esperados;nombre.textContent=d.hueco.nombre;const rf=document.getElementById('rc-foto');rf.hidden=!d.hueco.foto;rf.src=d.hueco.foto||'';subt.textContent=(d.hueco.ruta||'')+(d.hueco.ultimo_recuento?` · último recuento ${d.hueco.ultimo_recuento}`+(d.hueco.ultimo_recuento_faltan?` (faltaban ${d.hueco.ultimo_recuento_faltan})`:' (todo bien)'):' · nunca recontado');estado.className='scan-state ok';estado.textContent='Hueco cargado. Escanea lo que haya dentro.'}catch(e){estado.className='scan-state err';estado.textContent=e.message}
     render();scan.focus()}
   sel.onchange=()=>{const o=sel.selectedOptions[0];if(o&&o.value)cargar(Number(o.value),o.textContent.trim())};
   async function procesar(raw){const code=String(raw||scan.value).trim();if(!code||busy)return;busy=true;scan.value='';estado.className='scan-state';estado.textContent='Identificando '+code+'…';

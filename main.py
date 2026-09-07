@@ -9044,6 +9044,7 @@ def _nave_huecos(db: Session, warehouse_id: int) -> tuple[list[dict], dict]:
             "clase": clase, "n": len(items),
             "recuento": u.ultimo_recuento.strftime("%d/%m/%Y") if u.ultimo_recuento else "",
             "recuento_faltan": u.ultimo_recuento_faltan or 0,
+            "foto": _nave_foto_url(u),
             "items": items,
         })
     filas = sorted(filas_map.values(), key=lambda f: (_nave_clave_natural(f["zona"]), _nave_clave_natural(f["fila"])))
@@ -10122,7 +10123,7 @@ def api_nave_recuento(uid: int, request: Request = None, user: Usuario = Depends
     return JSONResponse({
         "ok": True, "hueco": {"id": u.id, "nombre": u.nombre, "ruta": u.ruta_completa, "codigo": u.codigo or "",
                              "ultimo_recuento": u.ultimo_recuento.strftime("%d/%m/%Y %H:%M") if u.ultimo_recuento else "",
-                             "ultimo_recuento_faltan": u.ultimo_recuento_faltan},
+                             "ultimo_recuento_faltan": u.ultimo_recuento_faltan, "foto": _nave_foto_url(u)},
         "esperados": _recuento_esperados(db, u),
     })
 
@@ -10205,7 +10206,7 @@ def api_nave_recuento_zona(zona: str = Query(..., min_length=1, max_length=120),
             i["esperado"] = not i.get("fuera")
         salida.append({"id": u.id, "nombre": u.nombre, "ruta": u.ruta_completa, "codigo": u.codigo or "",
                        "ultimo_recuento": u.ultimo_recuento.strftime("%d/%m/%Y %H:%M") if u.ultimo_recuento else "",
-                       "ultimo_recuento_faltan": u.ultimo_recuento_faltan, "esperados": items})
+                       "ultimo_recuento_faltan": u.ultimo_recuento_faltan, "foto": _nave_foto_url(u), "esperados": items})
     return JSONResponse({"ok": True, "zona": zona.strip(), "huecos": salida})
 
 
@@ -10267,6 +10268,69 @@ def api_nave_recuento_zona_cerrar(payload: RecuentoZonaCerrarRequest, request: R
     return JSONResponse({"ok": True, "zona": zona, "huecos": len(recontados), "total_huecos": len(huecos), "presentes": total_presentes,
                          "faltan": faltan_por_hueco, "faltan_total": faltan_total, "sin_recontar": sin_recontar,
                          "hecho": ahora.strftime("%d/%m/%Y %H:%M")})
+
+
+# ─── Foto del hueco (2.7.66) ─────────────────────────────────────────────────
+
+def _nave_foto_url(u: Ubicacion) -> str:
+    return f"/static/uploads/huecos/{u.foto_path}" if getattr(u, "foto_path", None) else ""
+
+
+def _nave_foto_dir():
+    d = BASE_DIR / "static" / "uploads" / "huecos"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+@app.post("/api/nave/huecos/{uid}/foto")
+async def api_nave_hueco_foto(uid: int, request: Request, foto: UploadFile = File(...),
+                              user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Foto del hueco hecha con el móvil: se ve en la Vista de la nave y en los recuentos."""
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    u = _recuento_hueco_de(db, _active_warehouse(db, user, request), uid)
+    if not foto or not foto.filename:
+        raise HTTPException(400, "Falta la foto")
+    try:
+        _, ext = validar_nombre_archivo(foto.filename, {"jpg", "jpeg", "png", "webp"})
+        head = await foto.read(16)
+        await foto.seek(0)
+        validar_contenido_archivo(head, ext)
+        contenido = await foto.read()
+        validar_tamaño_bytes(len(contenido), MAX_UPLOAD_MB)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(400, f"Foto no válida: {exc}")
+    carpeta = _nave_foto_dir()
+    if u.foto_path:
+        try:
+            (carpeta / u.foto_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+    nombre = f"u_{u.id}.{ext}"
+    (carpeta / nombre).write_bytes(contenido)
+    anterior = u.foto_path
+    u.foto_path = nombre
+    registrar_auditoria(db, "ubicaciones", u.id, "foto_hueco", user.id, {"foto_path": anterior}, {"foto_path": nombre}, resumen=f"Foto del hueco {u.nombre}")
+    db.commit()
+    return JSONResponse({"ok": True, "foto": _nave_foto_url(u) + f"?v={int(datetime.now().timestamp())}"})
+
+
+@app.post("/api/nave/huecos/{uid}/foto/eliminar")
+def api_nave_hueco_foto_eliminar(uid: int, request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if not _nave_permitido(user):
+        raise HTTPException(403, "Sin permiso")
+    u = _recuento_hueco_de(db, _active_warehouse(db, user, request), uid)
+    if u.foto_path:
+        try:
+            (_nave_foto_dir() / u.foto_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+        registrar_auditoria(db, "ubicaciones", u.id, "foto_hueco", user.id, {"foto_path": u.foto_path}, {"foto_path": None}, resumen=f"Foto del hueco {u.nombre} eliminada")
+        u.foto_path = None
+        db.commit()
+    return JSONResponse({"ok": True, "foto": ""})
 
 
 @app.get("/nave/colocar", response_class=HTMLResponse)

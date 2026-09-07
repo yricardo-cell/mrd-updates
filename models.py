@@ -453,6 +453,7 @@ class Ubicacion(Base):
     elemento_id = Column(Integer, ForeignKey("nave_elementos.id"), nullable=True, index=True)  # 3D (2.7.54)
     ultimo_recuento = Column(DateTime, nullable=True)          # recuento por hueco (2.7.59)
     ultimo_recuento_faltan = Column(Integer, nullable=True)
+    foto_path   = Column(String(255), nullable=True)           # foto del hueco (2.7.66)
     activo      = Column(Boolean, default=True)
     created_at  = Column(DateTime, server_default=func.now())
 
