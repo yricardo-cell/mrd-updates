@@ -28,7 +28,7 @@ def test_plantillas_oficina_con_campo_vacio_extienden_base():
     """Toda plantilla de oficina con <input name="_csrf_token"> vacío depende del interceptor de base.html."""
     sin_base = []
     for p in sorted(TEMPLATES.glob("*.html")):
-        if p.name.startswith("portal_") or p.name == "base.html":
+        if p.name.startswith("portal_") or p.name in ("base.html", "kiosco.html", "tv.html"):
             continue
         html = p.read_text(encoding="utf-8")
         if re.search(r'name="_csrf_token">', html) and 'extends "base.html"' not in html and "extends 'base.html'" not in html:

@@ -9,6 +9,7 @@ def test_ruta_parecida():
     assert main._ruta_parecida("/mostrado") == "/mostrador"
     assert main._ruta_parecida("/portal-trabajador") is None
     assert main._ruta_parecida("/api/x") is None
+    assert main._ruta_parecida("/portal/token-x/herramientas/2") is None
     assert main._ruta_parecida("/zzzzzz") is None
 
 

@@ -25,7 +25,7 @@ def test_ean(client, db):
     m = Material(nombre="Silicona ean", codigo="MAT-EAN", activo=True, almacen_id=almacen.id, stock_actual=5, unidad="ud")
     db.add(m)
     db.commit()
-    r = client.post("/materiales/enlazar-codigo", data={"_csrf_token": hdr["X-CSRF-Token"], "codigo": "8412345678905", "material_id": str(m.id)}, follow_redirects=False)
+    r = client.post("/materiales/enlazar-codigo", data={"_csrf_token": hdr["X-CSRF-Token"], "codigo_barras": "8412345678905", "material_id": str(m.id)}, follow_redirects=False)
     assert r.status_code == 303
     db.refresh(m)
     assert m.codigo_barras == "8412345678905"
@@ -36,4 +36,4 @@ def test_ean(client, db):
     m2 = Material(nombre="Otro ean", codigo="MAT-EAN2", activo=True, almacen_id=almacen.id, stock_actual=1, unidad="ud")
     db.add(m2)
     db.commit()
-    assert client.post("/materiales/enlazar-codigo", data={"_csrf_token": hdr["X-CSRF-Token"], "codigo": "8412345678905", "material_id": str(m2.id)}, follow_redirects=False).status_code == 409
+    assert client.post("/materiales/enlazar-codigo", data={"_csrf_token": hdr["X-CSRF-Token"], "codigo_barras": "8412345678905", "material_id": str(m2.id)}, follow_redirects=False).status_code == 409

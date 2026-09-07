@@ -801,7 +801,10 @@ _ALIAS_RUTAS = {
 def _ruta_parecida(path: str) -> str | None:
     """Dirección escrita a mano con una errata (fallo real del 07/09/2026: /portal-trajador 22 veces)."""
     import difflib
-    primero = "/" + (path or "").strip("/").lower().split("/")[0].split("?")[0]
+    limpio = (path or "").split("?")[0].strip("/")
+    if "/" in limpio:
+        return None   # solo erratas de primer nivel: /portal/<token>/... no se toca
+    primero = "/" + limpio.lower()
     if len(primero) < 5 or primero in _RUTAS_CONOCIDAS:
         return None
     if primero in _ALIAS_RUTAS:
@@ -11185,7 +11188,7 @@ async def materiales_enlazar_codigo(request: Request, user: Usuario = Depends(re
     if not (tiene_permiso(user, "editar") or tiene_permiso(user, "stock_operar")):
         raise HTTPException(403, "Sin permiso")
     form = await request.form()
-    codigo = " ".join(str(form.get("codigo") or "").split())[:64]
+    codigo = " ".join(str(form.get("codigo_barras") or form.get("codigo") or "").split())[:64]
     mid = str(form.get("material_id") or "").strip()
     if not codigo or not mid.isdigit():
         raise HTTPException(400, "Falta el código o el material")
