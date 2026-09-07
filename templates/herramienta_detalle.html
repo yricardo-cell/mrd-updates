@@ -519,7 +519,9 @@
 
   <!-- Tab: Documentos -->
   <div class="tab-content" data-tab="documentos">
-    <div style="padding:12px 18px;display:flex;justify-content:flex-end">
+    <div style="padding:12px 18px;display:flex;justify-content:flex-end;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="small text-muted">Se guarda también en las herramientas del mismo modelo.</span>
+      <select id="doc-tipo" class="form-select form-select-sm" style="width:auto"><option value="manual">Manual</option><option value="ficha_tecnica">Ficha técnica</option><option value="certificado_ce">Certificado CE</option><option value="garantia">Garantía</option><option value="factura">Factura</option><option value="otro" selected>Otro</option></select>
       <label class="btn btn-primary btn-sm" style="cursor:pointer">
         <i class="bi bi-upload"></i> Subir documento
         <input type="file" style="display:none" onchange="subirDocumento(this, {{ herramienta.id }})">
@@ -532,7 +534,7 @@
         <i class="bi bi-file-earmark-pdf" style="font-size:1.4rem;color:var(--danger);flex-shrink:0"></i>
         <div style="flex:1;min-width:0">
           <div style="font-size:.82rem;font-weight:600;color:var(--text);text-overflow:ellipsis;overflow:hidden;white-space:nowrap">{{ doc.nombre }}</div>
-          <div style="font-size:.72rem;color:var(--text-muted)">{{ doc.tipo or '' }}</div>
+          <div style="font-size:.72rem;color:var(--text-muted)">{{ {'manual':'Manual','ficha_tecnica':'Ficha técnica','certificado_ce':'Certificado CE','factura':'Factura','garantia':'Garantía'}.get(doc.tipo, doc.tipo or '') }}</div>
         </div>
         <a href="/documentos/{{ doc.id }}/descargar" class="btn btn-ghost btn-icon btn-sm"><i class="bi bi-download"></i></a>
       </div>
@@ -934,6 +936,7 @@ function subirDocumento(input, herramientaId) {
   const form = new FormData();
   form.append('archivo', input.files[0]);
   form.append('herramienta_id', herramientaId);
+  const tipoSel = document.getElementById('doc-tipo'); if (tipoSel) form.append('tipo', tipoSel.value);
   fetch('/documentos/subir', { method: 'POST', body: form })
     .then(r => r.json())
     .then(data => {
