@@ -18,6 +18,7 @@
 {% endblock %}
 
 {% block content %}
+<div class="card shadow-sm border-0 mb-3"><div class="card-body"><h3 class="h6 mb-2"><i class="bi bi-people"></i> Cuadrilla (portal del encargado)</h3>{% if request.query_params.get('ok') == 'cuadrilla' %}<div class="alert alert-success py-1">Guardado.</div>{% endif %}<form method="post" action="/trabajadores/{{ trabajador.id }}/cuadrilla" class="row g-2 align-items-end"><input type="hidden" name="_csrf_token"><div class="col-auto"><label class="form-label small"><input type="checkbox" name="es_encargado" value="1" {{ 'checked' if trabajador.es_encargado }}> Es encargado (ve y pide por su cuadrilla)</label></div><div class="col-auto"><label class="form-label small">Su encargado</label><select name="encargado_id" class="form-select form-select-sm"><option value="">— ninguno —</option>{% for e in encargados_lista %}<option value="{{ e.id }}" {{ 'selected' if trabajador.encargado_id == e.id }}>{{ e.nombre_completo }}</option>{% endfor %}</select></div><div class="col-auto"><button class="btn btn-sm btn-primary">Guardar</button></div></form>{% if cuadrilla_de %}<small class="text-muted d-block mt-2">Su cuadrilla: {% for m in cuadrilla_de %}{{ m.nombre_completo }}{% if not loop.last %}, {% endif %}{% endfor %}</small>{% endif %}</div></div>
 <div class="mrd-page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
   <div>
     <h2 class="mrd-page-title mb-0"><i class="bi bi-shield-check me-2"></i>EPIs y Ropa — {{ trabajador.nombre_completo }}</h2>

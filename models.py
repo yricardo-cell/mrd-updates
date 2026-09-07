@@ -162,6 +162,8 @@ class Trabajador(Base):
     portal_pin_cambio_obligatorio = Column(Boolean, nullable=False, default=False)
     idioma = Column(String(5), nullable=True)   # idioma del portal: es / ro (P5)
     epi_revisado_en = Column(DateTime, nullable=True)   # última revisión de EPI desde el portal (mejora 7)
+    es_encargado = Column(Boolean, nullable=False, default=False)   # portal del encargado (mejora 6)
+    encargado_id = Column(Integer, ForeignKey("trabajadores.id"), nullable=True, index=True)   # su encargado (cuadrilla)
     portal_contacto_verificado_en = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
