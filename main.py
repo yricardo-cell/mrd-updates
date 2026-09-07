@@ -11222,6 +11222,75 @@ def informe_paradas_excel(meses: int = 6, user: Usuario = Depends(requiere_login
     return Response(content=datos, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=herramientas_paradas.xlsx"})
 
 
+# ─── Inventario valorado para seguro y contabilidad (mejora 27) ──────────────
+def _inventario_valorado(db: Session, hoy: date | None = None) -> dict:
+    """Valor de compra, amortización lineal por vida útil (5 años si no consta) y valor actual de cada herramienta; totales por tipo."""
+    hoy = hoy or date.today()
+    filas = []
+    for h in db.query(Herramienta).filter(Herramienta.activa == True).order_by(Herramienta.categoria, Herramienta.nombre).all():
+        precio = float(h.precio_compra or 0)
+        vida = int(h.vida_util_anos or 0) or 5
+        fc = h.fecha_compra.date() if isinstance(h.fecha_compra, datetime) else h.fecha_compra
+        anos = max(0.0, (hoy - fc).days / 365.25) if fc else None
+        if precio > 0 and anos is not None:
+            amortizado = round(min(precio, precio * min(1.0, anos / vida)), 2)
+            valor = round(precio - amortizado, 2)
+        elif precio > 0:
+            amortizado, valor = 0.0, precio
+        else:
+            amortizado, valor = 0.0, float(h.valor_actual or 0)
+        filas.append({"id": h.id, "codigo": h.codigo, "nombre": h.nombre, "categoria": h.categoria or "Sin tipo", "fecha_compra": fc, "precio": precio,
+                      "vida": vida, "anos": round(anos, 1) if anos is not None else None, "amortizado": amortizado, "valor": valor, "sin_precio": precio <= 0})
+    por_tipo: dict[str, dict] = {}
+    for f in filas:
+        g = por_tipo.setdefault(f["categoria"], {"categoria": f["categoria"], "n": 0, "precio": 0.0, "valor": 0.0, "sin_precio": 0})
+        g["n"] += 1
+        g["precio"] += f["precio"]
+        g["valor"] += f["valor"]
+        g["sin_precio"] += 1 if f["sin_precio"] else 0
+    tipos = sorted(por_tipo.values(), key=lambda g: -g["valor"])
+    return {"filas": filas, "tipos": tipos, "total_precio": round(sum(f["precio"] for f in filas), 2), "total_valor": round(sum(f["valor"] for f in filas), 2),
+            "n": len(filas), "sin_precio": sum(1 for f in filas if f["sin_precio"]), "fecha": hoy}
+
+
+@app.get("/informes/inventario-valorado", response_class=HTMLResponse)
+def informe_inventario_valorado(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    return templates.TemplateResponse(request, "informe_inventario_valorado.html", ctx_base(request, user, db, d=_inventario_valorado(db)))
+
+
+@app.get("/informes/inventario-valorado/excel")
+def informe_inventario_valorado_excel(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    from reports import exportar_tabla_excel as _xl
+    d = _inventario_valorado(db)
+    datos = _xl("Inventario valorado", ["Código", "Herramienta", "Tipo", "Compra", "Precio compra", "Vida útil (años)", "Años", "Amortizado", "Valor actual"],
+                [[f["codigo"], f["nombre"], f["categoria"], f["fecha_compra"].strftime("%d/%m/%Y") if f["fecha_compra"] else "", f["precio"], f["vida"], f["anos"] if f["anos"] is not None else "", f["amortizado"], f["valor"]] for f in d["filas"]], [16, 34, 20, 12, 13, 14, 8, 12, 12])
+    return Response(content=datos, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename=inventario_valorado_{d['fecha']:%Y%m%d}.xlsx"})
+
+
+@app.get("/informes/inventario-valorado/pdf")
+def informe_inventario_valorado_pdf(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    d = _inventario_valorado(db)
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=28, rightMargin=28, topMargin=28, bottomMargin=28)
+    st = getSampleStyleSheet()
+    partes = [Paragraph(f"MRD ESTRUCTURAS · Inventario valorado de herramientas a {d['fecha']:%d/%m/%Y}", st["Title"]),
+              Paragraph(f"{d['n']} herramientas activas · valor de compra {d['total_precio']:.2f} € · valor actual {d['total_valor']:.2f} € · sin precio de compra: {d['sin_precio']}", st["Normal"]), Spacer(1, 10)]
+    resumen = [["Tipo", "Uds.", "Precio compra", "Valor actual"]] + [[g["categoria"], g["n"], f"{g['precio']:.2f}", f"{g['valor']:.2f}"] for g in d["tipos"]]
+    t = Table(resumen, colWidths=[260, 60, 110, 110])
+    t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E3A5F")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("GRID", (0, 0), (-1, -1), 0.3, colors.grey), ("ALIGN", (1, 1), (-1, -1), "RIGHT"), ("FONTSIZE", (0, 0), (-1, -1), 9)]))
+    partes += [t, Spacer(1, 12), Paragraph("Detalle", st["Heading2"])]
+    detalle = [["Código", "Herramienta", "Tipo", "Compra", "Precio", "Vida", "Amort.", "Valor"]] + [[f["codigo"] or "", (f["nombre"] or "")[:40], (f["categoria"] or "")[:22], f["fecha_compra"].strftime("%d/%m/%Y") if f["fecha_compra"] else "", f"{f['precio']:.2f}", f["vida"], f"{f['amortizado']:.2f}", f"{f['valor']:.2f}"] for f in d["filas"]]
+    t2 = Table(detalle, colWidths=[110, 210, 120, 70, 60, 40, 60, 60], repeatRows=1)
+    t2.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E3A5F")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("GRID", (0, 0), (-1, -1), 0.25, colors.lightgrey), ("ALIGN", (4, 1), (-1, -1), "RIGHT"), ("FONTSIZE", (0, 0), (-1, -1), 7.5)]))
+    partes.append(t2)
+    doc.build(partes)
+    return Response(content=buf.getvalue(), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=inventario_valorado_{d['fecha']:%Y%m%d}.pdf"})
+
+
 def _alertas_consumo_obras_bg():
     """Una vez por semana: un aviso por cada obra/material con consumo anómalo (sin repetir la misma semana)."""
     try:
