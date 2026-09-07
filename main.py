@@ -643,7 +643,7 @@ async def csrf_middleware(request: Request, call_next):
       (para AJAX/fetch) o en el campo _csrf_token del body (para form submit).
     """
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
-        if request.url.path not in _CSRF_EXENTOS:
+        if request.url.path not in _CSRF_EXENTOS and not request.url.path.startswith("/api/bot/"):   # el bot se autentica con su propio token (mejora 38)
             csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME, "")
 
             # ── 1. Verificar desde header (fetch/AJAX) ────────────────────────
@@ -12064,6 +12064,49 @@ def _arranque_bg():
         except Exception as exc:
             mrd_logging.log_error(f"Comprobación de arranque: {exc}")
         _t.sleep(86400)
+
+
+# ─── 38: mando a distancia desde el bot (reiniciar, reparar, copia, actualizar) ─────
+@app.post("/api/bot/reiniciar")
+def api_bot_reiniciar(request: Request):
+    _bot_requiere(request)
+    if not _supervisado():
+        return {"ok": False, "detalle": "El proceso no está supervisado: reinícialo desde /servicio"}
+    _notificar_sistema("Reinicio pedido desde Telegram", "Se reinicia en 2 segundos; tarda unos 10 en volver.", prioridad="media")
+    _reiniciar_proceso("orden desde Telegram")
+    return {"ok": True, "detalle": "Reiniciando"}
+
+
+@app.post("/api/bot/reparar")
+def api_bot_reparar(request: Request):
+    _bot_requiere(request)
+    res = _reparacion_automatica(aplicar=True)
+    return {"ok": res.get("accion") in ("ok", "reparar"), **res}
+
+
+@app.post("/api/bot/copia")
+def api_bot_copia(request: Request):
+    _bot_requiere(request)
+    import backup_manager as _bm
+    res = _bm.create_backup(tipo="manual", label="telegram")
+    return {"ok": bool(res.get("ok", res.get("filename"))), "fichero": res.get("filename") or res.get("path"), "detalle": res.get("error", "")}
+
+
+@app.post("/api/bot/actualizar")
+def api_bot_actualizar(request: Request):
+    """Comprueba si hay versión nueva y la instala (descarga, SHA-256, copia de vuelta atrás, reinicio)."""
+    _bot_requiere(request)
+    info = _updater.check_update()
+    if not (info.get("available") or info.get("update_available")):
+        return {"ok": False, "detalle": "No hay versión nueva", "info": info}
+    st = _updater.get_state()
+    url = info.get("download_url") or st.get("download_url")
+    sha = info.get("sha256") or st.get("sha256") or ""
+    ver = info.get("latest_version") or info.get("version_disponible") or info.get("version") or st.get("version_disponible") or ""
+    if not url:
+        return {"ok": False, "detalle": "No hay enlace de descarga", "info": info}
+    res = _updater.start_update(url, sha, ver)
+    return {"ok": bool(res.get("ok")), "detalle": res.get("message") or res.get("error", ""), "version": ver}
 
 
 def _alertas_consumo_obras_bg():
