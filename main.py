@@ -9121,6 +9121,9 @@ def supplier_order_receive(
                 move_material(db, user, obj.id, data.cantidad, tipo="pedido_proveedor",
                               event_id=event_id, motivo=f"Recepción {order.numero}")
                 db.expire(obj)
+                if line.precio_pedido:   # mejora 23: histórico de precios por proveedor
+                    _registrar_precio_compra(db, obj.id, line.precio_pedido, proveedor_id=order.proveedor_id, proveedor_texto=order.proveedor or "",
+                                             cantidad=data.cantidad, origen="pedido", pedido_id=order.id)
             elif line.tipo == "stock_epi":
                 if data.cantidad != int(data.cantidad):
                     raise StockError(400, "La ropa y EPI se reciben en unidades completas")
@@ -11005,6 +11008,61 @@ async def materiales_punto_pedido_post(request: Request, user: Usuario = Depends
         db.commit()
         return RedirectResponse(f"/materiales/punto-pedido?ok=pedido{n}", status_code=303)
     raise HTTPException(400, "Acción desconocida")
+
+
+# ─── Histórico de precios por proveedor (mejora 23) ─────────────────────────
+def _registrar_precio_compra(db: Session, material_id: int, precio, proveedor_id=None, proveedor_texto: str = "", cantidad=None, origen: str = "manual", pedido_id=None):
+    from models import PrecioCompra as _PC
+    try:
+        p = float(precio)
+    except (TypeError, ValueError):
+        return None
+    if p <= 0:
+        return None
+    row = _PC(material_id=material_id, proveedor_id=proveedor_id, proveedor_texto=(proveedor_texto or "")[:150] or None, precio=round(p, 4),
+              cantidad=float(cantidad) if cantidad not in (None, "") else None, origen=origen, pedido_id=pedido_id, fecha=datetime.now())
+    db.add(row)
+    m = db.get(Material, material_id)
+    if m is not None:
+        m.precio_unidad = round(p, 4)
+    db.flush()
+    return row
+
+
+def _precios_material(db: Session, material_id: int, limite: int = 30) -> dict:
+    """Último precio, proveedor más barato (últimos 12 meses) e historial."""
+    from models import PrecioCompra as _PC
+    filas = db.query(_PC).filter(_PC.material_id == material_id).order_by(_PC.fecha.desc()).limit(limite).all()
+
+    def _nombre(r):
+        if r.proveedor_id:
+            pv = db.get(Proveedor, r.proveedor_id)
+            if pv:
+                return pv.nombre
+        return r.proveedor_texto or "—"
+
+    hist = [{"fecha": r.fecha, "precio": r.precio, "proveedor": _nombre(r), "proveedor_id": r.proveedor_id, "cantidad": r.cantidad, "origen": r.origen or ""} for r in filas]
+    hace_un_ano = datetime.now() - timedelta(days=365)
+    recientes = [h for h in hist if h["fecha"] and h["fecha"] >= hace_un_ano]
+    mejor = min(recientes, key=lambda h: h["precio"]) if recientes else None
+    return {"ultimo": hist[0] if hist else None, "mejor": mejor, "historial": hist}
+
+
+@app.post("/materiales/{mid}/precios", response_class=RedirectResponse)
+async def material_precio_manual(mid: int, request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if not (tiene_permiso(user, "editar") or tiene_permiso(user, "stock_operar")):
+        raise HTTPException(403, "Sin permiso")
+    if db.get(Material, mid) is None:
+        raise HTTPException(404, "Material no encontrado")
+    form = await request.form()
+    precio = str(form.get("precio") or "").replace(",", ".").strip()
+    prov_id = str(form.get("proveedor_id") or "").strip()
+    row = _registrar_precio_compra(db, mid, precio, proveedor_id=int(prov_id) if prov_id.isdigit() else None,
+                                   proveedor_texto=str(form.get("proveedor_texto") or "").strip(), origen="manual")
+    if row is None:
+        raise HTTPException(400, "Indica un precio mayor que cero")
+    db.commit()
+    return RedirectResponse(f"/materiales/{mid}?ok=precio", status_code=303)
 
 
 def _alertas_consumo_obras_bg():
@@ -22544,6 +22602,7 @@ async def material_detalle(mid: int, request: Request, db: Session = Depends(get
     )
     return templates.TemplateResponse(request, "material_detalle.html", {
         "request": request, "usuario": usuario, "mat": mat, "mat_movs": mat_movs,
+        "precios": _precios_material(db, mat.id), "proveedores_lista": db.query(Proveedor).filter(Proveedor.activo == True).order_by(Proveedor.nombre).all(),
         "tipos": TIPOS_MOVIMIENTO_MAT, "obras": obras, "trabajadores": trabajadores,
         "categorias": CATEGORIAS_MATERIAL, "historial_valores": historial_valores,
     })

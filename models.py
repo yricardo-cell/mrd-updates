@@ -2803,3 +2803,17 @@ class Ajuste(Base):
     clave = Column(String(80), primary_key=True)
     valor = Column(Text, nullable=True)
     actualizado_en = Column(DateTime, nullable=True)
+
+
+class PrecioCompra(Base):
+    """Histórico de precios de compra por material y proveedor (mejora 23)."""
+    __tablename__ = "precios_compra"
+    id = Column(Integer, primary_key=True)
+    material_id = Column(Integer, ForeignKey("materiales.id"), nullable=False, index=True)
+    proveedor_id = Column(Integer, ForeignKey("proveedores.id"), nullable=True, index=True)
+    proveedor_texto = Column(String(150), nullable=True)
+    precio = Column(Float, nullable=False)
+    cantidad = Column(Float, nullable=True)
+    fecha = Column(DateTime, nullable=False, server_default=func.now())
+    origen = Column(String(40), nullable=True)     # pedido | foto | manual
+    pedido_id = Column(Integer, ForeignKey("pedidos_proveedor.id"), nullable=True)
