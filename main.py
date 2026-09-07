@@ -10486,6 +10486,14 @@ def material_arreglar_unidad(mid: int, user: Usuario = Depends(requiere_login), 
     return RedirectResponse(f"/materiales/{mid}?ok=unidad", status_code=303)
 
 
+@app.get("/api/novedades")
+def api_novedades(user: Usuario = Depends(requiere_login)):
+    """Mejora 15: la lista de cambios de la versión en marcha, para el aviso «qué hay de nuevo» de la oficina."""
+    v = leer_version_actual()
+    cambios = [str(c) for c in (v.get("cambios") or []) if str(c).strip()][:20]
+    return {"version": v.get("version_actual", VERSION), "fecha": v.get("fecha", ""), "cambios": cambios}
+
+
 def _alertas_consumo_obras_bg():
     """Una vez por semana: un aviso por cada obra/material con consumo anómalo (sin repetir la misma semana)."""
     try:
