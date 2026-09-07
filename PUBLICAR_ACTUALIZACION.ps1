@@ -129,6 +129,10 @@ $robocopyArgs = @(
            "*.exe", "*.db", "*.db-wal", "*.db-shm",
            "local.env", "*.token", "vapid_keys.json", ".service_restart",
            ".recovery_history.json", "secret.key", "users.json", "*.pem", "cpu_excluir.txt",
+           # Estado local de la instalacion (2.7.76): no viaja en el paquete
+           "etiquetas.json", "ensayo_restauracion.json", "backup_externo.json",
+           "resumen_diario_estado.json", "limpieza_estado.json", "ultima_version_comprobada.json",
+           "consumo_obras_estado.json", "errores_avisados.json", "drive_estado.json", "vigilante_estado.json",
     "/NFL", "/NDL", "/NJH", "/NJS"
 )
 & robocopy @robocopyArgs | Out-Null
@@ -143,7 +147,7 @@ $secretosEncontrados = Get-ChildItem -Path $destino -Recurse -File -Include "*.t
 # reconoce las rutas.
 $ignorados = @()
 try {
-    $relativos = @(Get-ChildItem -Path $destino -Recurse -File | ForEach-Object { $_.FullName.Substring($destino.Length + 1).Replace('', '/') })
+    $relativos = @(Get-ChildItem -Path $destino -Recurse -File | ForEach-Object { $_.FullName.Substring($destino.Length + 1).Replace([char]92, '/') })
     for ($i = 0; $i -lt $relativos.Count; $i += 100) {
         $lote = $relativos[$i..([Math]::Min($i + 99, $relativos.Count - 1))]
         $ignorados += @(& git -C $raiz check-ignore --no-index -- @lote 2>$null | Where-Object { $_ -and ($_ -notlike '*.gitkeep') })
