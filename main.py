@@ -7686,6 +7686,8 @@ class MostradorOperacionRequest(BaseModel):
     # Solicitud del trabajador que se está entregando: al completar la salida
     # pasa sola a "entregada" y desaparece de la lista de pendientes.
     solicitud_id: Optional[int] = Field(default=None, gt=0)
+    # Varios pedidos pendientes del mismo trabajador marcados en el Mostrador (2.7.67).
+    solicitud_ids: list[int] = Field(default_factory=list, max_length=20)
 
 
 class TransferLineRequest(BaseModel):
@@ -7909,6 +7911,30 @@ def _entregar_solicitud_por_mostrador(db, user, solicitud_id: int, trabajador_id
     return {"id": solicitud.id, "numero": solicitud.numero, "estado": solicitud.estado}
 
 
+@app.get("/api/mostrador/solicitudes-activas")
+def mostrador_solicitudes_activas(trabajador_id: int, request: Request,
+                                  user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Pedidos del portal pendientes de entregar del trabajador elegido en el
+    Mostrador (2.7.67): se marcan y se cierran solos al completar la salida."""
+    if not (tiene_permiso(user, "entregar") or tiene_permiso(user, "devolver")):
+        raise HTTPException(403, "Sin permiso para operar el mostrador")
+    warehouse = _active_warehouse(db, user, request)
+    q = db.query(SolicitudTrabajador).options(joinedload(SolicitudTrabajador.lineas)).filter(
+        SolicitudTrabajador.trabajador_id == trabajador_id,
+        SolicitudTrabajador.estado.in_(("pendiente", "revision", "aprobada", "preparando", "lista")),
+    )
+    if warehouse:
+        q = q.filter(or_(SolicitudTrabajador.almacen_id == warehouse.id, SolicitudTrabajador.almacen_id.is_(None)))
+    salida = []
+    for s in q.order_by(SolicitudTrabajador.creado_en.asc()).limit(20).all():
+        salida.append({
+            "id": s.id, "numero": s.numero, "estado": s.estado,
+            "creado": _utc_a_local(s.creado_en).strftime("%d/%m") if s.creado_en else "",
+            "lineas": [f"{l.cantidad_aprobada or l.cantidad} × {l.observaciones or l.descripcion}" + (f" T.{l.talla}" if l.talla and not l.observaciones else "") for l in s.lineas],
+        })
+    return JSONResponse({"ok": True, "solicitudes": salida})
+
+
 @app.get("/api/mostrador/epi-trabajador")
 def mostrador_epi_trabajador(
     trabajador_id: int,
@@ -8006,10 +8032,15 @@ def mostrador_operar(
             signature_data=payload.firma_datos,
             signature_name=payload.firma_nombre,
         )
-        if payload.solicitud_id and payload.accion == "salida":
-            result["solicitud"] = _entregar_solicitud_por_mostrador(
-                db, user, payload.solicitud_id, payload.trabajador_id, warehouse.id,
-            )
+        if payload.accion == "salida":
+            ids_solicitudes = []
+            for sid in ([payload.solicitud_id] if payload.solicitud_id else []) + list(payload.solicitud_ids):
+                if sid and sid > 0 and sid not in ids_solicitudes:
+                    ids_solicitudes.append(sid)
+            entregadas = [_entregar_solicitud_por_mostrador(db, user, sid, payload.trabajador_id, warehouse.id) for sid in ids_solicitudes]
+            if entregadas:
+                result["solicitud"] = entregadas[0]
+                result["solicitudes"] = entregadas
         if payload.trabajador_id and payload.accion == "salida":
             result["kit"] = _avisar_kit_incompleto(db, payload.trabajador_id)
         db.commit()
@@ -18341,6 +18372,35 @@ async def solicitud_trabajador_estado(
             f"Fallo al cambiar estado de solicitud {solicitud_id}: {exc}", level="error",
         )
         raise HTTPException(500, "No se pudo actualizar la solicitud. Nada se ha guardado, inténtalo de nuevo.")
+    return RedirectResponse("/solicitudes-trabajadores?ok=actualizada", status_code=303)
+
+
+@app.post("/solicitudes-trabajadores/{solicitud_id}/entregada", response_class=RedirectResponse)
+async def solicitud_trabajador_marcar_entregada(
+    solicitud_id: int, request: Request, user: Usuario = Depends(requiere_login),
+    db: Session = Depends(get_db),
+):
+    """«Ya entregado» (2.7.67): cuando el material ya salió por el Mostrador sin
+    enlazar el pedido, el pedido avanza solo hasta «entregada» en un clic."""
+    if not (tiene_permiso(user, "entregar") or user.rol in ("admin", "almacen")):
+        raise HTTPException(403, "Sin permiso")
+    solicitud = db.get(SolicitudTrabajador, solicitud_id)
+    if not solicitud:
+        raise HTTPException(404, "Solicitud no encontrada")
+    try:
+        active_warehouse = _active_warehouse(db, user, request)
+        _entregar_solicitud_por_mostrador(db, user, solicitud.id, None, active_warehouse.id if active_warehouse else solicitud.almacen_id)
+        db.add(AuditoriaLog(
+            tabla="solicitudes_trabajador", registro_id=solicitud.id, accion="cambiar_estado",
+            resumen=f"Solicitud {solicitud.numero}: entregada (marcada desde la lista)", usuario_id=user.id,
+        ))
+        db.commit()
+    except CounterError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.detail)
+    except WorkerPortalError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.detail)
     return RedirectResponse("/solicitudes-trabajadores?ok=actualizada", status_code=303)
 
 
