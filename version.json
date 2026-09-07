@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.64",
-    "nombre":  "MRD TOOL CONTROL -- Portal del trabajador: Lo que tengo, confirmar con un toque y ya no la tengo",
+    "version_actual":  "2.7.65",
+    "nombre":  "MRD TOOL CONTROL -- Historial por trabajador con filtros y Excel, y Mi historial en el portal",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Portal del trabajador: Lo que tengo, confirmar con un toque y ya no la tengo"
+                    "Historial por trabajador con filtros y Excel, y Mi historial en el portal"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.64.zip",
-    "sha256":  "a736cebaa98ac905ffc853c2d4efcc372d798c99d76cbafac9d5beda5c826de3"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.65.zip",
+    "sha256":  "638595fd19f5bd2fa24d7a4d6c95ae135ca6b912bf17a04c65e2f896fae16295"
 }
