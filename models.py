@@ -947,6 +947,7 @@ class Material(Base):
     ubicacion_texto = Column(String(200), nullable=True)  # texto libre legacy
     foto = Column(String(255), nullable=True)
     referencia_proveedor = Column(String(100), nullable=True)
+    codigo_barras = Column(String(64), nullable=True, index=True)   # EAN del envase (mejora 24)
     observaciones = Column(Text, nullable=True)
     activo = Column(Boolean, default=True, index=True)
     tipo_seguimiento = Column(String(20), nullable=False, default="generico", server_default="generico")  # individual | generico

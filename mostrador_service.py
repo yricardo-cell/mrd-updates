@@ -197,7 +197,7 @@ def resolve_counter_item(db: Session, raw_code: str, warehouse_id: int | None = 
         return stock_epi_counter_item(db, stock)
 
     material = db.execute(select(Material).where(
-        Material.activo == True, Material.codigo.in_(codes),
+        Material.activo == True, or_(Material.codigo.in_(codes), Material.codigo_barras.in_(codes)),
         *([or_(Material.almacen_id == warehouse_id, Material.almacen_id.is_(None))] if warehouse_id else []),
     )).scalar_one_or_none()
     if material:
@@ -279,7 +279,7 @@ def resolve_counter_item(db: Session, raw_code: str, warehouse_id: int | None = 
 _CODIGOS_POR_DIGITOS = (
     (Herramienta, ("codigo", "num_serie"), "activa"),
     (Maquinaria, ("codigo_interno", "codigo_barras", "num_serie"), "activa"),
-    (Material, ("codigo",), "activo"),
+    (Material, ("codigo", "codigo_barras"), "activo"),
     (StockEPI, ("codigo",), None),
     (EPIIndividual, ("codigo_qr",), None),
 )

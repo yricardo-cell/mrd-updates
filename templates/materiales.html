@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Materiales — Almacén{% endblock %}
 {% block content %}
+{% if request.query_params.get('enlazar') %}<div class="alert alert-info d-flex justify-content-between align-items-center gap-3 flex-wrap"><div><strong>Código no reconocido: {{ request.query_params.get('enlazar') }}</strong><br><span class="small">Elige a qué material corresponde y quedará enlazado: la próxima vez se escanea el paquete directamente.</span></div><form method="post" action="/materiales/enlazar-codigo" class="d-flex gap-2 align-items-center"><input type="hidden" name="_csrf_token"><input type="hidden" name="codigo" value="{{ request.query_params.get('enlazar') }}"><select class="form-select form-select-sm" name="material_id" required style="min-width:240px"><option value="">— material —</option>{% for m in materiales %}<option value="{{ m.id }}">{{ m.nombre }} ({{ m.codigo }})</option>{% endfor %}</select><button class="btn btn-sm btn-primary">Enlazar</button></form></div>{% endif %}
 
 {% if request.query_params.get('ok') %}
 <div class="alert alert-success alert-dismissible fade show mb-3">
@@ -193,6 +194,8 @@
           <div class="col-12">
             <label class="form-label"><i class="bi bi-tag me-1"></i>Ref. pedido proveedor</label>
             <input type="text" name="referencia_proveedor" class="form-control font-monospace" placeholder="Código del fabricante/proveedor">
+            <label class="form-label mt-2">Código de barras del envase (EAN)</label>
+            <input type="text" name="codigo_barras" class="form-control font-monospace" placeholder="Escanea el paquete">
           </div>
           <div class="col-12">
             <label class="form-label">Descripción</label>

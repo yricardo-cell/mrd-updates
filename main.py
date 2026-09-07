@@ -11065,6 +11065,28 @@ async def material_precio_manual(mid: int, request: Request, user: Usuario = Dep
     return RedirectResponse(f"/materiales/{mid}?ok=precio", status_code=303)
 
 
+@app.post("/materiales/enlazar-codigo", response_class=RedirectResponse)
+async def materiales_enlazar_codigo(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Mejora 24: enlaza el código de barras del envase (EAN) con un material; a partir de ahí se escanea el paquete."""
+    if not (tiene_permiso(user, "editar") or tiene_permiso(user, "stock_operar")):
+        raise HTTPException(403, "Sin permiso")
+    form = await request.form()
+    codigo = " ".join(str(form.get("codigo") or "").split())[:64]
+    mid = str(form.get("material_id") or "").strip()
+    if not codigo or not mid.isdigit():
+        raise HTTPException(400, "Falta el código o el material")
+    mat = db.get(Material, int(mid))
+    if mat is None:
+        raise HTTPException(404, "Material no encontrado")
+    otro = db.query(Material).filter(Material.codigo_barras == codigo, Material.id != mat.id).first()
+    if otro is not None:
+        raise HTTPException(409, f"Ese código ya está enlazado a {otro.nombre}")
+    mat.codigo_barras = codigo
+    db.add(AuditoriaLog(tabla="materiales", registro_id=mat.id, accion="codigo_barras", resumen=f"Código de barras {codigo} enlazado", usuario_id=user.id))
+    db.commit()
+    return RedirectResponse(f"/materiales/{mat.id}?ok=ean", status_code=303)
+
+
 def _alertas_consumo_obras_bg():
     """Una vez por semana: un aviso por cada obra/material con consumo anómalo (sin repetir la misma semana)."""
     try:
@@ -22456,6 +22478,7 @@ async def materiales_crear(request: Request, db: Session = Depends(get_db),
         stock_minimo=float(form.get("stock_minimo") or 0),
         stock_maximo=float(form.get("stock_maximo")) if form.get("stock_maximo") else None,
         referencia_proveedor=form.get("referencia_proveedor") or None,
+        codigo_barras=(" ".join(str(form.get("codigo_barras") or "").split())[:64] or None),
         ubicacion_texto=form.get("ubicacion"),
         tipo_seguimiento=_ts_mat if _ts_mat in ("individual", "generico") else "generico",
         almacen_id=almacen_predeterminado.id if almacen_predeterminado else None,
@@ -22804,6 +22827,7 @@ async def material_editar(mid: int, request: Request, db: Session = Depends(get_
     mat.stock_maximo = float(form.get("stock_maximo")) if form.get("stock_maximo") else None
     mat.precio_unidad = float(form.get("precio_unidad")) if form.get("precio_unidad") not in (None, "") else None
     mat.referencia_proveedor = form.get("referencia_proveedor") or None
+    mat.codigo_barras = " ".join(str(form.get("codigo_barras") or "").split())[:64] or None
     mat.ubicacion_texto = form.get("ubicacion_texto")
     _ts = form.get("tipo_seguimiento")
     if _ts in ("individual", "generico"):
