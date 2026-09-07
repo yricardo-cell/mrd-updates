@@ -74,3 +74,8 @@ config/backup_externo.json
 # Tamaño de etiqueta de la etiquetadora (2.7.61): configuracion local
 config/etiquetas.json
 config/ensayo_restauracion.json
+# Estado de tareas de fondo (2.7.74): resumen diario, limpieza, prueba de humo, consumo por obra
+config/resumen_diario_estado.json
+config/limpieza_estado.json
+config/ultima_version_comprobada.json
+config/consumo_obras_estado.json
