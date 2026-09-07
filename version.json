@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.70",
-    "nombre":  "MRD TOOL CONTROL -- Ensayo de restauración de la última copia y tareas semanales de fondo activadas",
+    "version_actual":  "2.7.71",
+    "nombre":  "MRD TOOL CONTROL -- Portal del trabajador: escanear desde el móvil",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Ensayo de restauración de la última copia y tareas semanales de fondo activadas"
+                    "Portal del trabajador: escanear desde el móvil"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.70.zip",
-    "sha256":  "1bb22cc27d9f4af469161af07f2e0645936b92fd6c13cc81971f3136561a9ac4"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.71.zip",
+    "sha256":  "aef9fbaa27a688361d7aff71657afbb33cc06309039da50a6d5359fa56361a22"
 }
