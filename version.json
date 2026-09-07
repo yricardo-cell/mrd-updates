@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.61",
-    "nombre":  "MRD TOOL CONTROL -- Etiquetas con tamano configurable para la etiquetadora (Brother, Dymo, Niimbot, A4, personalizado) en HTML y PDF; resumen semanal por WhatsApp y push; firma en el Mostrador; informe quien tiene que; importar formaciones y reconocimientos desde Excel",
+    "version_actual":  "2.7.62",
+    "nombre":  "MRD TOOL CONTROL -- Impresión directa en la etiquetadora, imprimir zona en 3D, etiqueta al alta express y PNG para apps del móvil",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Etiquetas con tamano configurable para la etiquetadora (Brother, Dymo, Niimbot, A4, personalizado) en HTML y PDF; resumen semanal por WhatsApp y push; firma en el Mostrador; informe quien tiene que; importar formaciones y reconocimientos desde Excel"
+                    "Impresión directa en la etiquetadora, imprimir zona en 3D, etiqueta al alta express y PNG para apps del móvil"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.61.zip",
-    "sha256":  "dcd94cc0423c5e575335017027f49c3aeadcd7770ab323d2bd07175653fbc2dc"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.62.zip",
+    "sha256":  "aff90cb5e7564050365fdcc2e03ee0e58ed79869953eac4b1d12e7f521ba7068"
 }
