@@ -887,6 +887,7 @@ class Reparacion(Base):
     coste_final = Column(Float, nullable=True)
     garantia_reparacion_hasta = Column(Date, nullable=True)
     resultado = Column(String(50), nullable=True)  # reparada | no_reparable | pendiente
+    foto_path = Column(String(255), nullable=True)   # foto del estado al devolver (mejora 20)
 
     observaciones = Column(Text, nullable=True)
 

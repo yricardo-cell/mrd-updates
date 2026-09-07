@@ -7758,6 +7758,8 @@ class MostradorLineaRequest(BaseModel):
     ]
     id: int = Field(gt=0)
     cantidad: int = Field(default=1, gt=0, le=9999)
+    condicion: Literal["buena", "danada", "incompleta"] = "buena"   # mejora 20: estado al devolver
+    foto: str = Field(default="", max_length=3_000_000)             # data URL de la foto del estado (opcional)
 
 
 class MostradorOperacionRequest(BaseModel):
@@ -8357,6 +8359,13 @@ def mostrador_operar(
             signature_data=payload.firma_datos,
             signature_name=payload.firma_nombre,
         )
+        if payload.accion == "entrada":
+            for line in payload.lineas:   # mejora 20: dañada o incompleta → reparación con foto del estado
+                if line.tipo == "herramienta" and line.condicion != "buena":
+                    h_dan = db.get(Herramienta, line.id)
+                    if h_dan is not None:
+                        _registrar_devolucion_danada(db, h_dan, line.condicion, line.foto, user.id, "Mostrador")
+            db.commit()
         if payload.accion == "salida":
             ids_solicitudes = []
             for sid in ([payload.solicitud_id] if payload.solicitud_id else []) + list(payload.solicitud_ids):
@@ -13818,6 +13827,46 @@ def _herramienta_devolucion_json(herramienta: Herramienta) -> dict:
 
 
 # ─── Ciclo de reparación al volver dañada (mejora 26) ────────────────────────
+
+def _guardar_foto_data_url(data_url: str, carpeta: str, base: str) -> str | None:
+    """Guarda una foto en data URL (jpg/png/webp, ≤ 3 MB) en static/uploads/<carpeta>/ y devuelve el nombre, o None."""
+    if not data_url or not data_url.startswith("data:image/"):
+        return None
+    try:
+        cabecera, b64 = data_url.split(",", 1)
+        raw = base64.b64decode(b64, validate=False)
+    except (ValueError, TypeError):
+        return None
+    if not raw or len(raw) > 3 * 1024 * 1024:
+        return None
+    if raw[:8] == bytes([137, 80, 78, 71, 13, 10, 26, 10]):
+        ext = "png"
+    elif raw[:3] == bytes([255, 216, 255]):
+        ext = "jpg"
+    elif raw[8:12] == b"WEBP":
+        ext = "webp"
+    else:
+        return None
+    carpeta_p = BASE_DIR / "static" / "uploads" / carpeta
+    carpeta_p.mkdir(parents=True, exist_ok=True)
+    nombre = f"{base}_{datetime.now():%Y%m%d%H%M%S}.{ext}"
+    (carpeta_p / nombre).write_bytes(raw)
+    return nombre
+
+
+def _registrar_devolucion_danada(db: Session, h, condicion: str, foto_data_url: str, usuario_id: int | None, origen: str):
+    """Mejora 20: al devolver una herramienta dañada o incompleta se abre (o reutiliza) la orden de reparación y se guarda la foto del estado."""
+    rep = _abrir_reparacion_si_danada(db, h, origen, usuario_id)
+    if rep is None:
+        return None
+    nombre = _guardar_foto_data_url(foto_data_url, "reparaciones", f"r_{rep.id}")
+    if nombre:
+        rep.foto_path = nombre
+    nota = f"Devuelta {condicion} el {datetime.now():%d/%m/%Y %H:%M} ({origen})" + (" · con foto del estado" if nombre else "")
+    rep.descripcion = ((rep.descripcion or "").rstrip() + chr(10) + nota).strip()
+    db.flush()
+    return rep
+
 
 def _abrir_reparacion_si_danada(db: Session, h, origen: str, usuario_id: int | None):
     """Abre una orden de reparación para la herramienta si no tiene ninguna abierta; la deja en 'en_reparacion'

@@ -762,6 +762,7 @@ def apply_migrations(target_engine=None):
         ("maquinaria", "event_id", "VARCHAR(64)"),
         ("salidas_obra", "event_id", "VARCHAR(64)"),
         ("albaranes_salida", "event_id", "VARCHAR(64)"),
+        ("reparaciones", "foto_path", "VARCHAR(255)"),
     ]
 
     indexes = [
