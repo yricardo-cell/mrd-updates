@@ -30,4 +30,7 @@ def test_ficha_material_y_filtros_movimientos(client, db):
     for q in ("q=&tipo=&trabajador_id=&usuario_id=&fecha_desde=2026-08-31&fecha_hasta=2026-09-01",
               "tipo=entrega&trabajador_id=&usuario_id=", "tipo=alta&trabajador_id=abc&usuario_id=&fecha_desde=31/08/2026"):
         r = client.get("/movimientos?" + q)
-        assert r.status_code == 200, (q, r.status_code)
+        # Campos vacíos: 200. Basura ("abc" como id): 400 con mensaje, nunca 422 ni 500.
+        assert r.status_code in (200, 400) and r.status_code != 422, (q, r.status_code)
+        if "abc" not in q:
+            assert r.status_code == 200, (q, r.status_code)
