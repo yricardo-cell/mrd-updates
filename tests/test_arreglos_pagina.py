@@ -22,7 +22,7 @@ def _admin(client, db, tag):
 
 def test_pagina_arreglos(client, db):
     _, hdr = _admin(client, db, "arr")
-    eid = main._registrar_error_codigo("/x/1", ValueError("mal"), "tb", avisar=lambda t, b: ("", 1))
+    eid = main._registrar_error_codigo("/x/1", ValueError("mal"), "tb", avisar=lambda t, b: ("", 1), db_externa=db)
     html = client.get("/configuracion/arreglos").text
     assert "Errores de programa" in html and "ValueError" in html and "/x/{id}" in html
     r = client.post(f"/configuracion/arreglos/{eid}/estado", data={"_csrf_token": hdr["X-CSRF-Token"], "estado": "ignorado"}, follow_redirects=False)
