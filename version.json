@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.74",
-    "nombre":  "MRD TOOL CONTROL -- Cola del Mostrador, picking guiado, recepcion por foto, kits de trabajo, reparacion automatica, resumen diario Telegram, alertas de consumo, informes de costes y EPI, busqueda ampliada, limpieza y prueba de humo",
+    "version_actual":  "2.7.75",
+    "nombre":  "MRD TOOL CONTROL -- Correccion: 403 Token de seguridad invalido al guardar en Telegram del almacen, Kits de trabajo, Avisos de la empresa, Recepcion por foto y Mi cuadrilla",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Cola del Mostrador, picking guiado, recepcion por foto, kits de trabajo, reparacion automatica, resumen diario Telegram, alertas de consumo, informes de costes y EPI, busqueda ampliada, limpieza y prueba de humo"
+                    "Correccion: 403 Token de seguridad invalido al guardar en Telegram del almacen, Kits de trabajo, Avisos de la empresa, Recepcion por foto y Mi cuadrilla"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.74.zip",
-    "sha256":  "7b5d9b6ec7f2c43021152a806f64abc8d239981282df033b4c668e5f0abd2634"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.75.zip",
+    "sha256":  "8b4f205dbee941892154a48ba7dfca9158f8d65ee375b438580f1ba57d238df2"
 }
