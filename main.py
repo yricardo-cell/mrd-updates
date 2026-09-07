@@ -3159,6 +3159,8 @@ def _entregas_epi_items(db, trabajador_id: int, meses: int = KIT_EPI_MESES_VIGEN
         if e.fecha and e.fecha < desde:
             continue
         for it in items:
+            if not isinstance(it, dict):
+                continue  # entradas antiguas con texto suelto: no rompen la página (2.7.76)
             nombre = str((it or {}).get("nombre", "")).strip().lower()
             if nombre:
                 try:
@@ -10404,6 +10406,66 @@ async def portal_solicitud_fecha(token: str, request_id: int, request: Request, 
                  mensaje="El trabajador ha indicado para cuándo lo necesita.", prioridad="baja", tipo="solicitud", enlace="/solicitudes-trabajadores"))
     db.commit()
     return RedirectResponse(f"/portal/{token}?ok=fecha#solicitudes", status_code=303)
+
+
+def _entregas_epi_filas(db: Session, trabajador_id: int | None, desde: date | None, hasta: date | None, limite: int = 500) -> list[dict]:
+    """Historial de entregas de EPI y ropa (mejora 13): solo consulta; las entregas nuevas van por el Mostrador."""
+    q = db.query(EntregaEPI)
+    if trabajador_id:
+        q = q.filter(EntregaEPI.trabajador_id == trabajador_id)
+    if desde:
+        q = q.filter(EntregaEPI.fecha >= datetime.combine(desde, datetime.min.time()))
+    if hasta:
+        q = q.filter(EntregaEPI.fecha < datetime.combine(hasta + timedelta(days=1), datetime.min.time()))
+    filas = []
+    for e in q.order_by(EntregaEPI.fecha.desc()).limit(limite).all():
+        try:
+            items = json.loads(e.items_json or "[]")
+        except ValueError:
+            items = []
+        partes = []
+        for it in items if isinstance(items, list) else []:
+            if isinstance(it, dict):
+                nombre = it.get("nombre") or it.get("descripcion") or it.get("tipo") or "?"
+                extra = " ".join(str(x) for x in (it.get("talla"), (str(it.get("cantidad")) + " ud") if it.get("cantidad") not in (None, "", 1) else None) if x)
+                partes.append(f"{nombre}{(' ' + extra) if extra else ''}")
+            else:
+                partes.append(str(it))
+        t = db.get(Trabajador, e.trabajador_id)
+        filas.append({"id": e.id, "fecha": _utc_a_local(e.fecha) if e.fecha else None, "trabajador": t.nombre_completo if t else "?", "trabajador_id": e.trabajador_id,
+                      "tipo": e.tipo or "", "articulos": "; ".join(partes)[:400], "n_items": len(partes), "entregado_por": e.entregado_por or "", "firmado": bool(e.firma_base64), "observaciones": e.observaciones or ""})
+    return filas
+
+
+def _entregas_epi_params(request: Request):
+    p = request.query_params
+    tid = int(p.get("trabajador_id")) if str(p.get("trabajador_id") or "").isdigit() else None
+    def _d(v):
+        try:
+            return date.fromisoformat(str(v)) if v else None
+        except ValueError:
+            return None
+    return tid, _d(p.get("desde")), _d(p.get("hasta"))
+
+
+@app.get("/epis/entregas", response_class=HTMLResponse)
+def epis_entregas_historial(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    tid, desde, hasta = _entregas_epi_params(request)
+    filas = _entregas_epi_filas(db, tid, desde, hasta)
+    trabajadores = db.query(Trabajador).filter(Trabajador.activo == True).order_by(Trabajador.apellidos, Trabajador.nombre).all()
+    return templates.TemplateResponse(request, "epis_entregas.html", ctx_base(request, user, db, filas=filas, trabajadores=trabajadores, f_trabajador=tid, f_desde=desde, f_hasta=hasta))
+
+
+@app.get("/epis/entregas/excel")
+def epis_entregas_excel(request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    from reports import exportar_tabla_excel as _xl
+    tid, desde, hasta = _entregas_epi_params(request)
+    filas = _entregas_epi_filas(db, tid, desde, hasta, limite=5000)
+    datos = _xl("Entregas de EPI y ropa", ["Fecha", "Trabajador", "Tipo", "Artículos", "Entregado por", "Firmada", "Observaciones"],
+                [[f["fecha"].strftime("%d/%m/%Y %H:%M") if f["fecha"] else "", f["trabajador"], f["tipo"], f["articulos"], f["entregado_por"], "Sí" if f["firmado"] else "No", f["observaciones"]] for f in filas],
+                [16, 28, 12, 60, 18, 9, 30])
+    return Response(content=datos, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f"attachment; filename=entregas_epi_{date.today():%Y%m%d}.xlsx"})
 
 
 def _alertas_consumo_obras_bg():
