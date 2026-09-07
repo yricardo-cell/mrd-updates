@@ -736,6 +736,7 @@ def apply_migrations(target_engine=None):
         ("solicitudes_trabajador", "necesario_para", "DATETIME"),
         ("solicitudes_trabajador", "entrega_modo", "VARCHAR(20)"),
         ("solicitudes_trabajador", "dias_uso", "INTEGER"),
+        ("solicitudes_trabajador", "voy_a_recoger_en", "DATETIME"),
         ("solicitudes_trabajador", "tipo", "VARCHAR(20)"),
         ("solicitudes_trabajador", "categoria", "VARCHAR(50)"),
         ("solicitudes_trabajador", "asunto", "VARCHAR(200)"),

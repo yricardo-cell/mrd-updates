@@ -277,12 +277,26 @@ def transition_worker_request(
     if new_status == "entregada":
         request.entregado_en = datetime.now()
         ensure_delivery_note_for_request(db, user, request)
-    create_worker_notification(
-        db, request.trabajador_id, title=f"Solicitud {request.numero}",
-        message=f"Tu solicitud ha cambiado a {new_status.replace('_', ' ')}.",
-        kind="solicitud", link="#solicitudes",
-        event_key=f"solicitud:{request.id}:{new_status}",
-    )
+    if new_status == "lista":
+        # Mejora 9: dónde recogerlo y quién lo preparó.
+        almacen_nombre = request.almacen.nombre if request.almacen is not None else "el almacén"
+        nota = (notes or "").strip()
+        mensaje = f"Recógelo en el Mostrador de {almacen_nombre}. Lo preparó {getattr(user, 'nombre', None) or user.username}."
+        if nota and not nota.startswith("Entregada desde Mostrador"):
+            mensaje += f" Nota del almacén: {nota[:200]}"
+        mensaje += " Pulsa «Voy a recogerlo» en tu portal para que lo tengan a mano."
+        create_worker_notification(
+            db, request.trabajador_id, title=f"Tu pedido {request.numero} está listo",
+            message=mensaje, kind="solicitud", link="#solicitudes",
+            event_key=f"solicitud:{request.id}:{new_status}",
+        )
+    else:
+        create_worker_notification(
+            db, request.trabajador_id, title=f"Solicitud {request.numero}",
+            message=f"Tu solicitud ha cambiado a {new_status.replace('_', ' ')}.",
+            kind="solicitud", link="#solicitudes",
+            event_key=f"solicitud:{request.id}:{new_status}",
+        )
     db.flush()
     return request
 

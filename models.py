@@ -245,6 +245,7 @@ class SolicitudTrabajador(Base):
     necesario_para = Column(DateTime, nullable=True)      # para cuándo lo necesita (mejora 21)
     entrega_modo = Column(String(20), nullable=True)      # recoger | llevar
     dias_uso = Column(Integer, nullable=True)             # cuántos días lo necesita -> plazo al entregar
+    voy_a_recoger_en = Column(DateTime, nullable=True)    # el trabajador avisó que va a recogerlo (mejora 9)
 
     trabajador = relationship("Trabajador", back_populates="solicitudes", foreign_keys=[trabajador_id])
     almacen = relationship("Almacen", foreign_keys=[almacen_id])
