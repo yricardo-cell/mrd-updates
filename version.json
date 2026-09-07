@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.62",
-    "nombre":  "MRD TOOL CONTROL -- Impresión directa en la etiquetadora, imprimir zona en 3D, etiqueta al alta express y PNG para apps del móvil",
+    "version_actual":  "2.7.63",
+    "nombre":  "MRD TOOL CONTROL -- Recuento de zona completa con el escáner",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Impresión directa en la etiquetadora, imprimir zona en 3D, etiqueta al alta express y PNG para apps del móvil"
+                    "Recuento de zona completa con el escáner"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.62.zip",
-    "sha256":  "aff90cb5e7564050365fdcc2e03ee0e58ed79869953eac4b1d12e7f521ba7068"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.63.zip",
+    "sha256":  "ca3ba74d6ec3cacee2539beb1ed16b41b88b346a8817ab55edb6655c0b4101ea"
 }
