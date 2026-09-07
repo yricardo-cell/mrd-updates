@@ -10643,6 +10643,76 @@ async def kiosco_operar(request: Request, db: Session = Depends(get_db)):
     return {"ok": True, "lineas": len(lineas), "plazo": expected.strftime("%d/%m/%Y") if expected else None}
 
 
+# ─── Pantalla de TV del almacén (mejora 18) ─────────────────────────────────
+def _tv_autorizado(request: Request, db: Session) -> bool:
+    clave = request.query_params.get("clave") or request.cookies.get("mrd_tv") or ""
+    guardada = _ajuste_get(db, "tv_clave", "") or ""
+    if clave and guardada and secrets.compare_digest(clave, guardada):
+        return True
+    try:
+        return usuario_actual(request, db) is not None
+    except Exception:
+        return False
+
+
+def _tv_vencidos(db: Session, limite: int = 10) -> list[dict]:
+    ahora = datetime.now()
+    salida = []
+    for h in db.query(Herramienta).filter(Herramienta.activa == True, Herramienta.estado.in_(["entregada", "en_obra", "en_transporte"])).all():
+        ultimo = db.query(Movimiento).filter(Movimiento.herramienta_id == h.id, Movimiento.tipo.in_(["entrega", "traslado"])).order_by(Movimiento.id.desc()).first()
+        prevista = getattr(ultimo, "fecha_devolucion_prevista", None) if ultimo else None
+        if prevista and prevista < ahora:
+            t = db.get(Trabajador, h.responsable_id) if h.responsable_id else None
+            salida.append({"nombre": h.nombre, "codigo": h.codigo, "quien": t.nombre_completo if t else "?", "dias": (ahora - prevista).days})
+    salida.sort(key=lambda x: -x["dias"])
+    return salida[:limite]
+
+
+def _tv_datos(db: Session) -> dict:
+    cola = _cola_mostrador(db, None)[:12]
+    listos = db.query(SolicitudTrabajador).filter(SolicitudTrabajador.estado == "lista").order_by(SolicitudTrabajador.actualizado_en.asc()).limit(10).all()
+    hoy0 = datetime.combine(date.today(), datetime.min.time())
+    avisos = db.query(Aviso).filter(Aviso.leido == False, Aviso.creado_en >= hoy0 - timedelta(hours=2)).order_by(Aviso.creado_en.desc()).limit(8).all()
+    def _nombre(tid):
+        t = db.get(Trabajador, tid) if tid else None
+        return t.nombre_completo if t else "?"
+    return {
+        "hora": datetime.now().strftime("%H:%M"), "fecha": datetime.now().strftime("%d/%m/%Y"),
+        "cola": [{"numero": str(c.get("numero") or ""), "trabajador": str(c.get("trabajador") or c.get("trabajador_nombre") or ""), "estado": str(c.get("estado") or ""),
+                  "urgente": bool(c.get("urgente") or c.get("voy") or c.get("voy_a_recoger_en")), "para": str(c.get("para") or c.get("para_txt") or c.get("necesario_txt") or "")} for c in cola],
+        "listos": [{"numero": s.numero, "trabajador": _nombre(s.trabajador_id), "minutos": int((datetime.now() - _utc_a_local(s.actualizado_en)).total_seconds() // 60) if s.actualizado_en else 0, "voy": bool(s.voy_a_recoger_en)} for s in listos],
+        "vencidos": _tv_vencidos(db),
+        "avisos": [{"titulo": a.titulo, "hora": _utc_a_local(a.creado_en).strftime("%H:%M") if a.creado_en else "", "prioridad": a.prioridad or ""} for a in avisos],
+    }
+
+
+@app.get("/tv", response_class=HTMLResponse)
+def tv_almacen(request: Request, db: Session = Depends(get_db)):
+    if not _tv_autorizado(request, db):
+        raise HTTPException(403, "Pantalla de TV: falta la clave (Configuración > Pantalla de TV)")
+    resp = templates.TemplateResponse(request, "tv.html", {"request": request, "datos": _tv_datos(db), "version": VERSION})
+    clave = request.query_params.get("clave")
+    if clave:
+        resp.set_cookie("mrd_tv", clave, httponly=True, samesite="lax", max_age=365 * 86400, secure=request.url.scheme == "https")
+    return resp
+
+
+@app.get("/tv/api")
+def tv_api(request: Request, db: Session = Depends(get_db)):
+    if not _tv_autorizado(request, db):
+        raise HTTPException(403, "Sin clave")
+    return _tv_datos(db)
+
+
+@app.post("/configuracion/tv/clave", response_class=RedirectResponse)
+def configuracion_tv_clave(user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    if user.rol != "admin":
+        raise HTTPException(403, "Solo administración")
+    _ajuste_set(db, "tv_clave", secrets.token_urlsafe(18))
+    db.commit()
+    return RedirectResponse("/configuracion?tv=1#card-tv", status_code=303)
+
+
 def _alertas_consumo_obras_bg():
     """Una vez por semana: un aviso por cada obra/material con consumo anómalo (sin repetir la misma semana)."""
     try:
@@ -13002,6 +13072,7 @@ def configuracion(request: Request, user: Usuario = Depends(requiere_login), db:
     version_info = leer_version_actual()
     return templates.TemplateResponse(request, "configuracion.html", ctx_base(
         request, user,
+        ajustes_tv_clave=_ajuste_get(db, "tv_clave", ""),
         backups=backups,
         usuarios=usuarios,
         almacenes=almacenes,
