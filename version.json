@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.71",
-    "nombre":  "MRD TOOL CONTROL -- Portal del trabajador: escanear desde el móvil",
+    "version_actual":  "2.7.72",
+    "nombre":  "MRD TOOL CONTROL -- Portal del trabajador: pedido en dos toques, varias fotos, avisos utiles, firma en el movil e idioma rumano",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Portal del trabajador: escanear desde el móvil"
+                    "Portal del trabajador: pedido en dos toques, varias fotos, avisos utiles, firma en el movil e idioma rumano"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.71.zip",
-    "sha256":  "aef9fbaa27a688361d7aff71657afbb33cc06309039da50a6d5359fa56361a22"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.72.zip",
+    "sha256":  "972951b961a71f017c34597d632f59aba58eb02f1ed85d5c76b0882db1c4a937"
 }
