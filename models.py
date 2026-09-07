@@ -250,6 +250,7 @@ class SolicitudTrabajador(Base):
     dias_uso = Column(Integer, nullable=True)             # cuántos días lo necesita -> plazo al entregar
     voy_a_recoger_en = Column(DateTime, nullable=True)    # el trabajador avisó que va a recogerlo (mejora 9)
     fotos_json = Column(Text, nullable=True)   # fotos del pedido (mejora 11)
+    kit_nombre = Column(String(100), nullable=True)   # pedido a partir de un kit de trabajo (mejora 25)
 
     @property
     def fotos_lista(self) -> list:
@@ -2764,3 +2765,28 @@ class PasskeyTrabajador(Base):
     dispositivo = Column(String(200), nullable=True)
     creado_en = Column(DateTime, nullable=False, server_default=func.now())
     ultimo_uso_en = Column(DateTime, nullable=True)
+
+
+class KitTrabajo(Base):
+    """Kit por tipo de trabajo (mejora 25): lo que hace falta para soldar, trabajar en altura..."""
+    __tablename__ = "kits_trabajo"
+
+    id = Column(Integer, primary_key=True)
+    nombre = Column(String(100), nullable=False, unique=True)
+    descripcion = Column(String(300), nullable=True)
+    activo = Column(Boolean, nullable=False, default=True, index=True)
+    creado_en = Column(DateTime, nullable=False, server_default=func.now())
+
+    lineas = relationship("KitTrabajoLinea", back_populates="kit", cascade="all, delete-orphan", order_by="KitTrabajoLinea.id")
+
+
+class KitTrabajoLinea(Base):
+    __tablename__ = "kits_trabajo_lineas"
+
+    id = Column(Integer, primary_key=True)
+    kit_id = Column(Integer, ForeignKey("kits_trabajo.id"), nullable=False, index=True)
+    tipo = Column(String(20), nullable=False, default="herramienta")   # herramienta | maquinaria | ropa | epi | consumible | otro
+    descripcion = Column(String(200), nullable=False)
+    cantidad = Column(Integer, nullable=False, default=1)
+
+    kit = relationship("KitTrabajo", back_populates="lineas")

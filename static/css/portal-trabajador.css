@@ -98,3 +98,6 @@ input,select,textarea{transition:border-color .16s ease,box-shadow .16s ease}
 
 /* Sin cobertura (mejora 5) */
 .offline-bar{background:#fde68a;color:#78350f;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-weight:700}.offline-bar.ok{background:#bbf7d0;color:#166534}
+
+/* Kits de trabajo (mejora 25) */
+.kit-chips{margin-bottom:10px}.kit-chip{background:#fff7ed;border-color:#fdba74;color:#9a3412}
