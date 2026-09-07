@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.73",
-    "nombre":  "MRD TOOL CONTROL -- Portal del trabajador: 18 mejoras (pedido completo y por foto, Hoy, huella, sin cobertura, encargado, avisos de empresa...)",
+    "version_actual":  "2.7.74",
+    "nombre":  "MRD TOOL CONTROL -- Cola del Mostrador, picking guiado, recepcion por foto, kits de trabajo, reparacion automatica, resumen diario Telegram, alertas de consumo, informes de costes y EPI, busqueda ampliada, limpieza y prueba de humo",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Portal del trabajador: 18 mejoras (pedido completo y por foto, Hoy, huella, sin cobertura, encargado, avisos de empresa...)"
+                    "Cola del Mostrador, picking guiado, recepcion por foto, kits de trabajo, reparacion automatica, resumen diario Telegram, alertas de consumo, informes de costes y EPI, busqueda ampliada, limpieza y prueba de humo"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.73.zip",
-    "sha256":  "a9dc2e85996f6ed5f90e0f530ce7a5dad91f9271551b1f101f7b014d06402839"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.74.zip",
+    "sha256":  "7b5d9b6ec7f2c43021152a806f64abc8d239981282df033b4c668e5f0abd2634"
 }
