@@ -733,6 +733,9 @@ def apply_migrations(target_engine=None):
         ("solicitudes_trabajador", "recogida_confirmada_en", "DATETIME"),
         ("solicitudes_trabajador", "recogida_firma_datos", "TEXT"),
         ("solicitudes_trabajador", "recogida_firma_nombre", "VARCHAR(100)"),
+        ("solicitudes_trabajador", "necesario_para", "DATETIME"),
+        ("solicitudes_trabajador", "entrega_modo", "VARCHAR(20)"),
+        ("solicitudes_trabajador", "dias_uso", "INTEGER"),
         ("solicitudes_trabajador", "tipo", "VARCHAR(20)"),
         ("solicitudes_trabajador", "categoria", "VARCHAR(50)"),
         ("solicitudes_trabajador", "asunto", "VARCHAR(200)"),
@@ -742,6 +745,8 @@ def apply_migrations(target_engine=None):
         ("solicitudes_trabajador", "respondido_en", "DATETIME"),
         ("lineas_solicitud_trabajador", "cantidad_aprobada", "INTEGER"),
         ("lineas_solicitud_trabajador", "observaciones", "TEXT"),
+        ("lineas_solicitud_trabajador", "espera_disponible", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("lineas_solicitud_trabajador", "avisado_disponible_en", "DATETIME"),
         # Idempotencia de formularios: evita duplicados por doble clic o
         # reintento del mismo envío (alta de maquinaria, salidas, albaranes).
         ("maquinaria", "event_id", "VARCHAR(64)"),

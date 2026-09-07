@@ -149,6 +149,9 @@ def create_worker_request(
     destination: str,
     reason: str,
     items: list[dict],
+    needed_for: datetime | None = None,
+    delivery_mode: str = "",
+    days_of_use: int | None = None,
 ) -> SolicitudTrabajador:
     submission_id = (submission_id or "").strip()
     if not submission_id or len(submission_id) > 64:
@@ -178,7 +181,7 @@ def create_worker_request(
             raise WorkerPortalError(400, "Describe correctamente cada artículo")
         if quantity < 1 or quantity > 1000:
             raise WorkerPortalError(400, "La cantidad debe estar entre 1 y 1000")
-        clean_items.append((item_type, description, size, quantity))
+        clean_items.append((item_type, description, size, quantity, bool(raw.get("espera"))))
 
     numero = _public_number("SOL")
     motivo_limpio = (reason or "").strip()[:2000] or None
@@ -192,6 +195,9 @@ def create_worker_request(
         trabajador_id=worker.id, almacen_id=worker.almacen_id,
         prioridad=priority, obra_destino=" ".join((destination or "").split())[:200] or None,
         motivo=motivo_limpio,
+        necesario_para=needed_for,
+        entrega_modo=delivery_mode if delivery_mode in ("recoger", "llevar") else None,
+        dias_uso=days_of_use if days_of_use and 1 <= days_of_use <= 365 else None,
         # ``tipo`` pertenece al buzón antiguo, no al artículo solicitado.
         # Mantener "solicitud" también protege instalaciones que todavía no
         # hayan ejecutado la migración del esquema heredado.
@@ -199,9 +205,10 @@ def create_worker_request(
         asunto=f"Solicitud {numero}"[:200],
         mensaje=motivo_limpio or "Solicitud creada desde el portal del trabajador.",
     )
-    for item_type, description, size, quantity in clean_items:
+    for item_type, description, size, quantity, espera in clean_items:
         request.lineas.append(LineaSolicitudTrabajador(
             tipo=item_type, descripcion=description, talla=size, cantidad=quantity,
+            espera_disponible=bool(espera) and item_type in ("herramienta", "maquinaria"),
         ))
     db.add(request)
     db.flush()

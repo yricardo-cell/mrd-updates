@@ -242,6 +242,9 @@ class SolicitudTrabajador(Base):
     recogida_confirmada_en = Column(DateTime, nullable=True)
     recogida_firma_datos = Column(Text, nullable=True)      # firma en el móvil (P6)
     recogida_firma_nombre = Column(String(100), nullable=True)
+    necesario_para = Column(DateTime, nullable=True)      # para cuándo lo necesita (mejora 21)
+    entrega_modo = Column(String(20), nullable=True)      # recoger | llevar
+    dias_uso = Column(Integer, nullable=True)             # cuántos días lo necesita -> plazo al entregar
 
     trabajador = relationship("Trabajador", back_populates="solicitudes", foreign_keys=[trabajador_id])
     almacen = relationship("Almacen", foreign_keys=[almacen_id])
@@ -273,6 +276,8 @@ class LineaSolicitudTrabajador(Base):
     talla = Column(String(30), nullable=True)
     cantidad = Column(Integer, nullable=False, default=1)
     cantidad_aprobada = Column(Integer, nullable=True)
+    espera_disponible = Column(Boolean, nullable=False, default=False)   # avisar cuando quede libre (mejora 21)
+    avisado_disponible_en = Column(DateTime, nullable=True)
     observaciones = Column(Text, nullable=True)
 
     solicitud = relationship("SolicitudTrabajador", back_populates="lineas")

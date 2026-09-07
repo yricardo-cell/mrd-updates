@@ -952,6 +952,7 @@ def startup_event():
                     _resumen_semanal_bg()
                     _ensayo_restauracion_bg()
                     _avisos_trabajador_bg()
+                    _espera_disponible_bg()
                     _tm.sleep(6*3600)  # cada 6 horas
             _thr.Thread(target=_run_alerts, daemon=True, name="alertas_bg").start()
         except Exception:
@@ -7945,6 +7946,8 @@ def mostrador_solicitudes_activas(trabajador_id: int, request: Request,
             "id": s.id, "numero": s.numero, "estado": s.estado,
             "creado": _utc_a_local(s.creado_en).strftime("%d/%m") if s.creado_en else "",
             "lineas": [f"{l.cantidad_aprobada or l.cantidad} × {l.observaciones or l.descripcion}" + (f" T.{l.talla}" if l.talla and not l.observaciones else "") for l in s.lineas],
+            "necesario": _portal_necesario_texto(s.necesario_para), "entrega": s.entrega_modo or "", "dias_uso": s.dias_uso or 0,
+            "espera": any(l.espera_disponible and not l.avisado_disponible_en for l in s.lineas),
         })
     return JSONResponse({"ok": True, "solicitudes": salida})
 
@@ -8036,12 +8039,19 @@ def mostrador_operar(
             raise CounterError(409, "No hay un almacén activo configurado")
         if payload.almacen_id and payload.almacen_id != warehouse.id:
             raise CounterError(409, "Cambia primero al almacén que quieres operar")
+        expected_return = payload.fecha_devolucion_prevista
+        if payload.accion == "salida" and expected_return is None:
+            ids_prev = [x for x in ([payload.solicitud_id] if payload.solicitud_id else []) + list(payload.solicitud_ids) if x and x > 0]
+            if ids_prev:
+                dias = [x.dias_uso for x in db.query(SolicitudTrabajador).filter(SolicitudTrabajador.id.in_(ids_prev)).all() if x.dias_uso]
+                if dias:
+                    expected_return = datetime.now() + timedelta(days=max(dias))  # mejora 21: "lo necesito N días"
         result = operate_counter(
             db, user, operation_id=payload.operacion_id, action=payload.accion,
             lines=[line.model_dump() for line in payload.lineas],
             worker_id=payload.trabajador_id, work_id=payload.obra_id,
             warehouse_id=warehouse.id, notes=payload.notas,
-            expected_return=payload.fecha_devolucion_prevista,
+            expected_return=expected_return,
             origin=payload.origen,
             signature_data=payload.firma_datos,
             signature_name=payload.firma_nombre,
@@ -8060,6 +8070,11 @@ def mostrador_operar(
             if not payload.firma_datos and result.get("albaran_id"):
                 _avisar_firma_albaran(db, payload.trabajador_id, int(result["albaran_id"]), str(result.get("albaran_numero") or ""))
         db.commit()
+        if payload.accion == "entrada":
+            try:
+                _espera_disponible_util(db)  # mejora 21: algo ha vuelto, ¿alguien lo esperaba?
+            except Exception as exc:
+                mrd_logging.log_error(f"Espera disponible tras entrada: {exc}")
         return JSONResponse(result)
     except CounterError as exc:
         db.rollback()
@@ -17979,17 +17994,145 @@ def portal_trabajador(token: str, request: Request, db: Session = Depends(get_db
         "historial_portal": historial_portal,
         "ultimo_pedido": ultimo_pedido, "frecuentes": frecuentes,
         "t": _portal_traductor(t.idioma), "idioma": (t.idioma or "es"), "idiomas": PORTAL_IDIOMAS,
+        "necesario_texto": _portal_necesario_texto,
     })
     response.headers["Cache-Control"] = "no-store, private"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
 
 
+# ─── Pedido de herramienta completo (mejora 21) ──────────────────────────────
+
+def _portal_parse_necesario(cuando: str, fecha: str, hora: str) -> datetime | None:
+    """'hoy' / 'manana' / 'fecha' (+ YYYY-MM-DD) y hora opcional HH:MM -> datetime local, o None."""
+    cuando = (cuando or "").strip().lower()
+    hoy = date.today()
+    if cuando == "hoy":
+        d = hoy
+    elif cuando in ("manana", "mañana"):
+        d = hoy + timedelta(days=1)
+    elif cuando == "fecha":
+        try:
+            d = date.fromisoformat((fecha or "").strip()[:10])
+        except ValueError:
+            return None
+    else:
+        return None
+    h, m = 0, 0
+    try:
+        if (hora or "").strip():
+            h, m = (int(x) for x in hora.strip()[:5].split(":")[:2])
+    except ValueError:
+        h, m = 0, 0
+    return datetime(d.year, d.month, d.day, h, m)
+
+
+def _portal_necesario_texto(dt) -> str:
+    """'hoy 14:00', 'mañana', '12/09 08:30'... vacío si no hay fecha."""
+    if not dt:
+        return ""
+    hoy = date.today()
+    dia = "hoy" if dt.date() == hoy else ("mañana" if dt.date() == hoy + timedelta(days=1) else dt.strftime("%d/%m"))
+    hora = dt.strftime(" %H:%M") if (dt.hour or dt.minute) else ""
+    return dia + hora
+
+
+def _portal_disponibilidad(db: Session, t: Trabajador, tipo: str, q: str) -> list[dict]:
+    """Qué hay de eso en su almacén: unidades libres / total, quién tiene las que no lo están y una foto."""
+    q = " ".join((q or "").split()).lower()[:100]
+    salida: list[dict] = []
+    if tipo in ("herramienta", "maquinaria"):
+        Model = Herramienta if tipo == "herramienta" else Maquinaria
+        qs = db.query(Model).filter(Model.activa == True)
+        if t.almacen_id:
+            qs = qs.filter(Model.almacen_id == t.almacen_id)
+        if q:
+            qs = qs.filter(func.lower(Model.nombre).like(f"%{q}%"))
+        grupos: dict[str, dict] = {}
+        for h in qs.order_by(Model.nombre).limit(400).all():
+            nombre = (h.nombre or "").strip()
+            if not nombre:
+                continue
+            g = grupos.setdefault(nombre.lower(), {"nombre": nombre, "total": 0, "libres": 0, "quien": [], "foto": ""})
+            g["total"] += 1
+            if (getattr(h, "estado", "") or "") == "disponible":
+                g["libres"] += 1
+            elif len(g["quien"]) < 2 and getattr(h, "responsable_id", None):
+                r = db.get(Trabajador, h.responsable_id)
+                if r and r.nombre_completo not in g["quien"]:
+                    g["quien"].append(r.nombre_completo)
+            if not g["foto"]:
+                f = getattr(h, "foto_path", None) or getattr(h, "foto", None)
+                if f:
+                    g["foto"] = f"/static/uploads/{'herramientas' if tipo == 'herramienta' else 'maquinaria'}/{f}"
+        salida = sorted(grupos.values(), key=lambda g: (-g["libres"], g["nombre"]))
+    elif tipo == "consumible":
+        qs = db.query(Material).filter(Material.activo == True)
+        if t.almacen_id:
+            qs = qs.filter(Material.almacen_id == t.almacen_id)
+        if q:
+            qs = qs.filter(func.lower(Material.nombre).like(f"%{q}%"))
+        for m in qs.order_by(Material.nombre).limit(60).all():
+            stock = int(m.stock_actual or 0)
+            salida.append({"nombre": (m.nombre or "").strip(), "total": stock, "libres": stock, "quien": [],
+                           "foto": f"/static/uploads/materiales/{m.foto}" if getattr(m, "foto", None) else ""})
+    return salida[:12]
+
+
+def _espera_disponible_util(db: Session) -> int:
+    """Líneas de pedido marcadas 'avísame cuando quede libre': si ya hay una unidad disponible,
+    avisa al trabajador (una vez) y al almacén para que prepare el pedido."""
+    lineas = db.query(LineaSolicitudTrabajador).join(SolicitudTrabajador, SolicitudTrabajador.id == LineaSolicitudTrabajador.solicitud_id).filter(
+        LineaSolicitudTrabajador.espera_disponible == True, LineaSolicitudTrabajador.avisado_disponible_en.is_(None),
+        LineaSolicitudTrabajador.tipo.in_(("herramienta", "maquinaria")),
+        SolicitudTrabajador.estado.in_(("pendiente", "revision", "aprobada")),
+    ).all()
+    n = 0
+    for l in lineas:
+        s = db.get(SolicitudTrabajador, l.solicitud_id)
+        if s is None:
+            continue
+        Model = Herramienta if l.tipo == "herramienta" else Maquinaria
+        qs = db.query(Model).filter(Model.activa == True, Model.estado == "disponible",
+                                    func.lower(Model.nombre).like(f"%{(l.descripcion or '').strip().lower()}%"))
+        if s.almacen_id:
+            qs = qs.filter(Model.almacen_id == s.almacen_id)
+        libre = qs.first()
+        if libre is None:
+            continue
+        l.avisado_disponible_en = datetime.now()
+        create_worker_notification(
+            db, s.trabajador_id, title=f"Ya hay {l.descripcion} libre",
+            message=f"Tu pedido {s.numero} esperaba a que quedara libre. El almacén ya puede prepararlo.",
+            kind="pedido", link="#solicitudes", event_key=f"espera:{l.id}",
+        )
+        db.add(Aviso(titulo=f"Pedido {s.numero}: ya hay {l.descripcion} libre",
+                     mensaje=f"{libre.nombre} ({getattr(libre, 'codigo', '') or ''}) está disponible; el pedido esperaba a que quedara libre. Se puede preparar.",
+                     prioridad="media", tipo="sistema", enlace="/solicitudes-trabajadores"))
+        n += 1
+    if n:
+        db.commit()
+    return n
+
+
+def _espera_disponible_bg():
+    """Avisos 'ya hay X libre' (mejora 21), dentro del bucle de fondo."""
+    try:
+        from database import SessionLocal as _SLe
+        db = _SLe()
+        try:
+            _espera_disponible_util(db)
+        finally:
+            db.close()
+    except Exception as exc:  # pragma: no cover
+        mrd_logging.log_error(f"Espera disponible: {exc}")
+
+
 # ─── Idioma del portal del trabajador (P5): castellano o rumano ──────────────
 
 PORTAL_IDIOMAS = {"es": "Español", "ro": "Română"}
 
-PORTAL_TEXTOS: dict[str, dict[str, str]] = {"ro": {'Lo que tengo': 'Ce am la mine', 'Mi historial': 'Istoricul meu', 'Escanear': 'Scanează', 'Solicitar': 'Cere material', 'Seguimiento': 'Urmărire', 'Devolver': 'Returnează', 'Incidencias': 'Incidente', 'Albaranes': 'Avize de livrare', 'Buzón': 'Sugestii', 'Mi cuenta': 'Contul meu', 'Instalar': 'Instalează', 'Salir': 'Ieșire', 'MI ESPACIO MRD': 'SPAȚIUL MEU MRD', 'CARNET DIGITAL MRD': 'LEGITIMAȚIE DIGITALĂ MRD', 'Trabajador': 'Muncitor', 'AVISOS': 'ANUNȚURI', 'Notificaciones': 'Notificări', 'TU INVENTARIO PERSONAL': 'INVENTARUL TĂU PERSONAL', 'PROTECCIÓN': 'PROTECȚIE', 'Tu EPI': 'Echipamentul tău de protecție', 'ESCÁNER': 'SCANER', 'Escanear una herramienta': 'Scanează o sculă', 'TU ACTIVIDAD': 'ACTIVITATEA TA', 'PEDIDO AL ALMACÉN': 'COMANDĂ LA DEPOZIT', '¿Qué necesitas?': 'De ce ai nevoie?', 'SEGUIMIENTO': 'URMĂRIRE', 'Mis solicitudes': 'Cererile mele', 'DOCUMENTOS': 'DOCUMENTE', 'Mis albaranes': 'Avizele mele', 'ESCUCHA ACTIVA': 'ASCULTARE ACTIVĂ', 'Quejas y sugerencias': 'Reclamații și sugestii', 'DEVOLUCIONES': 'RETURURI', 'Solicitar una devolución': 'Cere o returnare', 'AYUDA RÁPIDA': 'AJUTOR RAPID', 'Comunicar una incidencia': 'Raportează un incident', 'IDENTIDAD Y SEGURIDAD': 'IDENTITATE ȘI SECURITATE', 'SEGURIDAD': 'SIGURANȚĂ', 'Documentación personal': 'Documente personale', 'Mis datos de contacto': 'Datele mele de contact', 'Teléfono': 'Telefon', 'Correo': 'E-mail', 'PIN actual para confirmar': 'PIN-ul actual pentru confirmare', 'Guardar datos': 'Salvează datele', 'Cambiar mi PIN': 'Schimbă PIN-ul', 'PIN actual': 'PIN-ul actual', 'PIN nuevo': 'PIN nou', 'Repite el PIN': 'Repetă PIN-ul', 'Cambiar PIN': 'Schimbă PIN-ul', 'Dispositivos conectados': 'Dispozitive conectate', 'Cerrar las demás sesiones': 'Închide celelalte sesiuni', 'Idioma': 'Limba', 'Elige el idioma en el que quieres ver tu portal.': 'Alege limba în care vrei să vezi portalul tău.', 'Confirmar recogida': 'Confirmă ridicarea', 'Borrar firma': 'Șterge semnătura', 'Firma con el dedo para confirmar que lo has recogido:': 'Semnează cu degetul pentru a confirma că ai ridicat materialul:', 'Enviar': 'Trimite', 'Enviar al almacén': 'Trimite la depozit', 'Cancelar solicitud': 'Anulează cererea', 'Marcar leídas': 'Marchează ca citite', 'Comunicar incidencia': 'Raportează incidentul', 'Enviar devolución': 'Trimite returnarea', 'Repetir mi último pedido': 'Repetă ultima mea comandă', 'Lo que sueles pedir:': 'Ce ceri de obicei:', 'Tipo': 'Tip', 'Fotos (hasta 5, opcional)': 'Poze (până la 5, opțional)', '¿Qué ha pasado?': 'Ce s-a întâmplat?', 'Tipo de activo': 'Tip de bun', 'Qué ha ocurrido': 'Ce s-a întâmplat', 'Privacidad': 'Confidențialitate', 'Prioridad': 'Prioritate', 'Obra o destino': 'Șantier sau destinație', 'Obra (opcional)': 'Șantier (opțional)', 'Nombre del activo': 'Numele bunului', 'Motivo': 'Motiv', 'Mensaje': 'Mesaj', 'Estado': 'Stare', 'Detalle (opcional)': 'Detalii (opțional)', 'Código': 'Cod', 'Código o QR': 'Cod sau QR', 'Categoría': 'Categorie', 'Cantidad': 'Cantitate', 'Asunto': 'Subiect', 'Artículo': 'Articol', 'Solicitud registrada': 'Cerere înregistrată', 'Mensaje recibido': 'Mesaj primit', 'Incidencia registrada': 'Incident înregistrat', 'Devolución registrada': 'Returnare înregistrată', 'Datos guardados': 'Date salvate', 'PIN cambiado': 'PIN schimbat', 'Sesiones cerradas': 'Sesiuni închise', 'Solicitud cancelada': 'Cerere anulată', 'Comentario enviado': 'Comentariu trimis', 'Recogida confirmada': 'Ridicare confirmată', 'Idioma cambiado': 'Limba a fost schimbată', 'Operación completada': 'Operațiune finalizată', 'Gracias, queda anotado que tienes todo lo de tu lista': 'Mulțumim, am notat că ai tot ce este pe lista ta', 'Anotado: el almacén lo revisará': 'Notat: depozitul va verifica', 'Anotado: el almacén revisará que esa herramienta está contigo y la pondrá a tu nombre': 'Notat: depozitul va verifica că scula este la tine și o va trece pe numele tău'}}
+PORTAL_TEXTOS: dict[str, dict[str, str]] = {"ro": {'Lo que tengo': 'Ce am la mine', 'Mi historial': 'Istoricul meu', 'Escanear': 'Scanează', 'Solicitar': 'Cere material', 'Seguimiento': 'Urmărire', 'Devolver': 'Returnează', 'Incidencias': 'Incidente', 'Albaranes': 'Avize de livrare', 'Buzón': 'Sugestii', 'Mi cuenta': 'Contul meu', 'Instalar': 'Instalează', 'Salir': 'Ieșire', 'MI ESPACIO MRD': 'SPAȚIUL MEU MRD', 'CARNET DIGITAL MRD': 'LEGITIMAȚIE DIGITALĂ MRD', 'Trabajador': 'Muncitor', 'AVISOS': 'ANUNȚURI', 'Notificaciones': 'Notificări', 'TU INVENTARIO PERSONAL': 'INVENTARUL TĂU PERSONAL', 'PROTECCIÓN': 'PROTECȚIE', 'Tu EPI': 'Echipamentul tău de protecție', 'ESCÁNER': 'SCANER', 'Escanear una herramienta': 'Scanează o sculă', 'TU ACTIVIDAD': 'ACTIVITATEA TA', 'PEDIDO AL ALMACÉN': 'COMANDĂ LA DEPOZIT', '¿Qué necesitas?': 'De ce ai nevoie?', 'SEGUIMIENTO': 'URMĂRIRE', 'Mis solicitudes': 'Cererile mele', 'DOCUMENTOS': 'DOCUMENTE', 'Mis albaranes': 'Avizele mele', 'ESCUCHA ACTIVA': 'ASCULTARE ACTIVĂ', 'Quejas y sugerencias': 'Reclamații și sugestii', 'DEVOLUCIONES': 'RETURURI', 'Solicitar una devolución': 'Cere o returnare', 'AYUDA RÁPIDA': 'AJUTOR RAPID', 'Comunicar una incidencia': 'Raportează un incident', 'IDENTIDAD Y SEGURIDAD': 'IDENTITATE ȘI SECURITATE', 'SEGURIDAD': 'SIGURANȚĂ', 'Documentación personal': 'Documente personale', 'Mis datos de contacto': 'Datele mele de contact', 'Teléfono': 'Telefon', 'Correo': 'E-mail', 'PIN actual para confirmar': 'PIN-ul actual pentru confirmare', 'Guardar datos': 'Salvează datele', 'Cambiar mi PIN': 'Schimbă PIN-ul', 'PIN actual': 'PIN-ul actual', 'PIN nuevo': 'PIN nou', 'Repite el PIN': 'Repetă PIN-ul', 'Cambiar PIN': 'Schimbă PIN-ul', 'Dispositivos conectados': 'Dispozitive conectate', 'Cerrar las demás sesiones': 'Închide celelalte sesiuni', 'Idioma': 'Limba', 'Elige el idioma en el que quieres ver tu portal.': 'Alege limba în care vrei să vezi portalul tău.', 'Confirmar recogida': 'Confirmă ridicarea', 'Borrar firma': 'Șterge semnătura', 'Firma con el dedo para confirmar que lo has recogido:': 'Semnează cu degetul pentru a confirma că ai ridicat materialul:', 'Enviar': 'Trimite', 'Enviar al almacén': 'Trimite la depozit', 'Cancelar solicitud': 'Anulează cererea', 'Marcar leídas': 'Marchează ca citite', 'Comunicar incidencia': 'Raportează incidentul', 'Enviar devolución': 'Trimite returnarea', 'Repetir mi último pedido': 'Repetă ultima mea comandă', 'Lo que sueles pedir:': 'Ce ceri de obicei:', 'Tipo': 'Tip', 'Fotos (hasta 5, opcional)': 'Poze (până la 5, opțional)', '¿Qué ha pasado?': 'Ce s-a întâmplat?', 'Tipo de activo': 'Tip de bun', 'Qué ha ocurrido': 'Ce s-a întâmplat', 'Privacidad': 'Confidențialitate', 'Prioridad': 'Prioritate', 'Obra o destino': 'Șantier sau destinație', 'Obra (opcional)': 'Șantier (opțional)', 'Nombre del activo': 'Numele bunului', 'Motivo': 'Motiv', 'Mensaje': 'Mesaj', 'Estado': 'Stare', 'Detalle (opcional)': 'Detalii (opțional)', 'Código': 'Cod', 'Código o QR': 'Cod sau QR', 'Categoría': 'Categorie', 'Cantidad': 'Cantitate', 'Asunto': 'Subiect', 'Artículo': 'Articol', '¿Para cuándo?': 'Pentru când?', 'Cuando se pueda': 'Când se poate', 'Hoy': 'Azi', 'Mañana': 'Mâine', 'Elegir fecha': 'Alege data', 'Fecha': 'Data', 'Hora (opcional)': 'Ora (opțional)', '¿Cuántos días lo necesitas?': 'Câte zile ai nevoie de el?', 'Lo recojo en el almacén': 'Îl ridic de la depozit', 'Que lo lleven a la obra': 'Să fie adus la șantier', 'Avísame cuando quede libre': 'Anunță-mă când se eliberează', 'Ver qué hay': 'Vezi ce există', 'libres': 'libere', 'ninguna libre ahora': 'niciuna liberă acum', 'Nada que mostrar': 'Nimic de arătat', 'Motivo o comentario': 'Motiv sau comentariu', 'Añadir otra cosa': 'Adaugă altceva', 'Enviar solicitud': 'Trimite cererea', 'Lo necesito': 'Am nevoie', 'días': 'zile', 'En espera de que quede libre': 'În așteptare să se elibereze', 'Solicitud registrada': 'Cerere înregistrată', 'Mensaje recibido': 'Mesaj primit', 'Incidencia registrada': 'Incident înregistrat', 'Devolución registrada': 'Returnare înregistrată', 'Datos guardados': 'Date salvate', 'PIN cambiado': 'PIN schimbat', 'Sesiones cerradas': 'Sesiuni închise', 'Solicitud cancelada': 'Cerere anulată', 'Comentario enviado': 'Comentariu trimis', 'Recogida confirmada': 'Ridicare confirmată', 'Idioma cambiado': 'Limba a fost schimbată', 'Operación completada': 'Operațiune finalizată', 'Gracias, queda anotado que tienes todo lo de tu lista': 'Mulțumim, am notat că ai tot ce este pe lista ta', 'Anotado: el almacén lo revisará': 'Notat: depozitul va verifica', 'Anotado: el almacén revisará que esa herramienta está contigo y la pondrá a tu nombre': 'Notat: depozitul va verifica că scula este la tine și o va trece pe numele tău'}}
 
 
 def _portal_traductor(idioma: str | None):
@@ -18219,19 +18362,25 @@ async def portal_crear_solicitud(token: str, request: Request, db: Session = Dep
     form = await request.form()
     tipos, descripciones = form.getlist("tipo"), form.getlist("descripcion")
     tallas, cantidades = form.getlist("talla"), form.getlist("cantidad")
+    esperas = form.getlist("espera")
     items = [
         {"tipo": tipos[i] if i < len(tipos) else "otro",
          "descripcion": value,
          "talla": tallas[i] if i < len(tallas) else "",
-         "cantidad": cantidades[i] if i < len(cantidades) else "1"}
+         "cantidad": cantidades[i] if i < len(cantidades) else "1",
+         "espera": (str(esperas[i]).strip().lower() in ("1", "on", "true")) if i < len(esperas) else False}
         for i, value in enumerate(descripciones) if str(value).strip()
     ]
+    necesario_para = _portal_parse_necesario(str(form.get("necesario") or ""), str(form.get("necesario_fecha") or ""), str(form.get("necesario_hora") or ""))
+    dias_txt = str(form.get("dias_uso") or "").strip()
+    dias_uso = int(dias_txt) if dias_txt.isdigit() else None
     try:
         solicitud = create_worker_request(
             db, trabajador, submission_id=str(form.get("submission_id") or ""),
             priority=str(form.get("prioridad") or "normal"),
             destination=str(form.get("obra_destino") or ""),
             reason=str(form.get("motivo") or ""), items=items,
+            needed_for=necesario_para, delivery_mode=str(form.get("entrega_modo") or ""), days_of_use=dias_uso,
         )
         db.add(AuditoriaLog(
             tabla="solicitudes_trabajador", registro_id=solicitud.id, accion="crear_portal",
@@ -18244,7 +18393,10 @@ async def portal_crear_solicitud(token: str, request: Request, db: Session = Dep
                 titulo=f"Nueva solicitud {solicitud.numero} de {trabajador.nombre_completo}",
                 mensaje=f"{n_items} articulo(s) pedido(s)."
                         + (f" Prioridad: {solicitud.prioridad}." if solicitud.prioridad == "urgente" else "")
-                        + (f" Destino: {solicitud.obra_destino}." if solicitud.obra_destino else ""),
+                        + (f" Destino: {solicitud.obra_destino}." if solicitud.obra_destino else "")
+                        + (f" Lo necesita: {_portal_necesario_texto(solicitud.necesario_para)}." if solicitud.necesario_para else "")
+                        + (" Que lo lleven a la obra." if solicitud.entrega_modo == "llevar" else "")
+                        + (" Espera a que quede libre." if any(l.espera_disponible for l in solicitud.lineas) else ""),
                 prioridad="alta" if solicitud.prioridad == "urgente" else "media",
                 tipo="sistema",
                 enlace="/solicitudes-trabajadores",
@@ -18440,6 +18592,13 @@ async def portal_cambiar_idioma(token: str, request: Request, db: Session = Depe
     worker.idioma = idioma
     db.commit()
     return RedirectResponse(f"/portal/{token}?ok=idioma#cuenta", status_code=303)
+
+
+@app.get("/portal/{token}/api/disponibilidad")
+def portal_api_disponibilidad(token: str, request: Request, tipo: str = "herramienta", q: str = "", db: Session = Depends(get_db)):
+    """Al escribir el pedido: cuántas hay libres, quién tiene las demás y foto (mejora 21)."""
+    worker = _portal_worker_required(token, request, db)
+    return JSONResponse({"ok": True, "items": _portal_disponibilidad(db, worker, (tipo or "").strip().lower(), q)})
 
 
 @app.post("/portal/{token}/solicitudes/{request_id}/cancelar", response_class=RedirectResponse)
