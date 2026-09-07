@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.65",
-    "nombre":  "MRD TOOL CONTROL -- Historial por trabajador con filtros y Excel, y Mi historial en el portal",
+    "version_actual":  "2.7.68",
+    "nombre":  "MRD TOOL CONTROL -- Foto del hueco, pedidos del trabajador cerrados desde el Mostrador y Localizador visual sobre la Vista de la nave",
     "fecha":  "2026-09-07",
     "cambios":  [
-                    "Historial por trabajador con filtros y Excel, y Mi historial en el portal"
+                    "Foto del hueco, pedidos del trabajador cerrados desde el Mostrador y Localizador visual sobre la Vista de la nave"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.65.zip",
-    "sha256":  "638595fd19f5bd2fa24d7a4d6c95ae135ca6b912bf17a04c65e2f896fae16295"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.68.zip",
+    "sha256":  "bed640679dee20e1340feccbab9d22d910fd43c2351bef37f926e9c4ae8beaef"
 }
