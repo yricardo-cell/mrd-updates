@@ -1111,6 +1111,8 @@ def startup_event():
                 except Exception as _e:
                     mrd_logging.log_error(f"Prueba de humo: {_e}")
             _thr.Thread(target=_run_humo, daemon=True, name="prueba_humo_bg").start()
+            if IS_PRODUCTION:
+                _thr.Thread(target=_tunel_bg, daemon=True, name="tunel_bg").start()   # mejora 35
             try:
                 _ra = json.loads(_RESTAURACION_AUTO.read_text(encoding="utf-8")) if _RESTAURACION_AUTO.is_file() else {}
                 if _ra and not _ra.get("notificado"):
@@ -11878,6 +11880,76 @@ def _rollback_si_humo_falla(res: dict | None) -> bool:
     if _supervisado():
         _reiniciar_proceso(f"rollback {version}")
     return True
+
+
+# ─── 35: túnel de Cloudflare que se reinicia solo ────────────────────────────
+_TUNEL_ESTADO = BASE_DIR / "config" / "tunel_estado.json"
+_TUNEL_READY_URL = os.getenv("MRD_TUNEL_READY_URL", "http://127.0.0.1:20241/ready")
+_TUNEL_FALLOS = 0
+
+
+def _tunel_ok() -> bool:
+    import urllib.request as _ur
+    try:
+        with _ur.urlopen(_TUNEL_READY_URL, timeout=5) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def _tunel_decidir(fallos: int, estado: dict, ahora: datetime) -> str:
+    """'ok' | 'esperar' | 'reiniciar' | 'reiniciar_backup' | 'avisar'. Comprobación cada 5 min: 2 fallos = 10 min caído."""
+    if fallos <= 0:
+        return "ok"
+    if fallos < 2:
+        return "esperar"
+    ultimo = estado.get("ultimo_reinicio")
+    try:
+        ultimo_dt = datetime.fromisoformat(ultimo) if ultimo else None
+    except ValueError:
+        ultimo_dt = None
+    if ultimo_dt and (ahora - ultimo_dt).total_seconds() < 1800:
+        return "reiniciar_backup" if fallos == 4 else ("avisar" if fallos in (6, 12, 36) else "esperar")
+    return "reiniciar"
+
+
+def _tunel_reiniciar(servicio: str) -> bool:
+    if sys.platform != "win32":
+        return False
+    try:
+        r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", f"Restart-Service -Name '{servicio}' -Force -ErrorAction Stop; 'ok'"], capture_output=True, text=True, timeout=90)
+        return r.returncode == 0 and "ok" in (r.stdout or "")
+    except Exception as exc:
+        mrd_logging.log_error(f"Reinicio de {servicio}: {exc}")
+        return False
+
+
+def _tunel_tick() -> str:
+    global _TUNEL_FALLOS
+    _TUNEL_FALLOS = 0 if _tunel_ok() else _TUNEL_FALLOS + 1
+    estado = _estado_json_leer(_TUNEL_ESTADO)
+    accion = _tunel_decidir(_TUNEL_FALLOS, estado, datetime.now())
+    if accion in ("reiniciar", "reiniciar_backup"):
+        servicio = "Cloudflared" if accion == "reiniciar" else "CloudflaredBackup"
+        ok = _tunel_reiniciar(servicio)
+        estado["ultimo_reinicio"] = datetime.now().isoformat(timespec="seconds")
+        estado["servicio"] = servicio
+        _estado_json_escribir(_TUNEL_ESTADO, estado)
+        _notificar_sistema("Túnel de Cloudflare caído: reiniciado" if ok else "Túnel de Cloudflare caído: no se pudo reiniciar", f"El túnel llevaba {_TUNEL_FALLOS * 5} minutos sin responder. Se ha {'reiniciado' if ok else 'intentado reiniciar'} el servicio {servicio}." + ("" if ok else " Si sigue caído, activa el failover (el token DNS está pendiente en Salud del sistema)."), prioridad="alta")
+    elif accion == "avisar":
+        _notificar_sistema("Túnel de Cloudflare sigue caído", f"{_TUNEL_FALLOS * 5} minutos sin salida a internet pese a los reinicios. La app funciona en la red local; para el failover DNS hace falta renovar el token de Cloudflare.")
+    return accion
+
+
+def _tunel_bg():
+    import time as _t
+    _t.sleep(120)
+    while True:
+        try:
+            _tunel_tick()
+        except Exception as exc:
+            mrd_logging.log_error(f"Túnel: {exc}")
+        _t.sleep(300)
 
 
 def _alertas_consumo_obras_bg():
