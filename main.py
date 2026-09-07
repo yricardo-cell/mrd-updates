@@ -947,6 +947,10 @@ def startup_event():
                 while True:
                     _alertas_no_retorno()
                     _alertas_stock_bajo()
+                    # Tareas semanales (2.7.69): antes estaban definidas pero no se llamaban.
+                    _aviso_semanal_calendario_bg()
+                    _resumen_semanal_bg()
+                    _ensayo_restauracion_bg()
                     _tm.sleep(6*3600)  # cada 6 horas
             _thr.Thread(target=_run_alerts, daemon=True, name="alertas_bg").start()
         except Exception:
@@ -9284,6 +9288,15 @@ def _resumen_semanal_bg():
         mrd_logging.log_error(f"Resumen semanal: {exc}")
 
 
+def _ensayo_restauracion_bg():
+    """Ensayo de restauración semanal automático (2.7.69)."""
+    try:
+        import backup_manager as _bke
+        _bke.ensayo_automatico()
+    except Exception as exc:  # pragma: no cover
+        mrd_logging.log_error(f"Ensayo de restauración: {exc}")
+
+
 # ─── Importar formaciones y reconocimientos desde Excel (2.7.61) ─────────────
 
 FORMACIONES_CABECERAS = ["Código trabajador", "Nombre trabajador", "Curso", "Tipo", "Entidad", "Fecha realización", "Fecha caducidad", "Nº certificado"]
@@ -16811,6 +16824,15 @@ async def api_bk_externo_sincronizar(user: Usuario = Depends(requiere_login)):
     _bk_requiere_admin(user)
     result = await run_in_threadpool(_bk.sincronizar_externo)
     _bk_audit(user, "externo_sincronizar", str(result.get("copiados", 0)))
+    return result
+
+
+@app.post("/api/backup/ensayo")
+async def api_bk_ensayo(user: Usuario = Depends(requiere_login)):
+    """Ensayo de restauración (2.7.69): restaura la última copia en un fichero aparte y comprueba que abre y cuadra."""
+    _bk_requiere_admin(user)
+    result = await run_in_threadpool(_bk.ensayo_restauracion)
+    _bk_audit(user, "ensayo_restauracion", ("OK " if result.get("ok") else "FALLIDO ") + str(result.get("archivo") or result.get("error") or ""))
     return result
 
 

@@ -816,6 +816,7 @@ def get_backup_status() -> dict:
         },
         "encrypt_enabled": cfg["encrypt"],
         "externo": externo_estado(),
+        "ensayo": ensayo_estado(),
         "checked_at":     datetime.utcnow().isoformat(timespec="seconds"),
     }
 
@@ -890,3 +891,168 @@ def start_scheduler() -> bool:
 
     Thread(target=_worker, daemon=True, name="backup_scheduler").start()
     return True
+
+
+# ─── Ensayo de restauración (2.7.69) ─────────────────────────────────────────
+# Una copia solo vale si se puede restaurar. El ensayo coge la última copia,
+# la restaura en un fichero aparte (nunca toca la base de datos real), comprueba
+# su integridad y cuadra los recuentos de las tablas principales con el programa.
+ENSAYO_CFG = BASE_DIR / "config" / "ensayo_restauracion.json"
+ENSAYO_TABLAS = ["herramientas", "trabajadores", "movimientos", "ubicaciones", "albaranes_salida", "materiales",
+                 "stock_epi", "epis_individuales", "usuarios", "maquinaria", "obras"]
+ENSAYO_TABLAS_CLAVE = ("herramientas", "trabajadores", "movimientos")
+ENSAYO_MAX_HORAS = 36
+ENSAYO_CADA_DIAS = 7
+
+
+def _ensayo_leer() -> dict:
+    try:
+        return json.loads(ENSAYO_CFG.read_text(encoding="utf-8")) if ENSAYO_CFG.exists() else {}
+    except Exception:
+        return {}
+
+
+def _ensayo_escribir(data: dict) -> None:
+    ENSAYO_CFG.parent.mkdir(parents=True, exist_ok=True)
+    ENSAYO_CFG.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _ultimo_backup_path() -> Path | None:
+    """La copia más reciente de la base de datos (según el historial; si no, la más nueva en disco)."""
+    for m in get_history(200):
+        nombre = str(m.get("filename") or "")
+        if m.get("exists") and m.get("tipo") in ("daily", "weekly", "monthly", "manual") and re.search(r"\.db(\.gz)?(\.enc)?$", nombre):
+            return Path(m["path"])
+    cands = [f for f in BACKUPS_DIR.rglob("*") if f.is_file() and re.search(r"\.db(\.gz)?(\.enc)?$", f.name)]
+    return max(cands, key=lambda f: f.stat().st_mtime) if cands else None
+
+
+def _leer_backup_sqlite(path: Path) -> bytes:
+    raw = path.read_bytes()
+    name = path.name.lower()
+    if ".enc" in name:
+        key = _get_config().get("encrypt_key", "")
+        if not key:
+            raise ValueError("Se requiere MRD_BACKUP_KEY para descifrar la copia")
+        raw = _decrypt_data(raw, key)
+    if ".gz" in name:
+        raw = gzip.decompress(raw)
+    if raw[:16] != b"SQLite format 3\x00":
+        raise ValueError("El fichero no es una base de datos SQLite válida")
+    return raw
+
+
+def _conteos_sqlite(con) -> dict:
+    existentes = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    return {t: int(con.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]) for t in ENSAYO_TABLAS if t in existentes}
+
+
+def _conteos_actuales() -> dict:
+    from config import DATABASE_URL
+    if not str(DATABASE_URL).startswith("sqlite"):
+        return {}
+    db_path = Path(str(DATABASE_URL).replace("sqlite:///", "").replace("sqlite://", ""))
+    if not db_path.is_absolute():
+        db_path = BASE_DIR / db_path
+    if not db_path.exists():
+        return {}
+    con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        return _conteos_sqlite(con)
+    finally:
+        con.close()
+
+
+def ensayo_restauracion(backup_path: str | None = None) -> dict:
+    """Restaura la última copia en un fichero temporal y comprueba que abre y cuadra."""
+    import tempfile
+    t0 = time.perf_counter()
+    ahora = datetime.now()
+    path = Path(backup_path) if backup_path else _ultimo_backup_path()
+    res = {"ok": False, "fecha": ahora.strftime("%d/%m/%Y %H:%M"), "fecha_iso": ahora.isoformat(timespec="seconds"),
+           "archivo": path.name if path else "", "tamano_mb": 0.0, "antiguedad_horas": None, "integridad": "",
+           "tablas": {}, "avisos": [], "error": "", "duracion_ms": 0}
+    if path is None or not path.exists():
+        res["error"] = "No hay ninguna copia de seguridad que ensayar"
+    else:
+        try:
+            st = path.stat()
+            res["tamano_mb"] = round(st.st_size / 1024 ** 2, 2)
+            res["antiguedad_horas"] = round((ahora.timestamp() - st.st_mtime) / 3600, 1)
+            raw = _leer_backup_sqlite(path)
+            fd, tmp = tempfile.mkstemp(prefix="mrd_ensayo_", suffix=".db")
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(raw)
+            try:
+                con = sqlite3.connect(f"file:{tmp}?mode=ro", uri=True)
+                try:
+                    res["integridad"] = str(con.execute("PRAGMA integrity_check").fetchone()[0])
+                    copia = _conteos_sqlite(con)
+                finally:
+                    con.close()
+            finally:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+            actual = _conteos_actuales()
+            for t, n in copia.items():
+                res["tablas"][t] = {"copia": n, "actual": actual.get(t)}
+            if res["integridad"] != "ok":
+                res["avisos"].append(f"La copia tiene errores de integridad: {res['integridad'][:120]}")
+            for t in ENSAYO_TABLAS_CLAVE:
+                n, a = copia.get(t), actual.get(t)
+                if n is None and t in actual:
+                    res["avisos"].append(f"La copia no tiene la tabla {t}: parece incompleta")
+                elif n is not None and a and n < a * 0.9:
+                    res["avisos"].append(f"{t}: la copia tiene {n} y el programa {a}: parece incompleta")
+            if res["antiguedad_horas"] is not None and res["antiguedad_horas"] > ENSAYO_MAX_HORAS:
+                res["avisos"].append(f"La última copia tiene {res['antiguedad_horas']:.0f} horas: la copia diaria no está funcionando")
+            res["ok"] = not res["avisos"]
+        except Exception as exc:
+            res["error"] = f"No se pudo restaurar la copia: {exc}"
+    res["duracion_ms"] = round((time.perf_counter() - t0) * 1000)
+    datos = _ensayo_leer()
+    datos["ultimo"] = res
+    _ensayo_escribir(datos)
+    if not res["ok"]:
+        _aviso_ensayo(res)
+    logger.info("Ensayo de restauración %s: %s", "OK" if res["ok"] else "FALLIDO", res["archivo"] or res["error"])
+    return res
+
+
+def _aviso_ensayo(res: dict) -> None:
+    """Aviso interno (uno al día) cuando el ensayo de restauración falla."""
+    try:
+        from database import SessionLocal as _SLe
+        from models import Aviso as _Aviso
+        db = _SLe()
+        try:
+            titulo = f"Ensayo de restauración fallido {datetime.now().strftime('%d/%m/%Y')}"
+            if not db.query(_Aviso).filter(_Aviso.titulo == titulo).first():
+                motivo = res.get("error") or "; ".join(res.get("avisos") or [])
+                db.add(_Aviso(titulo=titulo, tipo="alerta", prioridad="alta", enlace="/backup",
+                              mensaje=f"La última copia de seguridad ({res.get('archivo') or 'ninguna'}) no ha pasado el ensayo de restauración: {motivo}. "
+                                      "Revisa la página de Copias de seguridad."))
+                db.commit()
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("No se pudo crear el aviso del ensayo: %s", exc)
+
+
+def ensayo_estado() -> dict:
+    return _ensayo_leer().get("ultimo") or {}
+
+
+def ensayo_automatico(now: datetime | None = None) -> dict | None:
+    """Ensayo semanal automático: corre si el último tiene más de ENSAYO_CADA_DIAS días."""
+    now = now or datetime.now()
+    ultimo = ensayo_estado()
+    try:
+        ultima_fecha = datetime.fromisoformat(ultimo["fecha_iso"]) if ultimo.get("fecha_iso") else None
+    except ValueError:
+        ultima_fecha = None
+    if ultima_fecha and (now - ultima_fecha) < timedelta(days=ENSAYO_CADA_DIAS):
+        return None
+    return ensayo_restauracion()

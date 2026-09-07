@@ -32,6 +32,18 @@
     </div>
   </div>
 
+  <div class="card shadow-sm mb-3" id="card-ensayo">
+    <div class="card-header fw-semibold"><i class="bi bi-life-preserver me-2 text-success"></i>Ensayo de restauración</div>
+    <div class="card-body">
+      <p class="small text-muted mb-2">Una copia solo vale si se puede restaurar. El ensayo coge la última copia, la restaura en un fichero aparte (nunca toca la base de datos real), comprueba que abre sin errores y cuadra los recuentos (herramientas, trabajadores, movimientos…) con el programa. Se hace solo cada semana y avisa si falla.</p>
+      <div class="d-flex gap-2 flex-wrap align-items-center">
+        <button class="btn btn-sm btn-success" type="button" onclick="ensProbar()"><i class="bi bi-play-circle"></i> Probar la última copia ahora</button>
+        <span id="ensResumen" class="small text-muted">—</span>
+      </div>
+      <div id="ensDetalle" class="small mt-2"></div>
+    </div>
+  </div>
+
   <div class="row g-3">
 
     <!-- Estado -->
@@ -208,6 +220,27 @@ async function extSincronizar() {
   bkRefresh();
 }
 
+function ensRender(e) {
+  const res = document.getElementById('ensResumen'), det = document.getElementById('ensDetalle');
+  if (!res) return;
+  if (!e || !e.fecha) { res.className = 'small text-muted'; res.textContent = 'Todavía no se ha hecho ningún ensayo.'; det.innerHTML = ''; return; }
+  res.className = 'small ' + (e.ok ? 'text-success' : 'text-danger');
+  res.textContent = (e.ok ? 'Último ensayo correcto' : 'Último ensayo FALLIDO') + ` · ${e.fecha}` + (e.archivo ? ` · ${e.archivo}` : '') + (e.tamano_mb ? ` · ${e.tamano_mb} MB` : '') + (e.antiguedad_horas != null ? ` · copia de hace ${Math.round(e.antiguedad_horas)} h` : '') + (e.duracion_ms ? ` · ${e.duracion_ms} ms` : '');
+  let html = '';
+  if (e.error) html += `<div class="text-danger">${e.error}</div>`;
+  (e.avisos || []).forEach(a => { html += `<div class="text-danger"><i class="bi bi-exclamation-triangle"></i> ${a}</div>`; });
+  const filas = Object.entries(e.tablas || {});
+  if (filas.length) html += '<table class="table table-sm mb-0 mt-1" style="max-width:520px"><thead><tr><th>Tabla</th><th class="text-end">En la copia</th><th class="text-end">En el programa</th></tr></thead><tbody>' + filas.map(([t, v]) => `<tr><td>${t}</td><td class="text-end">${v.copia}</td><td class="text-end">${v.actual == null ? '—' : v.actual}</td></tr>`).join('') + '</tbody></table>';
+  det.innerHTML = html;
+}
+async function ensProbar() {
+  const res = document.getElementById('ensResumen'); res.className = 'small text-muted'; res.textContent = 'Restaurando la última copia en un fichero aparte…';
+  const r = await fetchCsrf('/api/backup/ensayo', { method: 'POST' });
+  const d = await r.json();
+  if (!r.ok) { res.className = 'small text-danger'; res.textContent = d.detail || 'No se pudo ensayar'; return; }
+  ensRender(d);
+}
+
 function tipoBadge(t) {
   const m = {daily:'primary',weekly:'success',monthly:'info',manual:'secondary',pre_update:'warning',pre_import:'warning',pre_migrate:'warning'};
   return `<span class="badge bg-${m[t]||'dark'}">${t}</span>`;
@@ -222,6 +255,7 @@ async function bkRefresh() {
 
     document.getElementById('totalBkBadge').textContent = (st.total_backups || 0) + ' backups';
     extRender(st.externo);
+    ensRender(st.ensayo);
     document.getElementById('bkDir').textContent    = st.backup_dir || '—';
     document.getElementById('bkTotal').textContent  = st.total_backups || 0;
     document.getElementById('bkSize').textContent   = (st.total_size_mb || 0) + ' MB';
