@@ -17857,6 +17857,20 @@ def portal_trabajador(token: str, request: Request, db: Session = Depends(get_db
     ] or KIT_EPI_INICIAL
     kit_estado_portal = _kit_epi_estado(db, t.id, catalogo_kit_portal)
     historial_portal = _historial_trabajador(db, t)[:60]  # 2.7.65: "Mi historial"
+    # Pedido en dos toques (2.7.72, P2): repetir el último pedido y lo que suele pedir.
+    ultimo_pedido: list[dict] = []
+    frec: dict[tuple, dict] = {}
+    for sol in sorted(solicitudes, key=lambda x: (x.creado_en or datetime.min, x.id), reverse=True):
+        if sol.estado in ("cancelada", "rechazada"):
+            continue
+        lineas = [{"tipo": l.tipo or "otro", "descripcion": (l.descripcion or "").strip(), "talla": (l.talla or "").strip(), "cantidad": int(l.cantidad or 1)} for l in sol.lineas if (l.descripcion or "").strip()]
+        if lineas and not ultimo_pedido:
+            ultimo_pedido = lineas
+        for l in lineas:
+            k = (l["tipo"], l["descripcion"].lower(), l["talla"].lower())
+            f = frec.setdefault(k, dict(l, veces=0))
+            f["veces"] += 1
+    frecuentes = sorted(frec.values(), key=lambda f: (-f["veces"], f["descripcion"]))[:8]
     response = templates.TemplateResponse(request, "portal_trabajador.html", {
         "request": request, "trabajador": t, "epis": epis,
         "kit_estado": kit_estado_portal, "catalogo_kit": catalogo_kit_portal,
@@ -17875,6 +17889,7 @@ def portal_trabajador(token: str, request: Request, db: Session = Depends(get_db
         "carnet_qr_b64": carnet_qr_b64,
         "dotacion_lineas": dotacion_lineas,
         "historial_portal": historial_portal,
+        "ultimo_pedido": ultimo_pedido, "frecuentes": frecuentes,
     })
     response.headers["Cache-Control"] = "no-store, private"
     response.headers["Referrer-Policy"] = "no-referrer"
