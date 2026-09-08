@@ -716,7 +716,7 @@ const GlobalScanner = (() => {
     });
     if (event.key.length === 1 && !detector.buffer) captureField(event.target);
     const localInput = event.target?.matches?.(
-      '#counter-scan,#inventory-scan-input,#line-filter,#receipt-code,#transfer-scan,#prep-scan,#purchase-code'
+      '#counter-scan,#inventory-scan-input,#line-filter,#receipt-code,#transfer-scan,#prep-scan,#purchase-code,#maletin-codigo'
     );
     // Los campos dedicados también aportan su valor compuesto: ciertos
     // lectores Android envían letras como key='Unidentified', aunque sí las
@@ -749,7 +749,7 @@ const GlobalScanner = (() => {
         });
         document.dispatchEvent(scanEvent);
         const localWorkflow = document.querySelector(
-          '#counter-scan,#inventory-scan-input,#line-filter,#receipt-code,#transfer-scan,#prep-scan,#purchase-code'
+          '#counter-scan,#inventory-scan-input,#line-filter,#receipt-code,#transfer-scan,#prep-scan,#purchase-code,#maletin-codigo'
         );
         if (!scanEvent.defaultPrevented && !localWorkflow) {
           location.assign('/scan?codigo=' + encodeURIComponent(code) + '&origen=pistola');
