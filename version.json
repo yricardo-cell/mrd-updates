@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.77",
-    "nombre":  "MRD TOOL CONTROL -- Maletin facil: piezas desde la ficha del maletin, pieza nueva con codigo, quitar, avisos y lote desde el Mostrador",
+    "version_actual":  "2.7.78",
+    "nombre":  "MRD TOOL CONTROL -- Lector: lecturas pegadas y colas de codigo. Cajon/maletin: casilla en el alta, pistola en la ficha, botones sin cortar. Manual de uso en PDF.",
     "fecha":  "2026-09-08",
     "cambios":  [
-                    "Maletin facil: piezas desde la ficha del maletin, pieza nueva con codigo, quitar, avisos y lote desde el Mostrador"
+                    "Lector: lecturas pegadas y colas de codigo. Cajon/maletin: casilla en el alta, pistola en la ficha, botones sin cortar. Manual de uso en PDF."
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.77.zip",
-    "sha256":  "835f72f526dd3a13e18bee656426063f7913309e77829443c913d0a376d1bb11"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.78.zip",
+    "sha256":  "66a59113d8719b066938431a16cb077e107621d9b9368f4d20bc9a3a2261355b"
 }
