@@ -12324,6 +12324,144 @@ async def configuracion_arreglos_estado(eid: int, request: Request, user: Usuari
     return RedirectResponse("/configuracion/arreglos", status_code=303)
 
 
+# ─── Maletín fácil: piezas desde el maletín, lote desde el Mostrador ─────────
+def _maletin_pieza_por_codigo(db: Session, texto: str, almacen_id: int | None):
+    """Localiza una herramienta por id, código o número de serie; si no, por el escáner tolerante."""
+    t = " ".join((texto or "").split())
+    if not t:
+        return None
+    if t.isdigit():
+        h = db.get(Herramienta, int(t))
+        if h is not None and h.activa:
+            return h
+    h = db.query(Herramienta).filter(Herramienta.activa == True, or_(func.upper(Herramienta.codigo) == t.upper(), func.upper(Herramienta.num_serie) == t.upper())).first()
+    if h is not None:
+        return h
+    try:
+        item = resolve_counter_item(db, t, almacen_id)
+        if item.get("tipo") == "herramienta":
+            return db.get(Herramienta, int(item["id"]))
+    except CounterError:
+        pass
+    q = db.query(Herramienta).filter(Herramienta.activa == True, func.lower(Herramienta.nombre).like(f"%{t.lower()}%"))
+    return q.first() if q.count() == 1 else None
+
+
+def _maletin_meter(db: Session, maletin, pieza, usuario_id: int | None, forzar: bool = False) -> dict:
+    """Mete una pieza en el maletín. Sin `forzar`, se para y devuelve avisos si la pieza está en otro maletín,
+    la tiene alguien distinto o va en otro estado."""
+    if pieza is None:
+        return {"ok": False, "error": "No encuentro esa herramienta"}
+    if pieza.id == maletin.id:
+        return {"ok": False, "error": "El maletín no puede meterse dentro de sí mismo"}
+    if getattr(pieza, "es_maletin", False):
+        return {"ok": False, "error": f"{pieza.nombre} es un maletín: un maletín no va dentro de otro"}
+    if pieza.maletin_id == maletin.id:
+        return {"ok": True, "ya": True, "pieza": pieza.nombre, "avisos": []}
+    avisos = []
+    if pieza.maletin_id and pieza.maletin_id != maletin.id:
+        otro = db.get(Herramienta, pieza.maletin_id)
+        avisos.append(f"ya está en el maletín {otro.codigo if otro else pieza.maletin_id}")
+    if pieza.responsable_id and pieza.responsable_id != maletin.responsable_id:
+        t = db.get(Trabajador, pieza.responsable_id)
+        avisos.append(f"la tiene {t.nombre_completo if t else 'otro trabajador'}")
+    if (pieza.estado or "") != (maletin.estado or "") and pieza.estado not in ("disponible", "en_almacen"):
+        avisos.append(f"está «{pieza.estado}» y el maletín «{maletin.estado}»")
+    if avisos and not forzar:
+        return {"ok": False, "avisos": avisos, "pieza": pieza.nombre, "codigo": pieza.codigo}
+    pieza.maletin_id = maletin.id
+    if maletin.almacen_id:
+        pieza.almacen_id = maletin.almacen_id
+    db.add(AuditoriaLog(tabla="herramientas", registro_id=pieza.id, accion="maletin", resumen=f"Metida en el maletín {maletin.codigo}" + (" (forzado: " + "; ".join(avisos) + ")" if avisos else ""), usuario_id=usuario_id))
+    return {"ok": True, "pieza": pieza.nombre, "avisos": avisos}
+
+
+def _maletin_de(db: Session, mid: int, user: Usuario):
+    if not tiene_permiso(user, "editar"):
+        raise HTTPException(403, "Sin permiso para cambiar el contenido")
+    m = db.get(Herramienta, mid)
+    if m is None or not m.activa:
+        raise HTTPException(404, "Maletín no encontrado")
+    if not getattr(m, "es_maletin", False):
+        raise HTTPException(409, "Esa herramienta no es un maletín")
+    return m
+
+
+def _maletin_redirect(mid: int, clase: str, msg: str, extra: str = "") -> RedirectResponse:
+    return RedirectResponse(f"/herramientas/{mid}?mal={clase}&msg={urllib.parse.quote(msg[:300])}{extra}#contenido-maletin", status_code=303)
+
+
+@app.post("/herramientas/{mid}/contenido/anadir", response_class=RedirectResponse)
+async def maletin_contenido_anadir(mid: int, request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    m = _maletin_de(db, mid, user)
+    form = await request.form()
+    codigo = str(form.get("codigo") or "").strip()
+    forzar = str(form.get("forzar") or "") == "1"
+    pieza = _maletin_pieza_por_codigo(db, codigo, m.almacen_id)
+    res = _maletin_meter(db, m, pieza, user.id, forzar)
+    if res.get("ok"):
+        db.commit()
+        return _maletin_redirect(mid, "ok", (f"{res['pieza']} ya estaba en el maletín" if res.get("ya") else f"{res['pieza']} metida en el maletín") + ((" (" + "; ".join(res["avisos"]) + ")") if res.get("avisos") else ""))
+    if res.get("avisos"):
+        return _maletin_redirect(mid, "aviso", f"{res['pieza']}: " + "; ".join(res["avisos"]), "&codigo=" + urllib.parse.quote(res.get("codigo") or codigo))
+    return _maletin_redirect(mid, "err", res.get("error") or f"No encuentro «{codigo}»")
+
+
+@app.post("/herramientas/{mid}/contenido/{pid}/quitar", response_class=RedirectResponse)
+def maletin_contenido_quitar(mid: int, pid: int, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    m = _maletin_de(db, mid, user)
+    p = db.get(Herramienta, pid)
+    if p is None or p.maletin_id != m.id:
+        raise HTTPException(404, "Esa pieza no está en este maletín")
+    p.maletin_id = None
+    db.add(AuditoriaLog(tabla="herramientas", registro_id=p.id, accion="maletin", resumen=f"Sacada del maletín {m.codigo}", usuario_id=user.id))
+    db.commit()
+    return _maletin_redirect(mid, "ok", f"{p.nombre} sacada del maletín (sigue existiendo como herramienta suelta)")
+
+
+@app.post("/herramientas/{mid}/contenido/nueva", response_class=RedirectResponse)
+async def maletin_contenido_nueva(mid: int, request: Request, user: Usuario = Depends(requiere_login), db: Session = Depends(get_db)):
+    """Crea una pieza que no existía (batería, cargador…) ya dentro del maletín, con su código MRD."""
+    m = _maletin_de(db, mid, user)
+    form = await request.form()
+    nombre = " ".join(str(form.get("nombre") or "").split())[:200]
+    if len(nombre) < 2:
+        return _maletin_redirect(mid, "err", "Escribe el nombre de la pieza")
+    categoria = " ".join(str(form.get("categoria") or "").split())[:100] or m.categoria
+    h = Herramienta(codigo=generar_referencia_herramienta(db), nombre=nombre, categoria=categoria, marca=m.marca, estado=m.estado or "disponible", activa=True,
+                    almacen_id=m.almacen_id, obra_id=m.obra_id, responsable_id=m.responsable_id, maletin_id=m.id, ubicacion_id=getattr(m, "ubicacion_id", None))
+    db.add(h)
+    db.flush()
+    db.add(AuditoriaLog(tabla="herramientas", registro_id=h.id, accion="alta", resumen=f"Pieza nueva creada dentro del maletín {m.codigo}", usuario_id=user.id))
+    db.commit()
+    return _maletin_redirect(mid, "ok", f"{h.nombre} creada dentro del maletín con el código {h.codigo}", f"&nueva={h.id}")
+
+
+@app.post("/api/herramientas/{mid}/contenido/anadir-lote")
+async def api_maletin_anadir_lote(mid: int, request: Request, user: Usuario = Depends(requiere_login_scan), db: Session = Depends(get_db)):
+    """Desde el Mostrador o el kiosco: varias piezas escaneadas entran de golpe en el maletín."""
+    m = _maletin_de(db, mid, user)
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    ids = [int(x) for x in (body.get("ids") or []) if str(x).isdigit()][:100]
+    forzar = bool(body.get("forzar"))
+    metidas, avisos, errores = [], [], []
+    for pid in ids:
+        res = _maletin_meter(db, m, db.get(Herramienta, pid), user.id, forzar)
+        if res.get("ok"):
+            metidas.append(res["pieza"])
+            if res.get("avisos"):
+                avisos.append(f"{res['pieza']}: " + "; ".join(res["avisos"]))
+        elif res.get("avisos"):
+            avisos.append(f"{res['pieza']}: " + "; ".join(res["avisos"]))
+        else:
+            errores.append(res.get("error") or str(pid))
+    db.commit()
+    return {"ok": bool(metidas) and not errores, "metidas": metidas, "avisos": avisos, "errores": errores, "maletin": m.codigo}
+
+
 def _alertas_consumo_obras_bg():
     """Una vez por semana: un aviso por cada obra/material con consumo anómalo (sin repetir la misma semana)."""
     try:
