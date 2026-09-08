@@ -79,3 +79,12 @@ config/resumen_diario_estado.json
 config/limpieza_estado.json
 config/ultima_version_comprobada.json
 config/consumo_obras_estado.json
+config/planes_estado.json
+config/punto_pedido_estado.json
+config/reparacion_estado.json
+config/rollback_estado.json
+config/tunel_estado.json
+config/recursos_estado.json
+config/restauracion_auto.json
+config/drive_estado.json
+config/vigilante_estado.json

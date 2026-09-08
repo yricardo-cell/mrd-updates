@@ -133,6 +133,8 @@ $robocopyArgs = @(
            "etiquetas.json", "ensayo_restauracion.json", "backup_externo.json",
            "resumen_diario_estado.json", "limpieza_estado.json", "ultima_version_comprobada.json",
            "consumo_obras_estado.json", "errores_avisados.json", "drive_estado.json", "vigilante_estado.json",
+           "planes_estado.json", "punto_pedido_estado.json", "reparacion_estado.json", "rollback_estado.json",
+           "tunel_estado.json", "recursos_estado.json", "restauracion_auto.json",
     "/NFL", "/NDL", "/NJH", "/NJS"
 )
 & robocopy @robocopyArgs | Out-Null
