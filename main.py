@@ -2391,6 +2391,7 @@ async def herramienta_nueva_post(
     foto: UploadFile = File(None),
     redirect: str = Form(""),
     tipo_seguimiento: str = Form("individual"),
+    es_maletin: str = Form(""),
 ):
     if not tiene_permiso(user, "crear"):
         raise HTTPException(403, "Sin permiso")
@@ -2451,6 +2452,7 @@ async def herramienta_nueva_post(
         foto=foto_path,
         activa=True,
         tipo_seguimiento=tipo_seguimiento if tipo_seguimiento in ("individual", "generico") else "individual",
+        es_maletin=bool(es_maletin),
     )
     db.add(h)
     db.flush()
