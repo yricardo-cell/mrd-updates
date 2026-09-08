@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.76",
-    "nombre":  "MRD TOOL CONTROL -- 44 mejoras: arreglos, Salud del sistema, plazos y foto en Mostrador, reservas, kiosco, pantalla TV, punto de pedido, planes de mantenimiento, informes nuevos, bot Telegram, Google Drive, autocuracion y arreglos de errores desde Telegram",
+    "version_actual":  "2.7.77",
+    "nombre":  "MRD TOOL CONTROL -- Maletin facil: piezas desde la ficha del maletin, pieza nueva con codigo, quitar, avisos y lote desde el Mostrador",
     "fecha":  "2026-09-08",
     "cambios":  [
-                    "44 mejoras: arreglos, Salud del sistema, plazos y foto en Mostrador, reservas, kiosco, pantalla TV, punto de pedido, planes de mantenimiento, informes nuevos, bot Telegram, Google Drive, autocuracion y arreglos de errores desde Telegram"
+                    "Maletin facil: piezas desde la ficha del maletin, pieza nueva con codigo, quitar, avisos y lote desde el Mostrador"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.76.zip",
-    "sha256":  "ce5f8e1bd814a99c25cba34e690979067df7ad4a866bf1aa9d3f420b1e0dc740"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.77.zip",
+    "sha256":  "835f72f526dd3a13e18bee656426063f7913309e77829443c913d0a376d1bb11"
 }
