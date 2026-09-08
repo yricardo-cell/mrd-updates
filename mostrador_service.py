@@ -273,6 +273,9 @@ def resolve_counter_item(db: Session, raw_code: str, warehouse_id: int | None = 
     parecido = _resolve_por_parecido(db, code, warehouse_id)
     if parecido:
         return parecido
+    fragmento = _resolve_por_fragmento(db, code, warehouse_id)
+    if fragmento:
+        return fragmento
     raise CounterError(404, "QR no reconocido o articulo inactivo")
 
 
@@ -380,6 +383,42 @@ def _resolve_por_parecido(db: Session, code: str, warehouse_id: int | None = Non
     real_code = matches.pop()
     try:
         item = resolve_counter_item(db, real_code, warehouse_id)
+    except CounterError:
+        return None
+    item["lectura_reparada"] = code
+    return item
+
+
+_FRAGMENTO_RE = re.compile(r"^[A-F0-9]{5,16}$")
+
+
+def _resolve_por_fragmento(db: Session, code: str, warehouse_id: int | None = None) -> dict | None:
+    """Lecturas que llegan solo con la cola del código (2.7.78).
+
+    El 08/09/2026 el lector del almacén entregó «6767F» y «4BF42B0»: los últimos
+    caracteres de dos códigos MRD-HTA distintos (el resto se perdió). Si el valor
+    es hexadecimal de 5 a 16 caracteres (no solo dígitos, que ya tienen su vía) y
+    coincide con el final de un único código activo largo, se resuelve ese artículo
+    por la vía normal y se marca la lectura como reparada. Ante cualquier
+    ambigüedad no se adivina."""
+    c = (code or "").strip().upper()
+    if not _FRAGMENTO_RE.match(c) or c.isdigit():
+        return None
+    matches: set[str] = set()
+    for model, columns, active_attr in _CODIGOS_POR_DIGITOS:
+        for name in columns:
+            column = getattr(model, name)
+            statement = select(column).where(column.is_not(None), column != "")
+            if active_attr:
+                statement = statement.where(getattr(model, active_attr) == True)
+            for (value,) in db.execute(statement):
+                v = str(value).strip().upper()
+                if len(v) >= 20 and v != c and v.endswith(c):
+                    matches.add(str(value).strip())
+    if len(matches) != 1:
+        return None
+    try:
+        item = resolve_counter_item(db, matches.pop(), warehouse_id)
     except CounterError:
         return None
     item["lectura_reparada"] = code

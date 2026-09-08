@@ -8,6 +8,10 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 
 _QUERY_KEYS = ("codigo", "code", "qr", "ref", "referencia", "barcode")
+# Identificador interno MRD completo (prefijo de tipo + 32 hex) incrustado en una lectura
+# pegada, y prefijo repetido (MRD-HTA-MRD-HTA-…) que algunos lectores entregan al reintentar.
+_MRD_ID_RE = re.compile(r"MRD-[A-Z0-9]{2,6}-[A-F0-9]{32}")
+_MRD_PREFIJO_DOBLE = re.compile(r"^(MRD-[A-Z0-9]{2,6}-)(?:\1)+")
 _DASHES = str.maketrans({
     "‐": "-", "‑": "-", "‒": "-", "–": "-", "—": "-", "−": "-",
 })
@@ -53,9 +57,11 @@ def _clean(value: str) -> str:
     value = re.sub(r"^(?:CODIGO|CÓDIGO|CODE|QR|REF)\s*[:=]\s*", "", value, flags=re.I)
     # Algunos lectores HID configurados con un mapa de teclado distinto al de
     # Windows/Android escriben el separador «-» como apóstrofo. Solo se corrige
-    # cuando todo el valor tiene forma de identificador para no alterar nombres
-    # ni textos introducidos manualmente.
-    if re.fullmatch(r"[A-Za-z0-9]+(?:['´’`][A-Za-z0-9]+)+", value):
+    # cuando todo el valor tiene forma de identificador (letras, dígitos, guiones y
+    # apóstrofos, sin espacios) para no alterar nombres ni textos introducidos a mano.
+    # Desde 2.7.78 también cuando el valor mezcla guiones y apóstrofos: es el caso de
+    # una lectura doble pegada (MRD-HTA-…MRD'HTA'…) vista el 08/09/2026.
+    if re.search(r"['´’`]", value) and re.fullmatch(r"[A-Za-z0-9]+(?:['´’`-][A-Za-z0-9]+)+", value):
         value = re.sub(r"['´’`]", "-", value)
     # Code 39 puede entregar los asteriscos de inicio/fin.
     if len(value) > 2 and value.startswith("*") and value.endswith("*"):
@@ -99,7 +105,16 @@ def scan_code_candidates(raw_value: str) -> list[str]:
         value = _clean(value).split("?", 1)[0].split("#", 1)[0].strip().upper()
         if not value:
             continue
-        for candidate in (value, re.sub(r"\s+", "", value)):
+        value = _MRD_PREFIJO_DOBLE.sub(r"\1", value)
+        compacto = re.sub(r"\s+", "", value)
+        variantes = [value, compacto]
+        # Lectura pegada (dos QR seguidos, o la cola de una lectura anterior delante):
+        # el primer identificador MRD completo incrustado va por delante. Solo uno,
+        # para que dos etiquetas leídas de golpe no devuelvan dos artículos a la vez.
+        incrustado = _MRD_ID_RE.search(compacto)
+        if incrustado and incrustado.group(0) != compacto:
+            variantes.insert(0, incrustado.group(0))
+        for candidate in variantes:
             if candidate and len(candidate) <= 128 and candidate not in candidates:
                 candidates.append(candidate)
                 for repaired in _delayed_trailing_key_candidates(candidate):
