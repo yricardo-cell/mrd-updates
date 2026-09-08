@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.78",
-    "nombre":  "MRD TOOL CONTROL -- Lector: lecturas pegadas y colas de codigo. Cajon/maletin: casilla en el alta, pistola en la ficha, botones sin cortar. Manual de uso en PDF.",
+    "version_actual":  "2.7.79",
+    "nombre":  "MRD TOOL CONTROL -- Cajon/maletin: las piezas siguen al maletin al entregar, devolver o traspasar por cualquier via.",
     "fecha":  "2026-09-08",
     "cambios":  [
-                    "Lector: lecturas pegadas y colas de codigo. Cajon/maletin: casilla en el alta, pistola en la ficha, botones sin cortar. Manual de uso en PDF."
+                    "Cajon/maletin: las piezas siguen al maletin al entregar, devolver o traspasar por cualquier via."
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.78.zip",
-    "sha256":  "66a59113d8719b066938431a16cb077e107621d9b9368f4d20bc9a3a2261355b"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.79.zip",
+    "sha256":  "e87acf13fa0a0bd7dee667e38922b25b5d19d986c46830f46c61644c6965e47f"
 }
