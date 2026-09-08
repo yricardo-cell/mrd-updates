@@ -119,6 +119,7 @@ from identificadores import (
 )
 from backups import crear_backup, listar_backups, restaurar_backup
 from movement_service import (
+    arrastrar_piezas_maletin,
     CONDICIONES_DEVOLUCION, MovementError, actor_snapshot,
     deliver_tool, require_movement_permission, return_tool,
     start_movement_transaction,
@@ -22800,6 +22801,9 @@ def _resolver_traspaso(db: Session, worker: Trabajador, tid: int, aceptar: bool)
                           origen=f"{de.nombre_completo if de else ''} (traspaso desde el móvil)"[:200],
                           destino=worker.nombre_completo[:200], motivo=(tr.nota or "Traspaso entre compañeros")[:200],
                           herramienta_id=h.id, trabajador_id=worker.id))
+        db.flush()
+        arrastrar_piezas_maletin(db, h.id, None, "traslado",
+                                 f"Con el maletín {h.codigo}: traspaso a {worker.nombre_completo}")
         db.add(AuditoriaLog(tabla="herramientas", registro_id=h.id, accion="traspaso_portal",
                             resumen=f"{h.nombre} ({h.codigo}) pasa de {de.nombre_completo if de else '?'} a {worker.nombre_completo} (aceptado en el móvil)", usuario_id=None))
         db.add(Aviso(titulo=f"Traspaso: {h.nombre} ahora la tiene {worker.nombre_completo}",
@@ -23042,6 +23046,9 @@ def _portal_dejar_en_hueco(db: Session, worker: Trabajador, h: Herramienta, loc:
         motivo="Dejada en su hueco desde el móvil"[:200],
         herramienta_id=h.id, trabajador_id=worker.id,
     ))
+    db.flush()
+    arrastrar_piezas_maletin(db, h.id, None, "devolucion",
+                             f"Con el maletín {h.codigo}: dejado en {loc.nombre} desde el móvil")
     db.add(AuditoriaLog(tabla="herramientas", registro_id=h.id, accion="devolucion_portal",
                         resumen=f"{worker.nombre_completo} dejó {h.nombre} ({h.codigo}) en {loc.nombre} desde su móvil", usuario_id=None))
     db.add(Aviso(titulo=f"{worker.nombre_completo} ha dejado {h.nombre} en {loc.nombre}",

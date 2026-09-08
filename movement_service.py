@@ -69,7 +69,7 @@ def require_movement_permission(user: Usuario, action: str) -> None:
 
 def _tool_identity(db: Session, herramienta_id: int):
     statement = select(
-        Herramienta.id, Herramienta.codigo, Herramienta.estado
+        Herramienta.id, Herramienta.codigo, Herramienta.estado, Herramienta.es_maletin,
     ).where(
         Herramienta.id == herramienta_id,
         Herramienta.activa == True,
@@ -86,6 +86,82 @@ def _persist_movement(db: Session, movement: Movimiento) -> None:
     """Punto único de persistencia, también permite probar rollback por fallo."""
     db.add(movement)
     db.flush()
+
+
+def _ultimo_movimiento_id(db: Session, herramienta_id: int) -> int:
+    return db.execute(select(Movimiento.id).where(
+        Movimiento.herramienta_id == herramienta_id,
+    ).order_by(Movimiento.id.desc()).limit(1)).scalar_one_or_none() or 0
+
+
+def _expirar_herramientas(db: Session, ids: list[int]) -> None:
+    """Las actualizaciones van por SQL directo: los objetos ya cargados se recargan al leerlos."""
+    for obj in list(db.identity_map.values()):
+        if isinstance(obj, Herramienta) and obj.id in ids:
+            db.expire(obj)
+
+
+def arrastrar_piezas_maletin(
+    db: Session, maletin_id: int, usuario_id: Optional[int], tipo: str,
+    observaciones: str = "", fecha_devolucion_prevista: Optional[datetime] = None,
+) -> list[int]:
+    """Las piezas de un maletín siguen al maletín (2.7.79).
+
+    Hasta ahora solo el carrito del Mostrador añadía las piezas como líneas propias;
+    si el maletín salía por la ficha, el escáner, el kiosco o el portal, las piezas se
+    quedaban «disponibles» en la nave. Ahora, tras mover el maletín, cada pieza activa
+    que estaba en el almacén sale con él (mismo trabajador, obra y plazo), la que
+    estaba fuera vuelve con él, y en un traspaso cambia de manos con él. Las piezas en
+    reparación, baja o cualquier otro estado no se tocan. Devuelve los ids movidos."""
+    m = db.execute(select(
+        Herramienta.codigo, Herramienta.estado, Herramienta.responsable_id, Herramienta.obra_id,
+        Herramienta.almacen_id, Herramienta.ubicacion_id, Herramienta.ubicacion_texto, Herramienta.es_maletin,
+    ).where(Herramienta.id == maletin_id)).first()
+    if not m or not m.es_maletin:
+        return []
+    fuera = m.estado in ESTADOS_DEVOLVIBLES
+    en_almacen = m.estado in ("disponible", "pendiente_revision", "en_reparacion")
+    if not (fuera or en_almacen):
+        return []
+    piezas = db.execute(select(
+        Herramienta.id, Herramienta.estado, Herramienta.responsable_id, Herramienta.obra_id,
+    ).where(Herramienta.maletin_id == maletin_id, Herramienta.activa == True)).all()
+    movidas: list[int] = []
+    for p in piezas:
+        if fuera:
+            if p.estado == "disponible":
+                nuevo = m.estado
+            elif tipo == "traslado" and p.estado in ESTADOS_DEVOLVIBLES and (
+                p.responsable_id != m.responsable_id or p.obra_id != m.obra_id
+            ):
+                nuevo = p.estado  # traspaso: cambia de manos con el maletín
+                # (en una entrega normal, una pieza que ya tiene otra persona no se le quita)
+            else:
+                continue
+            valores = dict(estado=nuevo, responsable_id=m.responsable_id, obra_id=m.obra_id,
+                           ubicacion_texto=m.ubicacion_texto)
+        else:
+            if p.estado not in ESTADOS_DEVOLVIBLES:
+                continue
+            nuevo = "disponible"
+            valores = dict(estado=nuevo, responsable_id=None, obra_id=None, vehiculo_id=None,
+                           almacen_id=m.almacen_id, ubicacion_id=m.ubicacion_id,
+                           ubicacion_texto=m.ubicacion_texto)
+        db.execute(update(Herramienta).where(Herramienta.id == p.id).values(**valores)
+                   .execution_options(synchronize_session=False))
+        db.add(Movimiento(
+            tipo=tipo, estado_anterior=p.estado, estado_nuevo=nuevo,
+            destino=(m.ubicacion_texto or "")[:200], observaciones=(observaciones or None),
+            herramienta_id=p.id, usuario_id=usuario_id,
+            trabajador_id=m.responsable_id if fuera else None,
+            obra_id=m.obra_id if fuera else None,
+            fecha_devolucion_prevista=fecha_devolucion_prevista if fuera else None,
+        ))
+        movidas.append(p.id)
+    if movidas:
+        db.flush()
+        _expirar_herramientas(db, movidas)
+    return movidas
 
 
 def deliver_tool(
@@ -127,9 +203,15 @@ def deliver_tool(
         ubicacion_texto=destino,
     ).execution_options(synchronize_session=False))
     if changed.rowcount != 1:
-        current = db.execute(select(Herramienta.estado).where(
-            Herramienta.id == herramienta_id
-        )).scalar_one_or_none()
+        actual = db.execute(select(
+            Herramienta.estado, Herramienta.responsable_id, Herramienta.obra_id, Herramienta.maletin_id,
+        ).where(Herramienta.id == herramienta_id)).first()
+        if (actual and actual.maletin_id and actual.estado == "entregada"
+                and actual.responsable_id == trabajador_id and actual.obra_id == obra_id):
+            # La pieza ya salió con su maletín (misma operación o ya la tiene esa persona): no es un error.
+            return MovementResult(herramienta_id, tool.codigo, "entregada", "Entregada",
+                                  _ultimo_movimiento_id(db, herramienta_id), destino)
+        current = actual.estado if actual else None
         raise MovementError(409, f"La herramienta no está disponible (estado actual: {current or 'desconocido'})")
 
     movement = Movimiento(
@@ -141,6 +223,9 @@ def deliver_tool(
         fecha_devolucion_prevista=fecha_devolucion_prevista,
     )
     _persist_movement(db, movement)
+    if tool.es_maletin:
+        arrastrar_piezas_maletin(db, herramienta_id, user.id, "entrega",
+                                 f"Con el maletín {tool.codigo}", fecha_devolucion_prevista)
     return MovementResult(
         herramienta_id, tool.codigo, "entregada", "Entregada",
         movement.id, destino,
@@ -188,9 +273,16 @@ def return_tool(
         ubicacion_texto=destino,
     ).execution_options(synchronize_session=False))
     if changed.rowcount != 1:
-        current = db.execute(select(Herramienta.estado).where(
+        actual = db.execute(select(Herramienta.estado, Herramienta.maletin_id).where(
             Herramienta.id == herramienta_id
-        )).scalar_one_or_none()
+        )).first()
+        if actual and actual.maletin_id and actual.estado == estado_nuevo:
+            # La pieza ya volvió con su maletín en esta misma operación: no es un error.
+            labels_previos = {"disponible": "Disponible", "pendiente_revision": "Pendiente de revisión",
+                              "en_reparacion": "En reparación"}
+            return MovementResult(herramienta_id, tool.codigo, estado_nuevo, labels_previos[estado_nuevo],
+                                  _ultimo_movimiento_id(db, herramienta_id), destino)
+        current = actual.estado if actual else None
         raise MovementError(409, f"La herramienta no admite devolución desde '{current or 'desconocido'}'")
 
     movement = Movimiento(
@@ -199,6 +291,9 @@ def return_tool(
         herramienta_id=herramienta_id, usuario_id=user.id,
     )
     _persist_movement(db, movement)
+    if tool.es_maletin:
+        arrastrar_piezas_maletin(db, herramienta_id, user.id, "devolucion",
+                                 f"Con el maletín {tool.codigo}. {detail}")
     labels = {
         "disponible": "Disponible",
         "pendiente_revision": "Pendiente de revisión",
