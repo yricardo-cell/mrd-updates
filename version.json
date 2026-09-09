@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.8.0",
-    "nombre":  "MRD TOOL CONTROL -- 7 mejoras completadas: búsqueda global, reportes automáticos, lazy-loading, dashboard mejorado, portal trabajador v2, auditoría completa, notificaciones push",
+    "version_actual":  "2.8.1",
+    "nombre":  "MRD TOOL CONTROL -- Vista 3D con buscador, filtros y contadores; foto de herramienta a tamano util; corrige la cache del service worker desfasada en 2.8.0",
     "fecha":  "2026-09-09",
     "cambios":  [
-                    "7 mejoras completadas: búsqueda global, reportes automáticos, lazy-loading, dashboard mejorado, portal trabajador v2, auditoría completa, notificaciones push"
+                    "Vista 3D con buscador, filtros y contadores; foto de herramienta a tamano util; corrige la cache del service worker desfasada en 2.8.0"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.0.zip",
-    "sha256":  "2ae263dfd293c53afe81a09f2e59d63821247805356006f8a1a634b21f139c80"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.1.zip",
+    "sha256":  "52af1a260e9d7f6ed340387cc597b27114ed5a66ce11b7773bc30132c6cc9e69"
 }
