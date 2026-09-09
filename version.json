@@ -6,8 +6,11 @@
     "fecha": "2026-09-09",
     "estado": "estable",
     "cambios": [
-        "Autocuraci�n (fases 31-39): vigilante autom�tico, auto-restauraci�n de BD, rollback autom�tico de actualizaciones, sincronizaci�n de recursos.",
-        "Gesti�n de errores (fases 41-44): tabla errores_codigo, notificaciones Telegram, p�gina /configuracion/arreglos, API /api/bot/errores, auto-arreglo con Claude (pruebas, tests, commit, publicaci�n)."
+        "Entregar desde la ficha de la herramienta deja albarán, igual que el Mostrador, el escáner y Movimientos, y se abre para firmar o imprimir. Por esa vía las piezas del maletín también siguen al maletín al entregar, mover y devolver.",
+        "Cajón / maletín: las piezas siguen al maletín siempre. Al entregar el cajón (desde la ficha, el escáner, el kiosco, el portal o el Mostrador) sus piezas pasan al mismo trabajador y obra con su propio movimiento; al devolverlo vuelven a disponible; en un traspaso entre compañeros cambian de manos con él. Las piezas en reparación o baja no se tocan.",
+        "Lector: se reconocen las lecturas que llegaban pegadas (el QR leído dos veces seguidas, dos etiquetas de golpe, la cola de una lectura anterior delante del código, el prefijo MRD-HTA- repetido y los apóstrofos mezclados con guiones) y las lecturas en las que solo llega la cola del código (5 o más caracteres) cuando corresponde a un único artículo.",
+        "Cajón / maletín: casilla «Es un maletín» ya en el alta de herramienta (antes solo en Editar); en la ficha del maletín la pistola mete la pieza en el maletín en vez de saltar a Escanear; el botón «Meter en el maletín» y el formulario «Crear y meter» ya no se cortan en pantallas de 1280 px.",
+        "Manual de uso con capturas en extras/1MANUAL DE USO (PDF y Word)."
     ],
     "notas": "Mostrador Único transaccional, QR universal, pistola global, plano real y continuidad 24x7.",
     "download_url": "",
