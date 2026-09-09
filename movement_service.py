@@ -120,7 +120,7 @@ def arrastrar_piezas_maletin(
     if not m or not m.es_maletin:
         return []
     fuera = m.estado in ESTADOS_DEVOLVIBLES
-    en_almacen = m.estado in ("disponible", "pendiente_revision", "en_reparacion")
+    en_almacen = m.estado in ("disponible", "en_almacen", "pendiente_revision", "en_reparacion")
     if not (fuera or en_almacen):
         return []
     piezas = db.execute(select(

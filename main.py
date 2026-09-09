@@ -2942,6 +2942,8 @@ def herramienta_accion(
     ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "")
     es_admin = tiene_permiso(user, "borrar")
 
+    albaran = None
+    piezas_movidas: list[int] = []
     try:
         aplicar_accion(
             db, h, accion, user,
@@ -2953,16 +2955,48 @@ def herramienta_accion(
             observaciones = observaciones,
             ip            = ip,
         )
+        db.flush()
+        # 2.7.80: por esta vía (botón de la ficha) las piezas del maletín también siguen al
+        # maletín, y la entrega deja albarán igual que el Mostrador, el escáner y Movimientos.
+        if getattr(h, "es_maletin", False) and accion in (
+            "entregar", "a_obra", "a_furgoneta", "devolver", "a_almacen", "retorno_reparacion",
+        ):
+            tipo_arrastre = "entrega" if accion in ("entregar", "a_obra", "a_furgoneta") else "devolucion"
+            piezas_movidas = arrastrar_piezas_maletin(
+                db, h.id, user.id, tipo_arrastre, f"Con el maletín {h.codigo}",
+            )
+        if accion == "entregar":
+            lineas = []
+            for hid in [h.id, *piezas_movidas]:
+                mov = db.query(Movimiento).filter(
+                    Movimiento.herramienta_id == hid,
+                ).order_by(Movimiento.id.desc()).first()
+                pieza = h if hid == h.id else db.get(Herramienta, hid)
+                lineas.append({
+                    "tipo": "herramienta", "id": hid, "cantidad": 1,
+                    "nombre": pieza.codigo if pieza else str(hid),
+                    "movimiento_id": mov.id if mov else None,
+                })
+            albaran = create_delivery_note(
+                db, user_id=user.id, worker_id=t_id, work_id=o_id,
+                notes=observaciones, warehouse_id=h.almacen_id, lines=lineas,
+            )
         db.commit()
     except ErrorTransicion as exc:
         db.rollback()
         raise HTTPException(400, str(exc))
 
+    albaran_url = f"/albaranes-salida/{albaran.id}" if albaran else None
     # Soporte JSON para llamadas AJAX (desde la ficha)
     accept = request.headers.get("Accept", "")
     if "application/json" in accept:
-        return JSONResponse({"ok": True, "estado": h.estado})
+        return JSONResponse({"ok": True, "estado": h.estado,
+                             "albaran_id": albaran.id if albaran else None,
+                             "albaran_url": albaran_url,
+                             "piezas_movidas": len(piezas_movidas)})
 
+    if albaran_url:
+        return RedirectResponse(albaran_url, status_code=303)
     return RedirectResponse(f"/herramientas/{herramienta_id}", status_code=303)
 
 

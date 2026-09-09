@@ -900,7 +900,13 @@ async function enviarAccion(accion, selectIds, obsIds) {
       method: 'POST', body: fd, headers: { Accept: 'application/json' }
     });
     const d = await r.json().catch(() => ({}));
-    if (r.ok) { Toast.success('Acción aplicada'); setTimeout(() => location.reload(), 800); }
+    if (r.ok) {
+      if (d.albaran_url) {
+        // La entrega desde la ficha deja albarán (2.7.80): se abre para firmar o imprimir.
+        Toast.success(d.piezas_movidas ? `Entrega registrada con ${d.piezas_movidas} pieza(s) del maletín. Abriendo el albarán…` : 'Entrega registrada. Abriendo el albarán…');
+        setTimeout(() => { location.href = d.albaran_url; }, 700);
+      } else { Toast.success('Acción aplicada'); setTimeout(() => location.reload(), 800); }
+    }
     else Toast.error(d.detail || 'Error');
   } catch { Toast.error('Error de conexión'); }
 }
