@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.8.4",
-    "nombre":  "MRD TOOL CONTROL -- Vista 3D: recorrido de recogida con paradas numeradas y mapa de calor del trasiego",
+    "version_actual":  "2.8.5",
+    "nombre":  "MRD TOOL CONTROL -- Reparto ABC del inventario, caducidad del EPI individual e informe de paradas optimizado",
     "fecha":  "2026-09-09",
     "cambios":  [
-                    "Vista 3D: recorrido de recogida con paradas numeradas y mapa de calor del trasiego"
+                    "Reparto ABC del inventario, caducidad del EPI individual e informe de paradas optimizado"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.4.zip",
-    "sha256":  "37cee4aefa77aa6f19e57c7f8ea1802264163bef25a2d62922222d2743ff39ba"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.5.zip",
+    "sha256":  "19763378e72e93caa593164de45f1c06e004182e7251780061671eaf3a2cd9e9"
 }
