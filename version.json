@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.8.2",
-    "nombre":  "MRD TOOL CONTROL -- Vista 3D: boton Rotacion que colorea la nave segun el tiempo que lleva cada cosa sin moverse",
+    "version_actual":  "2.8.3",
+    "nombre":  "MRD TOOL CONTROL -- Vista 3D: plano o vista aerea de la nave pintado en el suelo de cada zona",
     "fecha":  "2026-09-09",
     "cambios":  [
-                    "Vista 3D: boton Rotacion que colorea la nave segun el tiempo que lleva cada cosa sin moverse"
+                    "Vista 3D: plano o vista aerea de la nave pintado en el suelo de cada zona"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.2.zip",
-    "sha256":  "476abf20e6f6487226da588a4ba33f9bb529edadc7e70948ff94ecf9b44e844a"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.3.zip",
+    "sha256":  "7d9d634155904168002d8fa6da867992f8530a3edff4bc3627685acfdde59239"
 }
