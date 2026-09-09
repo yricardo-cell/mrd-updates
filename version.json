@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.8.3",
-    "nombre":  "MRD TOOL CONTROL -- Vista 3D: plano o vista aerea de la nave pintado en el suelo de cada zona",
+    "version_actual":  "2.8.4",
+    "nombre":  "MRD TOOL CONTROL -- Vista 3D: recorrido de recogida con paradas numeradas y mapa de calor del trasiego",
     "fecha":  "2026-09-09",
     "cambios":  [
-                    "Vista 3D: plano o vista aerea de la nave pintado en el suelo de cada zona"
+                    "Vista 3D: recorrido de recogida con paradas numeradas y mapa de calor del trasiego"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.3.zip",
-    "sha256":  "7d9d634155904168002d8fa6da867992f8530a3edff4bc3627685acfdde59239"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.4.zip",
+    "sha256":  "37cee4aefa77aa6f19e57c7f8ea1802264163bef25a2d62922222d2743ff39ba"
 }
