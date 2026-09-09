@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.7.80",
-    "nombre":  "MRD TOOL CONTROL -- Entregar desde la ficha de la herramienta deja albaran y arrastra las piezas del maletin.",
+    "version_actual":  "2.8.0",
+    "nombre":  "MRD TOOL CONTROL -- 7 mejoras completadas: búsqueda global, reportes automáticos, lazy-loading, dashboard mejorado, portal trabajador v2, auditoría completa, notificaciones push",
     "fecha":  "2026-09-09",
     "cambios":  [
-                    "Entregar desde la ficha de la herramienta deja albaran y arrastra las piezas del maletin."
+                    "7 mejoras completadas: búsqueda global, reportes automáticos, lazy-loading, dashboard mejorado, portal trabajador v2, auditoría completa, notificaciones push"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.7.80.zip",
-    "sha256":  "02cfa160d7f7d54cde9568c1f5a508b75c7643d9f2d0d11ab048f0d33d5ef5d0"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.0.zip",
+    "sha256":  "2ae263dfd293c53afe81a09f2e59d63821247805356006f8a1a634b21f139c80"
 }
