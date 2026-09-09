@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.8.1",
-    "nombre":  "MRD TOOL CONTROL -- Vista 3D con buscador, filtros y contadores; foto de herramienta a tamano util; corrige la cache del service worker desfasada en 2.8.0",
+    "version_actual":  "2.8.2",
+    "nombre":  "MRD TOOL CONTROL -- Vista 3D: boton Rotacion que colorea la nave segun el tiempo que lleva cada cosa sin moverse",
     "fecha":  "2026-09-09",
     "cambios":  [
-                    "Vista 3D con buscador, filtros y contadores; foto de herramienta a tamano util; corrige la cache del service worker desfasada en 2.8.0"
+                    "Vista 3D: boton Rotacion que colorea la nave segun el tiempo que lleva cada cosa sin moverse"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.1.zip",
-    "sha256":  "52af1a260e9d7f6ed340387cc597b27114ed5a66ce11b7773bc30132c6cc9e69"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.2.zip",
+    "sha256":  "476abf20e6f6487226da588a4ba33f9bb529edadc7e70948ff94ecf9b44e844a"
 }
