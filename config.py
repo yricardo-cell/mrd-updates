@@ -104,9 +104,9 @@ try:
     # utf-8-sig acepta tanto UTF-8 normal como archivos escritos por
     # Windows PowerShell con BOM. Así una publicación no degrada VERSION.
     _vdata = json.loads(_version_file.read_text(encoding="utf-8-sig"))
-    VERSION = _vdata.get("version_actual", "1.9.2-alpha")
+    VERSION = _vdata.get("version_actual", "2.7.81")
 except Exception:
-    VERSION = "1.9.2-alpha"
+    VERSION = "2.7.81"
 
 # ─── Aplicación ───────────────────────────────────────────────────────────────
 APP_NAME = "MRD TOOL CONTROL"
