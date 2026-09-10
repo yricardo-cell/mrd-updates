@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.9.0",
-    "nombre":  "MRD TOOL CONTROL -- Se retiran push, auditoria de cambios, reportes automaticos y carga por partes: eran solo tablas vacias sin nada detras",
+    "version_actual":  "2.9.1",
+    "nombre":  "MRD TOOL CONTROL -- Escaner: se separan las lecturas de EPI que llegan pegadas de dos en dos",
     "fecha":  "2026-09-10",
     "cambios":  [
-                    "Se retiran push, auditoria de cambios, reportes automaticos y carga por partes: eran solo tablas vacias sin nada detras"
+                    "Escaner: se separan las lecturas de EPI que llegan pegadas de dos en dos"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.9.0.zip",
-    "sha256":  "c5d3b60df96f80fe8fc42a9b14399fc7ad054ab26ff6a5fb9285a2eb7a1c8dd6"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.9.1.zip",
+    "sha256":  "e9a6bdaf4c7f13545f3c765d2cc32eae04a38b631df0c847fc4b2c2ba50e5576"
 }
