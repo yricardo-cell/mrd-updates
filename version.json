@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.8.5",
-    "nombre":  "MRD TOOL CONTROL -- Reparto ABC del inventario, caducidad del EPI individual e informe de paradas optimizado",
-    "fecha":  "2026-09-09",
+    "version_actual":  "2.8.6",
+    "nombre":  "MRD TOOL CONTROL -- PDF del pedido con la referencia del proveedor y totales; etiquetas de hueco que se abren en el navegador",
+    "fecha":  "2026-09-10",
     "cambios":  [
-                    "Reparto ABC del inventario, caducidad del EPI individual e informe de paradas optimizado"
+                    "PDF del pedido con la referencia del proveedor y totales; etiquetas de hueco que se abren en el navegador"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.5.zip",
-    "sha256":  "19763378e72e93caa593164de45f1c06e004182e7251780061671eaf3a2cd9e9"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.6.zip",
+    "sha256":  "a2f8e25bce2556352e2041f87414faf0f696e237304108656d4131acadfd501a"
 }
