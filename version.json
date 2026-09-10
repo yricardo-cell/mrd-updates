@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.8.8",
-    "nombre":  "MRD TOOL CONTROL -- Rendimiento: mantenimiento 448 a 17 consultas, historial 210 a 8, EPI 186 a 18, trabajadores 87 a 7",
+    "version_actual":  "2.8.9",
+    "nombre":  "MRD TOOL CONTROL -- Anomalias 71 a 23 consultas, panel de automatizacion 93 a 45, y ningun atrapa-errores ciego",
     "fecha":  "2026-09-10",
     "cambios":  [
-                    "Rendimiento: mantenimiento 448 a 17 consultas, historial 210 a 8, EPI 186 a 18, trabajadores 87 a 7"
+                    "Anomalias 71 a 23 consultas, panel de automatizacion 93 a 45, y ningun atrapa-errores ciego"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.8.zip",
-    "sha256":  "0b34e604c8fe8a5a381ee32ef645b2c5c1d4b45592f0efaef158f973ba1bf23a"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.9.zip",
+    "sha256":  "e2b02754088e4170ad3d49b6e4fc71b2bf15199de2a9a28b81ea374005e80ef9"
 }
