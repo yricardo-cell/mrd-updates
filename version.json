@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.9.1",
-    "nombre":  "MRD TOOL CONTROL -- Escaner: se separan las lecturas de EPI que llegan pegadas de dos en dos",
+    "version_actual":  "2.9.2",
+    "nombre":  "MRD TOOL CONTROL -- Inventario: ropa y EPI de stock ya se cuentan, y Todo el almacen incluye herramientas y maquinaria",
     "fecha":  "2026-09-10",
     "cambios":  [
-                    "Escaner: se separan las lecturas de EPI que llegan pegadas de dos en dos"
+                    "Inventario: ropa y EPI de stock ya se cuentan, y Todo el almacen incluye herramientas y maquinaria"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.9.1.zip",
-    "sha256":  "e9a6bdaf4c7f13545f3c765d2cc32eae04a38b631df0c847fc4b2c2ba50e5576"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.9.2.zip",
+    "sha256":  "17b141f8fd4b6b2934dcd1a28ab628390b9831505c0e27139ad3bd382c261781"
 }
