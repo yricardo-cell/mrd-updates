@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.8.7",
-    "nombre":  "MRD TOOL CONTROL -- Etiquetas de hueco: PDF de un hueco suelto o de un mueble entero desde la vista 3D",
+    "version_actual":  "2.8.8",
+    "nombre":  "MRD TOOL CONTROL -- Rendimiento: mantenimiento 448 a 17 consultas, historial 210 a 8, EPI 186 a 18, trabajadores 87 a 7",
     "fecha":  "2026-09-10",
     "cambios":  [
-                    "Etiquetas de hueco: PDF de un hueco suelto o de un mueble entero desde la vista 3D"
+                    "Rendimiento: mantenimiento 448 a 17 consultas, historial 210 a 8, EPI 186 a 18, trabajadores 87 a 7"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.7.zip",
-    "sha256":  "1e4ffe3330ef4282beafe852e917cab9a6ee4106eb3400528b969f1fadede5c1"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.8.zip",
+    "sha256":  "0b34e604c8fe8a5a381ee32ef645b2c5c1d4b45592f0efaef158f973ba1bf23a"
 }
