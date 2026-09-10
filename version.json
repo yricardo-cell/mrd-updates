@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.8.9",
-    "nombre":  "MRD TOOL CONTROL -- Anomalias 71 a 23 consultas, panel de automatizacion 93 a 45, y ningun atrapa-errores ciego",
+    "version_actual":  "2.9.0",
+    "nombre":  "MRD TOOL CONTROL -- Se retiran push, auditoria de cambios, reportes automaticos y carga por partes: eran solo tablas vacias sin nada detras",
     "fecha":  "2026-09-10",
     "cambios":  [
-                    "Anomalias 71 a 23 consultas, panel de automatizacion 93 a 45, y ningun atrapa-errores ciego"
+                    "Se retiran push, auditoria de cambios, reportes automaticos y carga por partes: eran solo tablas vacias sin nada detras"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.8.9.zip",
-    "sha256":  "e2b02754088e4170ad3d49b6e4fc71b2bf15199de2a9a28b81ea374005e80ef9"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.9.0.zip",
+    "sha256":  "c5d3b60df96f80fe8fc42a9b14399fc7ad054ab26ff6a5fb9285a2eb7a1c8dd6"
 }
