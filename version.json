@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.9.2",
-    "nombre":  "MRD TOOL CONTROL -- Inventario: ropa y EPI de stock ya se cuentan, y Todo el almacen incluye herramientas y maquinaria",
-    "fecha":  "2026-09-10",
+    "version_actual":  "2.9.3",
+    "nombre":  "MRD TOOL CONTROL -- QR de arneses y absorbedores visibles e imprimibles (ficha, listado y PDF con los elegidos); fuera datetime.utcnow()",
+    "fecha":  "2026-09-11",
     "cambios":  [
-                    "Inventario: ropa y EPI de stock ya se cuentan, y Todo el almacen incluye herramientas y maquinaria"
+                    "QR de arneses y absorbedores visibles e imprimibles (ficha, listado y PDF con los elegidos); fuera datetime.utcnow()"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.9.2.zip",
-    "sha256":  "17b141f8fd4b6b2934dcd1a28ab628390b9831505c0e27139ad3bd382c261781"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.9.3.zip",
+    "sha256":  "486d2792cf682fc5f2992c4de7af885b56817e1409a3b9e3debd7baa58df823b"
 }
