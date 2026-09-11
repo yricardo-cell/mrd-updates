@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.9.4",
-    "nombre":  "MRD TOOL CONTROL -- Stock bajo solo de lo que esta en el catalogo; quitar cosas de un hueco o vaciarlo; enlace a la ficha del trabajador sin 404",
+    "version_actual":  "2.9.5",
+    "nombre":  "MRD TOOL CONTROL -- Nave con su forma real: contorno dibujado sobre el plano, suelo y paredes 3D con esa forma, zonas giradas y aviso si se salen",
     "fecha":  "2026-09-11",
     "cambios":  [
-                    "Stock bajo solo de lo que esta en el catalogo; quitar cosas de un hueco o vaciarlo; enlace a la ficha del trabajador sin 404"
+                    "Nave con su forma real: contorno dibujado sobre el plano, suelo y paredes 3D con esa forma, zonas giradas y aviso si se salen"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.9.4.zip",
-    "sha256":  "000173df381fc1167795d6431cb06284498cb111a0db2c6f002f9978b4dd46de"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.9.5.zip",
+    "sha256":  "d2de30d32bdfa4ee17729793d1ca7899cdbede3dff785c6b163fd35daa54fde3"
 }
