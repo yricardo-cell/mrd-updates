@@ -1,11 +1,11 @@
 {
-    "version_actual":  "2.9.3",
-    "nombre":  "MRD TOOL CONTROL -- QR de arneses y absorbedores visibles e imprimibles (ficha, listado y PDF con los elegidos); fuera datetime.utcnow()",
+    "version_actual":  "2.9.4",
+    "nombre":  "MRD TOOL CONTROL -- Stock bajo solo de lo que esta en el catalogo; quitar cosas de un hueco o vaciarlo; enlace a la ficha del trabajador sin 404",
     "fecha":  "2026-09-11",
     "cambios":  [
-                    "QR de arneses y absorbedores visibles e imprimibles (ficha, listado y PDF con los elegidos); fuera datetime.utcnow()"
+                    "Stock bajo solo de lo que esta en el catalogo; quitar cosas de un hueco o vaciarlo; enlace a la ficha del trabajador sin 404"
                 ],
     "notas":  "Instala desde Configuracion \u003e Actualizaciones.",
-    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.9.3.zip",
-    "sha256":  "486d2792cf682fc5f2992c4de7af885b56817e1409a3b9e3debd7baa58df823b"
+    "download_url":  "https://raw.githubusercontent.com/yricardo-cell/mrd-updates/main/mrd_v2.9.4.zip",
+    "sha256":  "000173df381fc1167795d6431cb06284498cb111a0db2c6f002f9978b4dd46de"
 }
